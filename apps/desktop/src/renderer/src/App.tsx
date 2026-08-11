@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ProjectListItemVM, SearchHitVM } from '../../shared/viewModels';
 import { SpikeChat } from './SpikeChat';
 import { TaskCard } from './TaskCard';
@@ -194,8 +194,45 @@ function Toasts(): React.JSX.Element {
   );
 }
 
+/**
+ * 视图历史:点进过滤器/标签/项目后要能退回来。用一个栈 + 游标(而不是只存"上一个"),
+ * 这样连续下钻多层也退得回去;前进同理。
+ */
+function useViewHistory(initial: View): {
+  view: View;
+  setView: (v: View) => void;
+  back: () => void;
+  forward: () => void;
+  canBack: boolean;
+  canForward: boolean;
+} {
+  // 栈与游标必须是**同一个** state:分成两个会让 setView 读到上一轮的栈
+  const [hist, setHist] = useState<{ stack: View[]; i: number }>({ stack: [initial], i: 0 });
+  const same = (a: View | undefined, b: View): boolean => JSON.stringify(a) === JSON.stringify(b);
+  const setView = useCallback((v: View): void => {
+    setHist((h) => {
+      if (same(h.stack[h.i], v)) return h; // 原地重复点同一项不入栈,否则后退退不动
+      const stack = [...h.stack.slice(0, h.i + 1), v];
+      return { stack, i: stack.length - 1 };
+    });
+  }, []);
+  const back = useCallback(() => setHist((h) => ({ ...h, i: Math.max(0, h.i - 1) })), []);
+  const forward = useCallback(
+    () => setHist((h) => ({ ...h, i: Math.min(h.stack.length - 1, h.i + 1) })),
+    [],
+  );
+  return {
+    view: hist.stack[hist.i] ?? initial,
+    setView,
+    back,
+    forward,
+    canBack: hist.i > 0,
+    canForward: hist.i < hist.stack.length - 1,
+  };
+}
+
 export function App(): React.JSX.Element {
-  const [view, setView] = useState<View>({ kind: 'today' });
+  const { view, setView, back, forward, canBack, canForward } = useViewHistory({ kind: 'today' });
   const [info, setInfo] = useState<AppInfo | null>(null);
   const left = usePaneResize('pane.left', 240, 180, 420);
   const right = usePaneResize('pane.right', 384, 300, 680, true);
@@ -215,7 +252,7 @@ export function App(): React.JSX.Element {
     void window.gtd.appInfo().then(setInfo);
   }, []);
 
-  // 全局快捷键:⌘N 快速添加、⌘K 搜索
+  // 全局快捷键:⌘N 快速添加、⌘K 搜索、⌘[ / ⌘] 后退前进
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (!e.metaKey) return;
@@ -225,11 +262,31 @@ export function App(): React.JSX.Element {
       } else if (e.key === 'k') {
         e.preventDefault();
         setSearchOpen(true);
+      } else if (e.key === '[') {
+        e.preventDefault();
+        back();
+      } else if (e.key === ']') {
+        e.preventDefault();
+        forward();
+      }
+    };
+    // 鼠标侧键(Chromium:button 3 = 后退、4 = 前进);默认会触发页面级导航,须拦掉
+    const onMouse = (e: MouseEvent): void => {
+      if (e.button === 3) {
+        e.preventDefault();
+        back();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        forward();
       }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+    window.addEventListener('mouseup', onMouse);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mouseup', onMouse);
+    };
+  }, [back, forward]);
 
   /** 命中 → 切到该条目的容器视图;任务再顺手打开详情。 */
   const openHit = (hit: SearchHitVM): void => {
@@ -354,9 +411,9 @@ export function App(): React.JSX.Element {
                 onEdit={() => setProjectModal(p)}
                 onCompleted={() => {
                   // 正在看这个项目 → 回总览,避免停留在已完成项目里继续操作
-                  setView((v) =>
-                    v.kind === 'project' && v.id === p.id ? { kind: 'myprojects' } : v,
-                  );
+                  if (view.kind === 'project' && view.id === p.id) {
+                    setView({ kind: 'myprojects' });
+                  }
                 }}
               />
             ))}
@@ -389,7 +446,30 @@ export function App(): React.JSX.Element {
       <PaneHandle onPointerDown={left.onPointerDown} />
 
       {/* 中栏:content(@container 供视图做容器查询降级) */}
-      <main className="@container min-w-0 flex-1 overflow-y-auto">
+      <main className="@container relative min-w-0 flex-1 overflow-y-auto">
+        {/* 导航后退/前进:点进过滤器、标签、项目后要退得回来(⌘[ / ⌘] 与鼠标侧键同效) */}
+        {(canBack || canForward) && (
+          <div className="sticky top-0 z-10 flex gap-1 bg-white/85 px-8 pt-4 backdrop-blur">
+            <button
+              type="button"
+              disabled={!canBack}
+              onClick={back}
+              title="后退(⌘[)"
+              className="rounded px-1.5 py-0.5 text-sm text-neutral-500 hover:bg-neutral-100 disabled:opacity-30"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              disabled={!canForward}
+              onClick={forward}
+              title="前进(⌘])"
+              className="rounded px-1.5 py-0.5 text-sm text-neutral-500 hover:bg-neutral-100 disabled:opacity-30"
+            >
+              ›
+            </button>
+          </div>
+        )}
         {view.kind === 'inbox' && <InboxView />}
         {view.kind === 'today' && <TodayView />}
         {view.kind === 'calendar' && <CalendarView />}

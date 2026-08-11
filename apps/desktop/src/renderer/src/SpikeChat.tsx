@@ -26,12 +26,20 @@ interface StreamEvent {
   is_error?: boolean;
   total_cost_usd?: number;
   duration_ms?: number;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 }
 
 export function SpikeChat(): React.JSX.Element {
   const [items, setItems] = useState<ChatItem[]>([
-    { role: 'meta', text: 'M1 spike:验证打包内 SDK 会话。可粘贴图片。' },
+    {
+      role: 'meta',
+      text: 'M1 spike:验证打包内 SDK 会话。可粘贴图片。走本机 Claude Code 登录,不用 API key;下方 $ 是按 API 单价折算的估值,不是本应用的账单。',
+    },
   ]);
   const [draft, setDraft] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
@@ -75,14 +83,25 @@ export function SpikeChat(): React.JSX.Element {
       } else if (msg.type === 'result') {
         flushAssistant(true);
         setBusy(false);
-        const tokens = msg.usage
-          ? `${msg.usage.input_tokens ?? 0}→${msg.usage.output_tokens ?? 0} tok`
+        // 缓存 token 必须显示:首轮把 system prompt + 工具定义写进缓存(1.25× 单价),
+        // 光看 "2→14 tok" 会让 $0.20 显得莫名其妙 —— 真正花钱的是那几万缓存写入
+        const u = msg.usage;
+        const cw = u?.cache_creation_input_tokens ?? 0;
+        const cr = u?.cache_read_input_tokens ?? 0;
+        const tokens = u
+          ? [
+              `${u.input_tokens ?? 0}→${u.output_tokens ?? 0} tok`,
+              cw > 0 ? `缓存写入 ${cw}` : '',
+              cr > 0 ? `缓存命中 ${cr}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')
           : '';
         setItems((p) => [
           ...p,
           {
             role: msg.is_error ? 'error' : 'meta',
-            text: `${msg.is_error ? '出错' : '完成'} · ${((msg.duration_ms ?? 0) / 1000).toFixed(1)}s · ${tokens} · $${(msg.total_cost_usd ?? 0).toFixed(4)}`,
+            text: `${msg.is_error ? '出错' : '完成'} · ${((msg.duration_ms ?? 0) / 1000).toFixed(1)}s · ${tokens} · ≈$${(msg.total_cost_usd ?? 0).toFixed(4)}(按 API 单价折算)`,
           },
         ]);
       } else if (msg.type === 'spike_error') {

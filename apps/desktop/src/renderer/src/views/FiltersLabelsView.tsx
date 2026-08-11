@@ -39,6 +39,10 @@ export function FiltersLabelsView({
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  /** 编辑中的过滤器(名称 + 查询同时可改) */
+  const [editFilter, setEditFilter] = useState<{ id: string; name: string; query: string } | null>(
+    null,
+  );
   const [showHelp, setShowHelp] = useState(false);
 
   const reset = (): void => {
@@ -74,6 +78,14 @@ export function FiltersLabelsView({
     if (await run(window.gtd.labelUpdate(l.id, { name: draft.trim() }))) setEditing(null);
   };
 
+  const saveFilter = async (): Promise<void> => {
+    const e = editFilter;
+    if (e === null || e.name.trim() === '' || e.query.trim() === '') return;
+    if (await run(window.gtd.filterUpdate(e.id, { name: e.name.trim(), query: e.query.trim() }))) {
+      setEditFilter(null);
+    }
+  };
+
   const removeFilter = async (f: FilterListItemVM): Promise<void> => {
     if (!window.confirm(`删除过滤器「${f.name}」?(不影响任何任务)`)) return;
     await run(window.gtd.filterDelete(f.id));
@@ -87,6 +99,19 @@ export function FiltersLabelsView({
     if (!window.confirm(warn)) return;
     await run(window.gtd.labelDelete(l.id));
   };
+
+  const syntaxTable = (
+    <table className="mt-2 w-full text-[11px]">
+      <tbody>
+        {SYNTAX_HELP.map(([syntax, desc]) => (
+          <tr key={syntax} className="align-top">
+            <td className="w-[46%] py-0.5 pr-3 font-mono text-neutral-700">{syntax}</td>
+            <td className="py-0.5 text-neutral-500">{desc}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 
   const sectionHead = (
     title: string,
@@ -159,51 +184,92 @@ export function FiltersLabelsView({
                 {showHelp ? '收起语法' : '查询语法'}
               </button>
             </div>
-            {showHelp && (
-              <table className="mt-2 w-full text-[11px]">
-                <tbody>
-                  {SYNTAX_HELP.map(([syntax, desc]) => (
-                    <tr key={syntax} className="align-top">
-                      <td className="w-[46%] py-0.5 pr-3 font-mono text-neutral-700">{syntax}</td>
-                      <td className="py-0.5 text-neutral-500">{desc}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            {showHelp && syntaxTable}
           </div>
         )}
         <ul>
           {(filters.data ?? []).map((f) => (
-            <li
-              key={f.id}
-              className="group flex items-center gap-2 border-b border-neutral-100 px-1 py-2"
-            >
-              <span className="text-neutral-400">◍</span>
-              <button
-                type="button"
-                className="min-w-0 flex-1 text-left"
-                onClick={() => onOpenFilter(f.query, f.name)}
-              >
-                <span className="block truncate text-sm">{f.name}</span>
-                <span
-                  className={`block truncate font-mono text-[11px] ${
-                    f.error !== null ? 'text-red-600' : 'text-neutral-400'
-                  }`}
-                >
-                  {f.error !== null ? `语法错误:${f.error}` : f.query}
-                </span>
-              </button>
-              {f.matchCount !== null && (
-                <span className="shrink-0 text-xs text-neutral-400">{f.matchCount}</span>
+            <li key={f.id} className="border-b border-neutral-100">
+              {editFilter?.id === f.id ? (
+                <div className="px-1 py-2">
+                  <input
+                    value={editFilter.name}
+                    onChange={(e) => setEditFilter({ ...editFilter, name: e.target.value })}
+                    className="mb-1 w-full rounded border border-neutral-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  />
+                  <input
+                    value={editFilter.query}
+                    onChange={(e) => setEditFilter({ ...editFilter, query: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void saveFilter();
+                      if (e.key === 'Escape') setEditFilter(null);
+                    }}
+                    className="w-full rounded border border-neutral-200 px-2 py-1 font-mono text-sm outline-none focus:border-blue-400"
+                  />
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
+                      onClick={() => void saveFilter()}
+                    >
+                      保存
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-neutral-400 hover:text-neutral-700"
+                      onClick={() => setEditFilter(null)}
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      className="ml-auto text-xs text-neutral-400 underline hover:text-neutral-700"
+                      onClick={() => setShowHelp(!showHelp)}
+                    >
+                      {showHelp ? '收起语法' : '查询语法'}
+                    </button>
+                  </div>
+                  {showHelp && syntaxTable}
+                </div>
+              ) : (
+                <div className="group flex items-center gap-2 px-1 py-2">
+                  <span className="text-neutral-400">◍</span>
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => onOpenFilter(f.query, f.name)}
+                  >
+                    <span className="block truncate text-sm">{f.name}</span>
+                    <span
+                      className={`block truncate font-mono text-[11px] ${
+                        f.error !== null ? 'text-red-600' : 'text-neutral-400'
+                      }`}
+                    >
+                      {f.error !== null ? `语法错误:${f.error}` : f.query}
+                    </span>
+                  </button>
+                  {f.matchCount !== null && (
+                    <span className="shrink-0 text-xs text-neutral-400">{f.matchCount}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="shrink-0 text-xs text-neutral-300 opacity-0 group-hover:opacity-100 hover:text-neutral-700"
+                    onClick={() => {
+                      setEditFilter({ id: f.id, name: f.name, query: f.query });
+                      setAdding(null);
+                    }}
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 text-xs text-neutral-300 opacity-0 group-hover:opacity-100 hover:text-red-600"
+                    onClick={() => void removeFilter(f)}
+                  >
+                    删除
+                  </button>
+                </div>
               )}
-              <button
-                type="button"
-                className="shrink-0 text-xs text-neutral-300 opacity-0 group-hover:opacity-100 hover:text-red-600"
-                onClick={() => void removeFilter(f)}
-              >
-                删除
-              </button>
             </li>
           ))}
           {filters.data?.length === 0 && (
