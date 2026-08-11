@@ -1,5 +1,3 @@
-import type { InboxItem } from '../entities/inboxItem';
-import type { ListItem } from '../entities/listItem';
 import type { Project } from '../entities/project';
 import type { Task } from '../entities/task';
 import type { WaitingFor } from '../entities/waitingFor';
@@ -7,25 +5,39 @@ import type { GtdSnapshot } from '../ports/gtdStore';
 import type { FlowDeps } from '../flows/framework';
 import type { UsecaseResult } from './types';
 
-/** 跨实体搜索(只读;DESIGN §6.3 `search` 工具的领域实现)。 */
+/** 跨实体搜索(⌘K 与 CLI `search` 的唯一数据源)。 */
+
+export const SEARCH_DEFAULT_LIMIT = 50;
 
 export interface SearchAllInput {
   query: string;
+  /** 每类结果的上限;缺省 {@link SEARCH_DEFAULT_LIMIT }。截断前的总数见 totalMatched */
+  limit?: number;
 }
 
 export interface SearchAllConsequences {
-  /** 含 done/deleted(Trash/Completed 也可被搜到) */
+  /** 活跃在前、标题命中优先、再按创建时间倒序;含已完成(归档可搜),**不含软删除** */
   tasks: Task[];
-  /** 含 complete */
+  /** 含已完成的项目 */
   projects: Project[];
-  inbox: InboxItem[];
-  someday: ListItem[];
-  reference: ListItem[];
-  trash: ListItem[];
   waiting: WaitingFor[];
+  /** 截断前的命中总数(三类之和),用于"还有 N 条未列出" */
+  totalMatched: number;
 }
 
-/** 大小写不敏感的包含匹配;命中字段:title/outcome/text/description+delegatedTo。 */
+/**
+ * 大小写不敏感的子串匹配。命中字段:Task 的 title 与 description、Project 的 outcome、
+ * WaitingFor 的 description 与 delegatedTo。
+ *
+ * **容器模型口径(D-20/D-21/D-23)**:Inbox / Someday / Reference / 项目任务 / 日历块
+ * 现在全都是带 `bucket`(与 `scheduledDate`)的 Task,因此它们统一落在 `tasks` 一组里,
+ * 由调用方按 bucket/status 分组呈现。此前这里搜的是 `snap.inbox` 与 `snap.listItems`
+ * (D-20 之前的 InboxItem / ListItem),那两张表自容器模型起就不再写入 —— 对应的
+ * inbox/someday/reference/trash 四个分组恒为空,等于这些内容根本搜不到(2026-08-11 修)。
+ *
+ * **软删除任务不返回**:删除是可恢复的(INV-22),但当前没有 Trash 视图,搜出来也无处
+ * 可去 —— 与其给一条点不动的结果,不如不给。将来有了恢复入口再放开。
+ */
 export function searchAll(
   snap: GtdSnapshot,
   _deps: FlowDeps,
@@ -33,19 +45,32 @@ export function searchAll(
 ): UsecaseResult<SearchAllConsequences> {
   const q = input.query.trim().toLowerCase();
   if (q === '') return { error: '查询不能为空' };
+  const limit = input.limit ?? SEARCH_DEFAULT_LIMIT;
   const hit = (s: string): boolean => s.toLowerCase().includes(q);
-  const listOf = (kind: ListItem['kind']): ListItem[] =>
-    snap.listItems.filter((i) => i.kind === kind && hit(i.text));
+
+  const matchedTasks = snap.tasks.filter(
+    (t) => t.status !== 'deleted' && (hit(t.title) || hit(t.description)),
+  );
+  // 活跃优先(找东西多半是要动它)→ 标题命中优先于仅描述命中 → 新的在前
+  const tasks = [...matchedTasks].sort((a, b) => {
+    const active = (t: Task): number => (t.status === 'active' ? 0 : 1);
+    if (active(a) !== active(b)) return active(a) - active(b);
+    const byTitle = (t: Task): number => (hit(t.title) ? 0 : 1);
+    if (byTitle(a) !== byTitle(b)) return byTitle(a) - byTitle(b);
+    if (a.createdAt !== b.createdAt) return a.createdAt > b.createdAt ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  const projects = snap.projects.filter((p) => hit(p.outcome));
+  const waiting = snap.waiting.filter((w) => hit(w.description) || hit(w.delegatedTo));
+
   return {
     commands: [],
     consequences: {
-      tasks: snap.tasks.filter((t) => hit(t.title)),
-      projects: snap.projects.filter((p) => hit(p.outcome)),
-      inbox: snap.inbox.filter((i) => hit(i.text)),
-      someday: listOf('someday'),
-      reference: listOf('reference'),
-      trash: listOf('trash'),
-      waiting: snap.waiting.filter((w) => hit(w.description) || hit(w.delegatedTo)),
+      tasks: tasks.slice(0, limit),
+      projects: projects.slice(0, limit),
+      waiting: waiting.slice(0, limit),
+      totalMatched: tasks.length + projects.length + waiting.length,
     },
   };
 }

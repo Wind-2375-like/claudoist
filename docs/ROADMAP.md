@@ -462,10 +462,13 @@
 
 **子步**
 
-- **M7a — Search(⌘K)**:全局命令面板。数据源 `gtd:search` → domain `searchAll`。
-  **先修模型漂移**:`searchAll` 现搜的是 D-20 之前的 `snap.inbox` / `snap.listItems`,
-  而 Inbox/Someday/Reference 早已是带 `bucket` 的 Task —— 这三组实际上永远搜不到东西,
-  必须按容器模型重写,并补上"已完成/已删除"与日历型任务的区分。
+- **M7a — Search(⌘K)**(2026-08-11 完成):全局命令面板,数据源 `gtd:search` → domain
+  `searchAll`(INV-32)。**修掉的模型漂移**:`searchAll` 原先搜的是 D-20 之前的
+  `snap.inbox` / `snap.listItems`,而 Inbox/Someday/Reference 早已是带 `bucket` 的 Task
+  —— 那两张表零写入,对应四个分组恒为空,等于这些内容**根本搜不到**。改为按容器模型统一
+  搜 Task(标题 + 描述),并定下排序/截断/软删不返回的口径。
+  - 附带:`taskLine` 给 done 任务加 `✓已完成` 标记(搜索会混合状态,不标就分不出来);
+    截图通道新增 `--screenshot-type=<text>`(命令面板得能打字才拍得到结果)。
 - **M7b — Filters & Labels 视图**:侧栏 Filters & Labels 项接上真实视图。
   `FilterQuery` 是**结构化对象**(contextId / labelIds / energyMax / maxMinutes /
   priorityMin / dueOnOrBefore / noProject / textQuery),不是 Todoist 的查询字符串,
@@ -474,14 +477,14 @@
 
 **验收标准**
 
-- [ ] ⌘K 任意界面可唤起;输入即搜,结果按类型分组;回车/点击跳到对应视图并高亮目标
-- [ ] 搜索覆盖当前容器模型:Inbox/Someday/Reference/项目任务(含子任务)、项目、已完成、
-      Upstream 镜像、waiting-for;已完成/已删除项有明确标记,不与活跃项混淆
-- [ ] `searchAll` 的旧模型分组(`snap.inbox`/`listItems`)清理干净,不再返回恒空分组
+- [x] ⌘K 任意界面可唤起(侧栏 Search 项等价);输入即搜;↑↓/↵/Esc;命中跳到容器视图并开详情
+- [x] 搜索覆盖当前容器模型:Inbox/Someday/Reference/项目任务(含子任务)、项目、已完成、
+      Upstream 镜像;已完成灰显划线 + "已完成 <日期>",不与活跃项混淆
+- [x] `searchAll` 的旧模型分组(`snap.inbox`/`listItems`)清理干净,不再返回恒空分组(INV-32)
 - [ ] Filters & Labels 视图可新建/改名/删除 filter,点击 filter 显示命中的任务列表
 - [ ] 标签可新建/改名/删除;删除标签时其任务关联一并清理;点击标签显示带该标签的任务
 - [ ] filter 结果与 domain `evalFilter` 完全一致(UI 不得自行过滤,INV-20.6 同类纪律)
-- [ ] CLI 补 `search` 命令,与 ⌘K 同口径
+- [x] CLI 补 `search` 命令,与 ⌘K 同口径(CLI 多列等待项:终端里点不动的问题不存在)
 - [ ] 三份文档同步更新;`pnpm test/typecheck/lint/check-coverage/smoke` 全绿
 
 **用户反馈**

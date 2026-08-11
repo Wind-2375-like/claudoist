@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { ProjectListItemVM } from '../../shared/viewModels';
+import type { ProjectListItemVM, SearchHitVM } from '../../shared/viewModels';
 import { SpikeChat } from './SpikeChat';
 import { TaskCard } from './TaskCard';
 import { ProjectModal } from './ProjectModal';
 import { SettingsModal } from './SettingsModal';
+import { SearchPalette } from './SearchPalette';
+import { TaskDetailModal } from './TaskDetailModal';
 import { toast, useToasts } from './toast';
 import { useBucketCounts, useInbox, useProjects, useToday } from './hooks';
 import { InboxView } from './views/InboxView';
@@ -37,10 +39,7 @@ interface AppInfo {
   packaged: boolean;
 }
 
-const DISABLED_MENU = [
-  { icon: '🔍', label: 'Search', hint: 'M7' },
-  { icon: '🏷️', label: 'Filters & Labels', hint: 'M7' },
-] as const;
+const DISABLED_MENU = [{ icon: '🏷️', label: 'Filters & Labels', hint: 'M7' }] as const;
 
 /** 可拖拽分栏:宽度持久化 localStorage;invert 用于右栏(向左拖变宽)。 */
 function usePaneResize(
@@ -205,22 +204,40 @@ export function App(): React.JSX.Element {
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [projectModal, setProjectModal] = useState<'add' | ProjectListItemVM | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // 搜索命中任务后在此层开详情:各视图各有自己的详情态,跨视图跳转只能由 App 承担
+  const [searchDetailId, setSearchDetailId] = useState<string | null>(null);
 
   useEffect(() => {
     void window.gtd.appInfo().then(setInfo);
   }, []);
 
-  // Cmd+N 快速添加
+  // 全局快捷键:⌘N 快速添加、⌘K 搜索
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.metaKey && e.key === 'n') {
+      if (!e.metaKey) return;
+      if (e.key === 'n') {
         e.preventDefault();
         setQuickAddOpen(true);
+      } else if (e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  /** 命中 → 切到该条目的容器视图;任务再顺手打开详情。 */
+  const openHit = (hit: SearchHitVM): void => {
+    setView(
+      hit.target.view === 'project'
+        ? { kind: 'project', id: hit.target.projectId }
+        : { kind: hit.target.view },
+    );
+    setSearchOpen(false);
+    setSearchDetailId(hit.kind === 'task' ? hit.id : null);
+  };
 
   // D-23/M6a:hard-landscape 并入任务列表,徽章即任务数
   const todayBadge = today.data ? today.data.tasks.length : undefined;
@@ -267,6 +284,17 @@ export function App(): React.JSX.Element {
           {navItem('inbox', '📥', 'Inbox', inbox.data?.length)}
           {navItem('today', '📅', 'Today', todayBadge)}
           {navItem('calendar', '🗓️', 'Calendar')}
+          <button
+            type="button"
+            data-testid="search-open"
+            onClick={() => setSearchOpen(true)}
+            title="搜索(⌘K)"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-neutral-200"
+          >
+            <span>🔍</span>
+            Search
+            <kbd className="ml-auto text-[10px] text-neutral-400">⌘K</kbd>
+          </button>
           {DISABLED_MENU.map((item) => (
             <div
               key={item.label}
@@ -370,6 +398,10 @@ export function App(): React.JSX.Element {
       </main>
 
       {quickAddOpen && <TaskCard mode="add" onClose={() => setQuickAddOpen(false)} />}
+      {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onPick={openHit} />}
+      {searchDetailId !== null && (
+        <TaskDetailModal taskId={searchDetailId} onClose={() => setSearchDetailId(null)} />
+      )}
       <Toasts />
       {projectModal !== null && (
         <ProjectModal

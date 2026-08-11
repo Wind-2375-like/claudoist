@@ -67,6 +67,17 @@ export function useUpstream() {
   return useQuery({ queryKey: ['upstream'], queryFn: () => window.gtd.upstreamList() });
 }
 
+/** ⌘K 搜索(M7a):空查询不发请求;keepPreviousData 让逐字输入时列表不闪。 */
+export function useSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ['search', q],
+    queryFn: () => window.gtd.search(q),
+    enabled: q !== '',
+    placeholderData: (prev) => prev,
+  });
+}
+
 export function useContexts() {
   return useQuery({ queryKey: ['contexts'], queryFn: () => window.gtd.contextsList() });
 }

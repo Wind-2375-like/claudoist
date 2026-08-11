@@ -557,7 +557,11 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
 业务规则细节(决策树、路由、级联、排序公式)一律以 [./INVARIANTS.md](./INVARIANTS.md) 为准,本节只描述 UI 结构与交互。
 
 - **Add task(全局 "+",⌘N;2026-08-08 M5 反馈定案为 Todoist 式单卡)**:一张卡片 —— Task name + Description 两行输入,下方属性 chip 行:**Date**(Today / Tomorrow / 自选 → `scheduledDate`)、**Deadline**、**Priority**(文字 最高/高/中/低/最低,存储 1–5,1=最低,不重编号)、**Labels**(多选)、**Reminders**(datetime,落 `reminders` 表;响铃调度 M6)、context 选择(内联新建),底部位置选择器(**Inbox ▾** / 任意项目)+ Cancel / Add task。**语义**:位置=Inbox 且未 specify 任何属性 → 纯捕捉(`createInboxItem`,零摩擦);specify 了任意属性或选了项目 → 直接建 Task(相当于已理清)。attachment 并入 M10;location 不做(决策日志)。
-- **Search(⌘K)**:`cmdk` 面板,数据源 `gtd:search`——覆盖 tasks(含子任务)、projects、someday、reference、done 归档、calendar、waiting-for,外加命令动作("Focus mode"、"New conversation")。
+- **Search(⌘K,M7a;INV-32)**:自绘命令面板(未引 `cmdk` —— 只需输入框 + 列表 + ↑↓/↵/Esc,一个依赖换不来什么),数据源 `gtd:search` → domain `searchAll`。侧栏 Search 项与 ⌘K 等价。
+  - **覆盖**:任务(标题 + 描述,含子任务、someday/reference、Upstream 镜像、已完成归档)与项目。容器模型下这些都是带 `bucket` 的 Task,故同属一组,由 VM 按容器给出二级说明(`Inbox · @home`、`发布 1.0 · @computer`、`已完成 2026-08-11`)。
+  - **不列**:软删除项(无恢复入口,点了无处可去,INV-32.3)、等待项(桌面无该视图;CLI `search` 会列)。
+  - **导航**:命中即跳到该条目的**容器视图**(而非它恰好出现的 Today/日历),任务再顺手打开详情弹窗;跨视图跳转的详情态由 App 层持有,各视图自己的详情态管不了别人。
+  - 原规划里的命令动作("Focus mode"、"Start Weekly Review")**随 D-28 取消** —— 这些是 agent skill 的入口,不是搜索结果。
 - **TaskRow(全视图统一行组件)**:完成勾选圈(**complete↔reopen 可切换**:active 圈点击完成、done 圈点击撤销,D-22 误点即可复原)、标题、属性 chip(计划日 / 截止 / 优先级文字 / **label 名**(彩点+名称,不是数量)/ @context);**点击行主体(非勾选框)→ 任务详情弹窗**;右键菜单(完成 / 编辑 / 删除=软删);完成控件 **hover 提示**:带未完成子任务时提示"将连同 N 个子任务一起完成(误点可再点一下撤销)"(D-22 向下级联)。日历项(Today 硬边界)复用同一行式渲染(完成圈 + 标题 + 时间 chip),不再是独立卡片块。
 - **任务详情弹窗(D-22 Todoist 式两栏,单击任务打开;与右键"编辑"的 TaskCard 不同)**:**左栏 = 内容** —— 完成圈 + 标题、描述、**子任务区**(直接子任务用 TaskRow 渲染,可右键完成/删除、单击下钻;"+ Add sub-task" 打开与添加任务相同的 TaskCard,默认继承父的位置/context,≤5 层)、**评论区**(时间序 + 输入框;附件 M10);**右栏 = 属性面板** —— Project/位置(可编辑,**Move to** Inbox/Someday/Reference/项目)、Date、Deadline、Priority、Labels、Reminders、@context,逐项点击就地编辑(经 `tasks.update`/`tasks.move`/label·reminder 通道)。下钻子任务时顶部显示返回按钮(标签 = 真实上一层标题,非父链)。
 - **Inbox(容器模型,INVARIANTS D-20,2026-08-09 定案)**:`bucket='inbox'` 的**任务列表**(仅根任务成行,子任务在详情内)——task 生在 Inbox,不挪不消失。右键"编辑"展开 TaskCard;**Move to** 选择器(Inbox / 项目 / Someday / Reference)执行容器移动;底部内联 "+ Add task"。理清 = 编辑属性 + Move(或勾完成);想让 Claude 理清就直接在右栏对话——**无专用按钮**。

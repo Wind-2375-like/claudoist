@@ -173,6 +173,29 @@ export interface GoogleCalendarVM {
   accountEmail: string;
 }
 
+/** ⌘K 搜索结果跳转目标 —— 与 App 的 View 联合一一对应。 */
+export type SearchTargetVM =
+  | { view: 'inbox' | 'someday' | 'reference' | 'upstream' | 'completed' }
+  | { view: 'project'; projectId: string };
+
+export interface SearchHitVM {
+  kind: 'task' | 'project';
+  /** task 的 id(kind='task' 时可直接开详情弹窗)或 project 的 id */
+  id: string;
+  title: string;
+  /** 二级行:容器/项目 · context · 状态 */
+  subtitle: string;
+  done: boolean;
+  target: SearchTargetVM;
+}
+
+/** ⌘K 搜索(M7a):排序与过滤全部来自 domain `searchAll`,这里只做呈现映射。 */
+export interface SearchVM {
+  hits: SearchHitVM[];
+  /** 截断前的命中总数(含未在面板呈现的 waiting-for) */
+  totalMatched: number;
+}
+
 /** 侧栏徽章计数(someday/reference)。 */
 export interface BucketCountsVM {
   someday: number;

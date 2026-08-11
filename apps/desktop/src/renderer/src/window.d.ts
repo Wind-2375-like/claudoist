@@ -8,6 +8,7 @@ import type {
   GtdChangedEvent,
   MoveTargetVM,
   ProjectListItemVM,
+  SearchVM,
   ProjectViewVM,
   QuickAddTaskInputVM,
   TaskDetailVM,
@@ -36,6 +37,7 @@ declare global {
       taskDetail: (id: string) => Promise<TaskDetailVM | null>;
       today: () => Promise<TodayVM>;
       upstreamList: () => Promise<TaskTreeVM[]>;
+      search: (query: string) => Promise<SearchVM>;
       calendarRange: (from: string, days: number) => Promise<CalendarRangeVM>;
       contextsList: () => Promise<ContextVM[]>;
       onChanged: (cb: (ev: GtdChangedEvent) => void) => () => void;

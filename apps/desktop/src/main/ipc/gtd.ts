@@ -23,6 +23,7 @@ import {
   quickAddTask,
   reopenTask,
   reorderTask,
+  searchAll,
   setTaskLabels,
   subtreeHeight,
   taskDepth,
@@ -37,6 +38,9 @@ import type {
   ProjectListItemVM,
   ProjectViewVM,
   CalendarRangeVM,
+  SearchHitVM,
+  SearchTargetVM,
+  SearchVM,
   TaskDetailVM,
   TaskTreeVM,
   TaskVM,
@@ -59,6 +63,8 @@ export interface GtdViews {
   today(): TodayVM;
   /** 外部日历镜像任务(D-25/INV-29):独立容器,不与 Inbox 混淆 */
   upstream(): TaskTreeVM[];
+  /** ⌘K 跨实体搜索(M7a):空/无结果一律返回空 hits,不抛 */
+  search(query: string): SearchVM;
   /** 日历区间(D-23/INV-28/M6b):from 起连续 days 天 */
   calendarRange(from: string, days: number): CalendarRangeVM;
   contexts(): ContextVM[];
@@ -267,6 +273,59 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
         })
         .map((t) => treeVM(snap, t, today));
     },
+    search(query) {
+      const snap = store.snapshot();
+      // 匹配与排序全在 domain(searchAll);这里只把命中映射成"点了能去哪"
+      const r = searchAll(snap, { clock, idGen: { next: () => '' } }, { query });
+      if (isUsecaseError(r)) return { hits: [], totalMatched: 0 };
+      const projectName = (id: string | null): string | null =>
+        id === null ? null : (snap.projects.find((p) => p.id === id)?.outcome ?? null);
+      const hits: SearchHitVM[] = [
+        ...r.consequences.tasks.map((t): SearchHitVM => {
+          const done = t.status === 'done';
+          // 归宿 = 任务的容器(而非它恰好出现的 Today/Calendar),这样跳过去一定找得到
+          const target: SearchTargetVM = done
+            ? { view: 'completed' }
+            : t.externalId !== null
+              ? { view: 'upstream' }
+              : t.bucket === 'project' && t.projectId !== null
+                ? { view: 'project', projectId: t.projectId }
+                : t.bucket === 'someday' || t.bucket === 'reference'
+                  ? { view: t.bucket }
+                  : { view: 'inbox' };
+          const where =
+            t.externalId !== null
+              ? 'Upstream'
+              : t.bucket === 'project'
+                ? (projectName(t.projectId) ?? '项目')
+                : t.bucket === 'someday'
+                  ? 'Someday'
+                  : t.bucket === 'reference'
+                    ? 'Reference'
+                    : 'Inbox';
+          const bits = [where, snap.contexts.find((c) => c.id === t.contextId)?.name];
+          if (done) bits.push(`已完成 ${(t.completedAt ?? '').slice(0, 10)}`);
+          else if (t.scheduledDate !== null) bits.push(`📅 ${t.scheduledDate}`);
+          return {
+            kind: 'task',
+            id: t.id,
+            title: t.title,
+            subtitle: bits.filter(Boolean).join(' · '),
+            done,
+            target,
+          };
+        }),
+        ...r.consequences.projects.map((p): SearchHitVM => ({
+          kind: 'project',
+          id: p.id,
+          title: p.outcome,
+          subtitle: p.status === 'complete' ? '项目 · 已完成' : '项目',
+          done: p.status === 'complete',
+          target: { view: 'project', projectId: p.id },
+        })),
+      ];
+      return { hits, totalMatched: r.consequences.totalMatched };
+    },
     today() {
       const snap = store.snapshot();
       const today = clock.today();
@@ -363,6 +422,7 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   ipcMain.handle('gtd:task.detail', (_e, payload: { id: string }) => views.taskDetail(payload.id));
   ipcMain.handle('gtd:today', () => views.today());
   ipcMain.handle('gtd:upstream.list', () => views.upstream());
+  ipcMain.handle('gtd:search', (_e, p: { query: string }) => views.search(p.query));
   ipcMain.handle('gtd:calendar.range', (_e, payload: { from: string; days: number }) =>
     views.calendarRange(payload.from, payload.days),
   );

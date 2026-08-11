@@ -4,7 +4,7 @@ import { searchAll } from '../src/usecases/search';
 import { isUsecaseError } from '../src/usecases/types';
 import type { UsecaseResult } from '../src/usecases/types';
 import type { GtdSnapshot, Task } from '../src/index';
-import { deps, inboxItem, project, snapshot, task, waitingFor } from './helpers';
+import { deps, project, snapshot, task, waitingFor } from './helpers';
 
 function ok<C>(r: UsecaseResult<C>): C {
   if (isUsecaseError(r)) throw new Error(r.error);
@@ -131,24 +131,27 @@ describe('uc-filters CRUD', () => {
   });
 });
 
-describe('uc-search searchAll:跨实体、大小写不敏感、含 done/complete', () => {
+describe('INV-32 searchAll:容器模型口径、大小写不敏感、含 done 归档、软删不返回', () => {
+  // D-20 后 Inbox/Someday/Reference 都是带 bucket 的 Task —— 全部落在 tasks 一组
   const searchSnap = (): GtdSnapshot =>
     snapshot({
       tasks: [
-        task({ id: 'ta', title: 'Buy milk' }),
+        task({ id: 'ta', title: 'Buy milk', createdAt: '2026-08-05T00:00:00' }),
         task({ id: 'td', title: 'buy tickets', status: 'done' }),
+        task({ id: 'tgone', title: 'buy nothing', status: 'deleted' }),
+        task({ id: 'tsome', title: 'buy a boat', bucket: 'someday' }),
+        task({ id: 'tref', title: 'BUYing guide', bucket: 'reference' }),
+        task({
+          id: 'tdesc',
+          title: '装修',
+          description: '先去 buy 瓷砖',
+          createdAt: '2026-08-04T00:00:00',
+        }),
         task({ id: 'tx', title: 'call mom' }),
       ],
       projects: [
         project({ id: 'pa', outcome: 'Buy house', status: 'complete' }),
         project({ id: 'px', outcome: '装修厨房' }),
-      ],
-      inbox: [inboxItem({ id: 'i1', text: 'buy stamps' }), inboxItem({ id: 'i2', text: '想法' })],
-      listItems: [
-        { id: 's1', kind: 'someday', text: 'buy a boat', createdAt: '2026-08-01T00:00:00' },
-        { id: 'r1', kind: 'reference', text: 'BUYing guide', createdAt: '2026-08-01T00:00:00' },
-        { id: 'g1', kind: 'trash', text: 'old buy list', createdAt: '2026-08-01T00:00:00' },
-        { id: 's2', kind: 'someday', text: '学钢琴', createdAt: '2026-08-01T00:00:00' },
       ],
       waiting: [
         waitingFor({ id: 'wa', description: 'BUY approval', delegatedTo: 'boss' }),
@@ -156,22 +159,29 @@ describe('uc-search searchAll:跨实体、大小写不敏感、含 done/complete
       ],
     });
 
-  it('query=buy → 各分组命中(tasks 含 done;projects 含 complete)', () => {
+  it('query=buy → someday/reference 任务也命中;done 归档在活跃之后;软删不返回', () => {
     const g = ok(searchAll(searchSnap(), deps(), { query: 'buy' }));
-    expect(g.tasks.map((t) => t.id)).toEqual(['ta', 'td']);
+    // 活跃(标题命中,createdAt 倒序;同刻按 id)→ 活跃(仅描述命中)→ done;deleted 缺席
+    expect(g.tasks.map((t) => t.id)).toEqual(['ta', 'tref', 'tsome', 'tdesc', 'td']);
+    expect(g.tasks.map((t) => t.id)).not.toContain('tgone');
     expect(g.projects.map((p) => p.id)).toEqual(['pa']);
-    expect(g.inbox.map((i) => i.id)).toEqual(['i1']);
-    expect(g.someday.map((i) => i.id)).toEqual(['s1']);
-    expect(g.reference.map((i) => i.id)).toEqual(['r1']);
-    expect(g.trash.map((i) => i.id)).toEqual(['g1']);
     expect(g.waiting.map((w) => w.id)).toEqual(['wa']);
+    expect(g.totalMatched).toBe(7);
   });
 
-  it('中文查询、受托人命中、空查询报错', () => {
+  it('中文查询、描述命中、受托人命中、空查询报错', () => {
     const g = ok(searchAll(searchSnap(), deps(), { query: '厨房' }));
     expect(g.projects.map((p) => p.id)).toEqual(['px']);
+    const byDesc = ok(searchAll(searchSnap(), deps(), { query: '瓷砖' }));
+    expect(byDesc.tasks.map((t) => t.id)).toEqual(['tdesc']);
     const byPerson = ok(searchAll(searchSnap(), deps(), { query: '老王' }));
     expect(byPerson.waiting.map((w) => w.id)).toEqual(['wb']);
     expect('error' in searchAll(searchSnap(), deps(), { query: '  ' })).toBe(true);
+  });
+
+  it('limit 截断每类结果,totalMatched 仍为截断前总数', () => {
+    const g = ok(searchAll(searchSnap(), deps(), { query: 'buy', limit: 2 }));
+    expect(g.tasks).toHaveLength(2);
+    expect(g.totalMatched).toBe(7);
   });
 });

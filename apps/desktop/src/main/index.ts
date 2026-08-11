@@ -19,6 +19,8 @@ const dumpArg = process.argv.find((a) => a.startsWith('--dump='));
 const screenshotArg = process.argv.find((a) => a.startsWith('--screenshot='));
 // 截图前先点一个选择器(拍弹窗/面板用,如 Focus、周回顾向导、⌘K)
 const screenshotClickArg = process.argv.find((a) => a.startsWith('--screenshot-click='));
+// 点开之后往当前焦点输入框敲一段文字(命令面板/表单类界面)
+const screenshotTypeArg = process.argv.find((a) => a.startsWith('--screenshot-type='));
 
 function createWindow(): BrowserWindow {
   const widthArg = process.argv.find((a) => a.startsWith('--win-width='));
@@ -163,6 +165,20 @@ if (spikeArg) {
               );
               if (!hit) process.stdout.write(`[SCREENSHOT] 选择器无匹配:${sel}\n`);
               await new Promise((r) => setTimeout(r, 600));
+            }
+            if (screenshotTypeArg) {
+              const text = screenshotTypeArg.slice('--screenshot-type='.length);
+              // 受控组件必须走原生 setter + input 事件,直接赋值 React 收不到
+              await win.webContents.executeJavaScript(`(() => {
+                const el = document.activeElement;
+                if (!el || !('value' in el)) return false;
+                const proto = el instanceof HTMLTextAreaElement
+                  ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(text)});
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                return true;
+              })()`);
+              await new Promise((r) => setTimeout(r, 900));
             }
             const img = await win.webContents.capturePage();
             writeFileSync(path, img.toPNG());

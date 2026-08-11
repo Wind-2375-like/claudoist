@@ -35,6 +35,8 @@ import {
   quickAddTask,
   reopenTask,
   reorderTask,
+  searchAll,
+  SEARCH_DEFAULT_LIMIT,
   tasksWithInheritedDeadline,
   todaysTimedTasks,
   updateProject,
@@ -266,6 +268,8 @@ function taskJson(snap: GtdSnapshot, t: Task, today: IsoDate): TaskJson {
 
 function taskLine(j: TaskJson): string {
   const bits = [j.id.slice(0, 8), `${j.parentTaskId !== null ? '↳ ' : ''}${j.title}`];
+  // search 会把 done 与 active 混在一张表里,不标就分不出来(其余命令只列 active)
+  if (j.status === 'done') bits.push('✓已完成');
   if (j.project !== null) bits.push(`[${j.project}]`);
   else if (j.bucket !== 'inbox') bits.push(`[${j.bucket}]`);
   if (j.scheduledDate !== null) bits.push(`📅${j.scheduledDate}`);
@@ -570,6 +574,79 @@ const engage: Handler = (store, deps, args) => {
       matched: matches.length,
     },
     text,
+  };
+};
+
+/**
+ * 跨实体搜索(M7a):与 ⌘K 同一个 domain `searchAll`。
+ * CLI 比面板多列 waiting-for —— 面板里点它没有去处(桌面无等待项视图),终端里没这问题。
+ */
+const search: Handler = (store, deps, args) => {
+  const q = args.positionals.join(' ').trim();
+  if (!q) throw new CliError('用法:search <关键词> [--limit=50]');
+  const limitRaw = opt(args, 'limit');
+  const limit = limitRaw === undefined ? SEARCH_DEFAULT_LIMIT : Number(limitRaw);
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new CliError(`--limit 需为正整数,得到 "${limitRaw}"`);
+  }
+  const snap = store.snapshot();
+  const today = deps.clock.today();
+  const r = searchAll(snap, deps, { query: q, limit });
+  if (isUsecaseError(r)) throw new CliError(r.error);
+  const { tasks, projects: hitProjects, waiting, totalMatched } = r.consequences;
+  const taskRows = tasks.map((t) => taskJson(snap, t, today));
+  const projectRows = hitProjects.map((p) => ({
+    id: p.id,
+    name: p.outcome,
+    status: p.status,
+    deadline: p.deadline,
+  }));
+  const waitingRows = waiting.map((w) => ({
+    id: w.id,
+    description: w.description,
+    delegatedTo: w.delegatedTo,
+    resolved: w.resolvedAt !== null,
+  }));
+  const shown = taskRows.length + projectRows.length + waitingRows.length;
+  const lines = [
+    `搜索「${q}」`,
+    taskSection('任务', taskRows),
+    `项目(${projectRows.length})\n${
+      projectRows.length === 0
+        ? '(空)'
+        : projectRows
+            .map(
+              (p) =>
+                `- ${p.id.slice(0, 8)}  ${p.name}${p.status === 'complete' ? '  已完成' : ''}${
+                  p.deadline !== null ? `  🎯${p.deadline}` : ''
+                }`,
+            )
+            .join('\n')
+    }`,
+    `等待项(${waitingRows.length})\n${
+      waitingRows.length === 0
+        ? '(空)'
+        : waitingRows
+            .map(
+              (w) =>
+                `- ${w.id.slice(0, 8)}  ${w.description} → ${w.delegatedTo}${
+                  w.resolved ? '  已解决' : ''
+                }`,
+            )
+            .join('\n')
+    }`,
+  ];
+  if (totalMatched > shown) lines.push(`另有 ${totalMatched - shown} 条未列出(--limit 可放宽)。`);
+  return {
+    data: {
+      query: q,
+      limit,
+      totalMatched,
+      tasks: taskRows,
+      projects: projectRows,
+      waiting: waitingRows,
+    },
+    text: lines.join('\n\n'),
   };
 };
 
@@ -959,6 +1036,7 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
   today                             统一待办(计划 ≤ 今天 ∪ 截止 ≤ 今天;带时间任务按时刻排)
   calendar [--from=today|tomorrow|YYYY-MM-DD] [--days=1..31]  日历周视图(全天段 + 定时段,INV-28)
   engage [--context=] [--minutes=60] [--energy=low|medium|high]  择事:calendar-first + top-7(INV-20)
+  search <关键词> [--limit=50]                      跨实体搜索(任务/项目/等待项,与 ⌘K 同口径)
   show <任务>                       任务详情(含子任务树 / 评论 / 提醒)
   comment <任务> <内容>             加评论
   move <任务> <inbox|someday|reference|项目引用>   根任务子树随动;子任务先脱离父
@@ -983,6 +1061,7 @@ const HANDLERS: Record<string, Handler> = {
   today,
   calendar,
   engage,
+  search,
   show,
   comment,
   move,
@@ -1006,6 +1085,7 @@ const GLOBAL_OPTS = ['json', 'db', 'dev', 'prod', 'help'];
 const COMMAND_OPTS: Record<string, string[]> = {
   calendar: ['from', 'days'],
   engage: ['context', 'minutes', 'energy'],
+  search: ['limit'],
   add: [
     'parent',
     'desc',

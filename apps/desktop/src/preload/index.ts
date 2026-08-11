@@ -10,6 +10,7 @@ import type {
   MoveTargetVM,
   ProjectListItemVM,
   ProjectViewVM,
+  SearchVM,
   QuickAddTaskInputVM,
   TaskDetailVM,
   TaskTreeVM,
@@ -40,6 +41,7 @@ const gtdApi = {
     ipcRenderer.invoke('gtd:task.detail', { id }),
   today: (): Promise<TodayVM> => ipcRenderer.invoke('gtd:today'),
   upstreamList: (): Promise<TaskTreeVM[]> => ipcRenderer.invoke('gtd:upstream.list'),
+  search: (query: string): Promise<SearchVM> => ipcRenderer.invoke('gtd:search', { query }),
   calendarRange: (from: string, days: number): Promise<CalendarRangeVM> =>
     ipcRenderer.invoke('gtd:calendar.range', { from, days }),
   contextsList: (): Promise<ContextVM[]> => ipcRenderer.invoke('gtd:contexts.list'),
