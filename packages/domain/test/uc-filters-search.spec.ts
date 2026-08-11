@@ -31,7 +31,7 @@ function filterSnap(): GtdSnapshot {
         id: 'b',
         title: 'write REPORT',
         contextId: 'c1',
-        priority: 5,
+        priority: 1,
         energy: 'high',
         estimatedMinutes: 90,
         projectId: 'p1',
@@ -41,7 +41,7 @@ function filterSnap(): GtdSnapshot {
         id: 'c',
         title: 'call mom',
         contextId: 'c2',
-        priority: 4,
+        priority: 2,
         energy: 'urgent', // 未知值 → 按 medium 参与比较(INV-02)
         estimatedMinutes: 5,
         projectId: null,
@@ -69,9 +69,9 @@ describe('uc-filters evalFilter:各维度 + INV-01/INV-02 语义', () => {
     expect(ids(evalFilter(filterSnap(), { energyMax: 'low' }))).toEqual(['a']);
   });
 
-  it('priorityMin=4:数值 ≥(INV-01:5=最高,不重编号)', () => {
-    expect(ids(evalFilter(filterSnap(), { priorityMin: 4 }))).toEqual(['b', 'c']);
-    expect(ids(evalFilter(filterSnap(), { priorityMin: 5 }))).toEqual(['b']);
+  it('priorityMax=2:数值 ≤(INV-01/D-29:1=最高,不重编号)', () => {
+    expect(ids(evalFilter(filterSnap(), { priorityMax: 2 }))).toEqual(['b', 'c']);
+    expect(ids(evalFilter(filterSnap(), { priorityMax: 1 }))).toEqual(['b']);
   });
 
   it('dueOnOrBefore:字典序 ≤;无 deadline 不命中', () => {
@@ -94,7 +94,7 @@ describe('uc-filters evalFilter:各维度 + INV-01/INV-02 语义', () => {
     expect(ids(evalFilter(filterSnap(), { contextId: 'c2' }))).toEqual(['c']);
     expect(ids(evalFilter(filterSnap(), { maxMinutes: 20 }))).toEqual(['a', 'c']);
     expect(ids(evalFilter(filterSnap(), { noProject: true }))).toEqual(['a', 'c']);
-    expect(ids(evalFilter(filterSnap(), { noProject: true, priorityMin: 4 }))).toEqual(['c']);
+    expect(ids(evalFilter(filterSnap(), { noProject: true, priorityMax: 2 }))).toEqual(['c']);
   });
 });
 
@@ -114,7 +114,7 @@ describe('uc-filters CRUD', () => {
     expect('error' in createFilter(snap, d, { name: 'x', query: { energyMax: 'huge' } })).toBe(
       true,
     );
-    expect('error' in createFilter(snap, d, { name: 'x', query: { priorityMin: 9 } })).toBe(true);
+    expect('error' in createFilter(snap, d, { name: 'x', query: { priorityMax: 9 } })).toBe(true);
     expect('error' in createFilter(snap, d, { name: ' ', query: {} })).toBe(true);
   });
 

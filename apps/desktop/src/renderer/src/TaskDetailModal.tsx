@@ -3,20 +3,13 @@ import { useContexts, useLabels, useProjects, useTaskDetail } from './hooks';
 import { TaskCard } from './TaskCard';
 import { TaskTree } from './TaskTree';
 import { completeTitle, completeWithFeedback, reopenTask, toast } from './toast';
+import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
 
 /**
  * 任务详情弹窗(D-22 Todoist 式两栏,单击任务打开):
  * 左栏 = 内容(标题/完成圈/描述/子任务/评论);右栏 = 属性面板(位置/日期/截止/优先级/
  * 标签/提醒/context,逐项就地编辑,可 Move to)。子任务用 TaskRow(可右键、单击下钻)。
  */
-
-const PRIORITIES = [
-  { value: 5, label: '最高' },
-  { value: 4, label: '高' },
-  { value: 3, label: '中' },
-  { value: 2, label: '低' },
-  { value: 1, label: '最低' },
-];
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 const localDate = (offset = 0): string => {

@@ -29,7 +29,7 @@ describe('INV-23 waiting-for follow-up 模板(createFollowUp usecase)', () => {
     expect(t.contextId).toBe('cp'); // @phone 优先
     expect(t.estimatedMinutes).toBe(5);
     expect(t.energy).toBe('low');
-    expect(t.priority).toBe(4);
+    expect(t.priority).toBe(2); // 「高」(D-29 翻转后)
     expect(t.projectId).toBe('p1');
     expect(t.deadline).toBeNull();
     // 不改变 resolved(INV-23)

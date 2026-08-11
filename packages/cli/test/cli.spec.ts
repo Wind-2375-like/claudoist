@@ -41,7 +41,7 @@ describe('@gtd/cli 命令层(真实 sqlite 库)', () => {
   it('add 带属性入 inbox;--json data 含 id', () => {
     const t = run(
       'add',
-      args(['写周报'], { date: 'today', deadline: 'tomorrow', priority: '5' }),
+      args(['写周报'], { date: 'today', deadline: 'tomorrow', priority: '1' }),
     ) as {
       id: string;
       bucket: string;
@@ -53,7 +53,7 @@ describe('@gtd/cli 命令层(真实 sqlite 库)', () => {
     expect(t.bucket).toBe('inbox'); // D-20:默认容器 inbox
     expect(t.scheduledDate).toBe('2026-08-09');
     expect(t.deadline).toBe('2026-08-10'); // tomorrow 本地展开
-    expect(t.priorityLabel).toBe('最高'); // INV-01/D-14:1..5,文字展示
+    expect(t.priorityLabel).toBe('最高'); // INV-01/D-29:1 = 最高;D-14 文字展示
   });
 
   it('capture 多条零判断进 inbox(INV-16)', () => {

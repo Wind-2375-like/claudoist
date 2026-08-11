@@ -7,8 +7,8 @@ export interface FilterQuery {
   /** 任务 energy ≤ 此档(INV-02 序) */
   energyMax?: string;
   maxMinutes?: number;
-  /** 任务 priority ≥ 此值(INV-01:数值大 = 更高) */
-  priorityMin?: number;
+  /** 任务 priority ≤ 此值,即"至少这么重要"(INV-01/D-29:数值**小** = 更高) */
+  priorityMax?: number;
   dueOnOrBefore?: IsoDate;
   noProject?: boolean;
   textQuery?: string;

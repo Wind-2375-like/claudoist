@@ -296,4 +296,21 @@ ALTER TABLE tasks ADD COLUMN pushed_fingerprint TEXT;
 ALTER TABLE tasks ADD COLUMN time_zone TEXT;
 `,
   },
+  {
+    version: 10,
+    name: 'priority-flip',
+    // D-29:priority 方向翻转为 1 = 最高、5 = 最低(与 Todoist 的 pN 同向)。
+    // 存量值必须一起翻,否则旧数据的"最高"会变成"最低" —— 这是静默的语义损坏。
+    // 3(中)是对称中点,翻转后不动;CHECK (1..5) 与默认值 3 都不受影响。
+    // filters.query_json 里的 priorityMin 同步改名为 priorityMax 并取补值:
+    // 旧 {priorityMin:n} = "priority ≥ n" = "至少第 (6-n) 档重要" → 新 {priorityMax:6-n}。
+    sql: `
+UPDATE tasks SET priority = 6 - priority;
+UPDATE filters
+   SET query_json = json_remove(
+         json_set(query_json, '$.priorityMax', 6 - json_extract(query_json, '$.priorityMin')),
+         '$.priorityMin')
+ WHERE json_extract(query_json, '$.priorityMin') IS NOT NULL;
+`,
+  },
 ];

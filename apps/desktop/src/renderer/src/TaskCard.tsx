@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AddSubtaskInputVM, QuickAddTaskInputVM, TaskVM } from '../../shared/viewModels';
 import { useContexts, useLabels, useProjects } from './hooks';
+import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
 
 /**
  * Todoist 式统一卡片(D-20 容器模型):
@@ -10,14 +11,6 @@ import { useContexts, useLabels, useProjects } from './hooks';
  *   不显示 Move to 选择器(子任务随根,INV-25)。
  * - mode='edit':编辑既有任务属性;位置变化 = 容器移动(Move to)。
  */
-
-const PRIORITIES = [
-  { value: 5, label: '最高' },
-  { value: 4, label: '高' },
-  { value: 3, label: '中' },
-  { value: 2, label: '低' },
-  { value: 1, label: '最低' },
-];
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 const localDate = (offset = 0): string => {

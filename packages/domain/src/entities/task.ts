@@ -17,7 +17,7 @@ export interface Task {
   estimatedMinutes: number;
   /** 写入侧限 Energy;读取侧宽容未知字符串按 medium 参与比较(INV-02) */
   energy: string;
-  /** 1=最低 5=最高(INV-01);越界输入回退默认 3 */
+  /** 1=最高 5=最低(INV-01/D-29);越界输入回退默认 3 */
   priority: number;
   projectId: Id | null;
   /** 创建时若项目有 deadline 则静默复制(INV-10) */

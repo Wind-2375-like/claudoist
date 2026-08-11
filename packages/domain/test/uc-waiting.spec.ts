@@ -45,7 +45,7 @@ describe('uc-waiting resolve 与 follow-up 解耦(INV-14 边界 / INV-23)', () =
     expect(cmd.task.contextId).toBe('c-phone'); // @phone 优先(即使 sortOrder 更大)
     expect(cmd.task.estimatedMinutes).toBe(5);
     expect(cmd.task.energy).toBe('low');
-    expect(cmd.task.priority).toBe(4);
+    expect(cmd.task.priority).toBe(2); // 「高」(D-29 翻转后)
     expect(cmd.task.projectId).toBe('p1');
     expect(cmd.task.deadline).toBeNull();
     expect(r.consequences.followUpCreated).toBe(cmd.task.id);

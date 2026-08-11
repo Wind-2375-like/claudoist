@@ -58,7 +58,7 @@ CLI 中 inbox 是裸字符串数组;桌面版升级为对象(§5 差异 D-04)。
 | `contextId` | UUID,**必填** | — | 恰好一个 context(GTD 纪律);context 是主要标签 |
 | `estimatedMinutes` | int | **15** | 预估用时;engage 按 `estimatedMinutes <= 可用分钟` 过滤;CLI 对非数字输入回退默认值 |
 | `energy` | `'low' \| 'medium' \| 'high'` | **`'medium'`** | 所需精力;比较序 low(1) < medium(2) < high(3);历史数据出现未知值时按 medium(2) 处理(INV-02) |
-| `priority` | int 1–5 | **3** | ⚠ **1 = 最低,5 = 最高**(与 Todoist 的 p1=最高**相反**,见 INV-01);越界/非法输入回退默认 3 |
+| `priority` | int 1–5 | **3** | ⚠ **1 = 最高,5 = 最低**(D-29 起与 Todoist 的 p1=最高**同向**,见 INV-01);越界/非法输入回退默认 3 |
 | `projectId` | UUID,可空 | `null` | 所属项目;所有"项目有哪些行动"的查询**只按此字段扫描**(CLI 的 `Project.action_ids` 已废除,见 §5 D-08) |
 | `deadline` | date,可空 | `null` | 最迟完成日;创建时若所属项目有 deadline 则**静默复制**(INV-10);deadline ≠ 日程(见 2.5) |
 | `status` | `'active' \| 'done' \| 'deleted'` | `'active'` | `done` = 完成存档(CLI 的 `done_actions` 列表);`deleted` = 软删除进 Trash(§5 D-01)。注意:走 2 分钟规则当场完成的 Task **出生即 `done`**,从未有过 `active` 状态(INV-18) |
@@ -157,11 +157,12 @@ CLI 中三个裸字符串列表;桌面版统一为对象(§5 D-04)。
 
 ### 基础语义
 
-#### INV-01 Priority:1 = 最低,5 = 最高 ⚠SP
+#### INV-01 Priority:1 = 最高,5 = 最低(D-29 翻转)⚠SP
 
-**规则**:`priority` 取值 1–5,**1 为最低、5 为最高**,默认 3。任何界面、工具、导出**都不重编号**;选择器显示文字(最高/高/中/低/最低),存储始终为 GTD 语义数值。
-**为什么**:与 Todoist 的 p1=最高恰好相反,是最容易被 UI 层或 agent 静默翻转的语义。
-**验收**:engage 排序中 P5 排在 P1 之前;UI 选择器选"最高"落库为 5;任何序列化输出中不存在被翻转的数值。
+**规则**:`priority` 取值 1–5,**1 为最高、5 为最低**,默认 3(中)。任何界面、工具、导出**都不重编号**;选择器显示文字(最高/高/中/低/最低),存储值即用户所见的档位序号。排序时**升序 = 由重到轻**。
+**为什么**:2026-08-11 之前是反的(1 = 最低)。过滤器文本语法要用 Todoist 的 `p1 = 最高`,若存储仍是 5 = 最高,同一个应用里就会出现两套方向相反的数字 —— `p1` 与 `--priority=1` 恰好相反,这是必然出事的设计(用户定案:"不要让同一个应用出现两套方向相反的数字")。翻转后全链同向,`pN` 与存储值、CLI 入参完全一致,**不再需要任何转换**。
+**边界**:值域(1–5)、默认值(3)、"不重编号"三条都不变;3 是对称中点,翻转后仍是"中"。迁移 v10 对存量执行 `priority = 6 - priority`,并把 `filters.query_json` 的 `priorityMin` 改名取补为 `priorityMax`。
+**验收**:engage 排序中 p1 排在 p5 之前;UI 选择器选"最高"落库为 1;`pnpm cli add x --priority=1` 显示"最高";迁移后旧库里原本的"最高"仍显示"最高"。
 
 #### INV-02 Energy 序与过滤方向 ⚠SP
 
@@ -798,6 +799,7 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-17 | DDL 分解只在"创建带 deadline 项目"的流程内触发(§4.4),无对既有项目的独立入口 | My Projects 对任何有 deadline 的项目提供 "Break down by deadline"(§4.14) | 编辑能力普遍化后分解不应绑定创建时机;分解流程本体(§4.9)不变 |
 | D-18 | 理清 = 强制逐题问答(§4.3 交互形态) | **理清双路径(2026-08-08 用户定案)**:① 手动 specify —— Inbox 条目展开为 Todoist 式卡片,直接补属性转为 Task,或转为 Project,或归档 Someday/Reference/Trash;② 交给 Claude 对话理清(M8/M9 经 MCP 工具)。分步问答状态机**保留为内部机制**(agent 驱动与 Weekly Review 内嵌用),UI 无独立入口 | 逐题问答对日常理清过重;§4.3 的**去向语义**(六种去向、deadline 继承、逐项一次事务 = 一次确认)全部保留,变的只是交互载体 |
 | D-19 | Action 无"计划哪天做"概念(日程只能是 CalendarItem) | Task 新增 `scheduledDate`(与 deadline 并存)。(后续 D-23/M6a:CalendarItem 并入 Task,时间即 `startTime`) | Todoist 式 today/tomorrow 快速安排是用户核心工作流;时刻与最迟完成日的语义区分保留(§2.5) |
+| D-29 | priority 1 = 最低、5 = 最高(与 Todoist 相反) | **翻转为 1 = 最高、5 = 最低(2026-08-11 用户定案,INV-01)**:过滤器文本语法采用 Todoist 的 `p1 = 最高`,若存储不翻,同一应用里 `p1` 与 `--priority=1` 方向相反,必然出错。存量数据由迁移 v10 执行 `6 - priority`;值域/默认值/不重编号三条不变;`FilterQuery.priorityMin` 改名取补为 `priorityMax` | ✅ 已定 |
 | D-28 | `engage` / `review` 是 CLI 的交互式命令(分步问答向导) | **流程类功能不做 UI,改由 agent skill 承载(2026-08-11 用户定案)**:择事与周回顾**本质是一串原子操作的编排**,固化成向导 UI 等于把"何时该怎么想"写死在按钮里。算法(INV-20、§4.11、§4.12)原样保留在 domain;载体改为 agent skill + 聊天输入框下方的建议按钮(DESIGN §6.9),中栏不再有 Focus 面板/回顾向导。M7 范围收缩为 Search + Filters & Labels;已实现的 Focus 面板据此撤除,CLI `engage` 保留 | ✅ 已定 |
 | D-27 | 无时区概念,时间即本地墙上时间 | **浮动时间 vs 指定时区(2026-08-10 用户定案,INV-31,M6d)**:`Task.timeZone`(null = 浮动,随设备时区解释;非 null = 绑定 IANA 时区),借鉴 Todoist 的 Floating time | ✅ 已定 |
 | D-26 | 无外部日历写入 | **任务 → 专用 Claudoist 日历的双向同步(2026-08-10 用户定案,INV-30,M6c-3b)**:仅写**本应用创建**的日历(scope `calendar.app.created`),**默认关闭**,指纹去重 + 删除复查 + 本地脏数据优先 | ✅ 已定 |

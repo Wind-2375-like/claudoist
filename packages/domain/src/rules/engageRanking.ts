@@ -7,7 +7,7 @@ export const ENGAGE_TOP_N = 7;
 
 /**
  * INV-20 的**全部**匹配项(不截断):指定 context 的 active Task,过滤
- * estimatedMinutes ≤ 可用分钟 ∧ energy ≤ 用户 energy(INV-02);priority 降序
+ * estimatedMinutes ≤ 可用分钟 ∧ energy ≤ 用户 energy(INV-02);priority 升序(1 = 最高,D-29)
  * 稳定排序(同优先级保持原序 = 创建序)。deadline 不参与排序。纯读。
  *
  * INV-20.2:今天已排期的任务(= {@link todaysTimedTasks})**不进候选** ——
@@ -37,7 +37,7 @@ export function engageMatches(
   );
   return filtered
     .map((t, i) => ({ t, i }))
-    .sort((a, b) => b.t.priority - a.t.priority || a.i - b.i)
+    .sort((a, b) => a.t.priority - b.t.priority || a.i - b.i)
     .map((x) => x.t);
 }
 

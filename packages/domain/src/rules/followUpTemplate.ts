@@ -23,7 +23,7 @@ export function buildFollowUpTask(
     contextId,
     estimatedMinutes: 5,
     energy: 'low',
-    priority: 4,
+    priority: 2, // 「高」(D-29 翻转后)
     projectId: w.projectId,
     deadline: null,
     status: 'active',
