@@ -4,9 +4,9 @@ import type {
   GtdSnapshot,
   GtdStore,
   Id,
-  IsoDate,
   Project,
   Task,
+  TaskView,
   UsecaseResult,
 } from '@gtd/domain';
 import {
@@ -28,8 +28,6 @@ import {
   isUsecaseError,
   isValidIsoDate,
   moveTask,
-  priorityLabel,
-  projectBreadcrumb,
   projectStats,
   quickAddTask,
   reopenTask,
@@ -38,6 +36,7 @@ import {
   parseFilterQuery,
   runFilterQuery,
   searchAll,
+  taskView,
   SEARCH_DEFAULT_LIMIT,
   unknownNames,
   tasksWithInheritedDeadline,
@@ -124,7 +123,7 @@ function parseDuration(raw: string, allowNone: boolean): number | null {
 }
 
 /** 带时间但未设日期的提示(D-23:startTime 须与 scheduledDate 搭配才会上 Today/日历)。 */
-function danglingTimeHint(j: TaskJson): string {
+function danglingTimeHint(j: TaskView): string {
   return j.startTime !== null && j.scheduledDate === null
     ? '(提示:未设 --date,该时间暂不会出现在 Today/日历)'
     : '';
@@ -203,57 +202,7 @@ function resolveLabelIds(snap: GtdSnapshot, csv: string): Id[] {
 
 // ------------------------------------------------------------------ 输出
 
-interface TaskJson {
-  id: Id;
-  title: string;
-  status: string;
-  bucket: string;
-  project: string | null;
-  projectId: Id | null;
-  description: string;
-  scheduledDate: IsoDate | null;
-  deadline: IsoDate | null;
-  overdue: boolean;
-  priority: number;
-  priorityLabel: string;
-  labels: string[];
-  estimatedMinutes: number;
-  energy: string;
-  completedAt: string | null;
-  parentTaskId: Id | null;
-  startTime: string | null;
-  durationMinutes: number | null;
-  timeZone: string | null;
-}
-
-function taskJson(snap: GtdSnapshot, t: Task, today: IsoDate): TaskJson {
-  return {
-    id: t.id,
-    title: t.title,
-    status: t.status,
-    bucket: t.bucket,
-    project: t.projectId !== null ? projectBreadcrumb(snap, t.projectId) || null : null,
-    projectId: t.projectId,
-    description: t.description,
-    scheduledDate: t.scheduledDate,
-    deadline: t.deadline,
-    overdue: t.deadline !== null && t.deadline < today,
-    priority: t.priority,
-    priorityLabel: priorityLabel(t.priority),
-    labels: snap.taskLabels
-      .filter((tl) => tl.taskId === t.id)
-      .map((tl) => snap.labels.find((l) => l.id === tl.labelId)?.name ?? '?'),
-    estimatedMinutes: t.estimatedMinutes,
-    energy: t.energy,
-    completedAt: t.completedAt,
-    parentTaskId: t.parentTaskId,
-    startTime: t.startTime,
-    durationMinutes: t.durationMinutes,
-    timeZone: t.timeZone,
-  };
-}
-
-function taskLine(j: TaskJson): string {
+function taskLine(j: TaskView): string {
   const bits = [j.id.slice(0, 8), `${j.parentTaskId !== null ? '↳ ' : ''}${j.title}`];
   // search 会把 done 与 active 混在一张表里,不标就分不出来(其余命令只列 active)
   if (j.status === 'done') bits.push('✓已完成');
@@ -271,7 +220,7 @@ function taskLine(j: TaskJson): string {
   return bits.join('  ');
 }
 
-function taskSection(title: string, rows: TaskJson[]): string {
+function taskSection(title: string, rows: TaskView[]): string {
   const body = rows.length === 0 ? '(空)' : rows.map((r) => `- ${taskLine(r)}`).join('\n');
   return `${title}(${rows.length})\n${body}`;
 }
@@ -326,7 +275,7 @@ const add: Handler = (store, deps, args) => {
       }),
     );
     const after = store.snapshot();
-    const j = taskJson(after, findTask(after, c.taskId), deps.clock.today());
+    const j = taskView(after, findTask(after, c.taskId), deps.clock.today());
     return {
       data: { ...j, depth: c.depth },
       text: `已添加子任务(第 ${c.depth} 层,父:${parent.title}): ${taskLine(j)}${danglingTimeHint(j)}`,
@@ -349,7 +298,7 @@ const add: Handler = (store, deps, args) => {
   };
   const c = applyUsecase(store, quickAddTask(snap, deps, input));
   const after = store.snapshot();
-  const j = taskJson(after, findTask(after, c.taskId), deps.clock.today());
+  const j = taskView(after, findTask(after, c.taskId), deps.clock.today());
   const notes = c.inheritedDeadline ? `(继承项目 deadline ${c.inheritedDeadline},INV-10)` : '';
   return { data: j, text: `已添加: ${taskLine(j)} ${notes}${danglingTimeHint(j)}`.trim() };
 };
@@ -361,7 +310,7 @@ const capture: Handler = (store, deps, args) => {
     captureToInbox(store.snapshot(), deps, { texts: args.positionals }),
   );
   const after = store.snapshot();
-  const rows = c.createdIds.map((id) => taskJson(after, findTask(after, id), deps.clock.today()));
+  const rows = c.createdIds.map((id) => taskView(after, findTask(after, id), deps.clock.today()));
   return {
     data: rows,
     text: `已捕捉 ${rows.length} 条进 Inbox:\n${rows.map((r) => `- ${taskLine(r)}`).join('\n')}`,
@@ -373,7 +322,7 @@ const list: Handler = (store, deps, args) => {
   const snap = store.snapshot();
   const today = deps.clock.today();
   const byCreated = bySort;
-  let rows: TaskJson[];
+  let rows: TaskView[];
   if (kind === 'completed') {
     const limitRaw = opt(args, 'limit') ?? '200';
     const limit = Number(limitRaw);
@@ -384,7 +333,7 @@ const list: Handler = (store, deps, args) => {
       .filter((t) => t.status === 'done')
       .sort((a, b) => ((a.completedAt ?? '') > (b.completedAt ?? '') ? -1 : 1))
       .slice(0, limit)
-      .map((t) => taskJson(snap, t, today));
+      .map((t) => taskView(snap, t, today));
     return { data: rows, text: taskSection(kind, rows) };
   }
   if (kind === 'all') {
@@ -392,16 +341,16 @@ const list: Handler = (store, deps, args) => {
     rows = snap.tasks
       .filter((t) => t.status === 'active')
       .sort(byCreatedAt)
-      .map((t) => taskJson(snap, t, today));
+      .map((t) => taskView(snap, t, today));
     return { data: rows, text: taskSection(kind, rows) };
   }
   if (kind === 'inbox' || kind === 'someday' || kind === 'reference' || kind === 'project') {
     // 树状显示(M5R5):根 = active list-root;子 = active 子任务递归,缩进呈现
-    interface TreeJson extends TaskJson {
+    interface TreeJson extends TaskView {
       children: TreeJson[];
     }
     const build = (t: Task): TreeJson => ({
-      ...taskJson(snap, t, today),
+      ...taskView(snap, t, today),
       children: snap.tasks
         .filter((c) => c.parentTaskId === t.id && c.status === 'active')
         .sort(byCreated)
@@ -456,7 +405,7 @@ const today: Handler = (store, deps, _args) => {
       if (a.startTime !== b.startTime) return (a.startTime ?? '') < (b.startTime ?? '') ? -1 : 1;
       return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
     })
-    .map((t) => taskJson(snap, t, day));
+    .map((t) => taskView(snap, t, day));
   const scheduledIds = new Set(scheduledToday.map((t) => t.id));
   // due 仅收未计划的过期项(与桌面 today() 同口径):计划到未来 = 显式推迟,不留 Today
   const due = snap.tasks
@@ -469,7 +418,7 @@ const today: Handler = (store, deps, _args) => {
         !scheduledIds.has(t.id),
     )
     .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1))
-    .map((t) => taskJson(snap, t, day));
+    .map((t) => taskView(snap, t, day));
   // 统一列表(D-21/D-23,与 App Today 同构):计划项在前,其余按 deadline
   const tasks = [...scheduledToday, ...due];
   return {
@@ -501,16 +450,16 @@ const calendar: Handler = (store, deps, args) => {
     const { allDay, timed } = calendarDay(snap, date);
     lines.push(`${date}${date === today ? '(今天)' : ''}`);
     if (allDay.length === 0 && timed.length === 0) lines.push('  (空)');
-    for (const t of allDay) lines.push(`  全天         ${taskLine(taskJson(snap, t, today))}`);
+    for (const t of allDay) lines.push(`  全天         ${taskLine(taskView(snap, t, today))}`);
     for (const t of timed) {
       const span = `${t.startTime}–${endTimeLabel(blockEndMinutes(t))}`;
-      lines.push(`  ${span}  ${taskLine(taskJson(snap, t, today))}`);
+      lines.push(`  ${span}  ${taskLine(taskView(snap, t, today))}`);
     }
     return {
       date,
       isToday: date === today,
-      allDay: allDay.map((t) => taskJson(snap, t, today)),
-      timed: timed.map((t) => taskJson(snap, t, today)),
+      allDay: allDay.map((t) => taskView(snap, t, today)),
+      timed: timed.map((t) => taskView(snap, t, today)),
     };
   });
   return {
@@ -546,9 +495,9 @@ const engage: Handler = (store, deps, args) => {
   const labelName = label === undefined ? '全部标签' : `@${label.name}`;
 
   // INV-20.1:日历优先段 = 当天硬性日程,与 --label 无关,故不随之过滤
-  const first = todaysTimedTasks(snap, today).map((t) => taskJson(snap, t, today));
+  const first = todaysTimedTasks(snap, today).map((t) => taskView(snap, t, today));
   const matches = engageMatches(snap, labelId, minutes, energy, today);
-  const cands = matches.slice(0, ENGAGE_TOP_N).map((t) => taskJson(snap, t, today));
+  const cands = matches.slice(0, ENGAGE_TOP_N).map((t) => taskView(snap, t, today));
   const hidden = matches.length - cands.length;
   const text = [
     `Focus ${labelName} · ≤${minutes} 分钟 · 精力 ${energy}`,
@@ -587,7 +536,7 @@ const search: Handler = (store, deps, args) => {
   const r = searchAll(snap, deps, { query: q, limit });
   if (isUsecaseError(r)) throw new CliError(r.error);
   const { tasks, projects: hitProjects, waiting, totalMatched } = r.consequences;
-  const taskRows = tasks.map((t) => taskJson(snap, t, today));
+  const taskRows = tasks.map((t) => taskView(snap, t, today));
   const projectRows = hitProjects.map((p) => ({
     id: p.id,
     name: p.outcome,
@@ -668,7 +617,7 @@ const filter: Handler = (store, deps, args) => {
   const unknown = parsed.ok ? unknownNames(snap, parsed.ast) : { labels: [], projects: [] };
   const sections = r.sections.map((sec) => ({
     source: sec.source,
-    tasks: sec.tasks.map((t) => taskJson(snap, t, today)),
+    tasks: sec.tasks.map((t) => taskView(snap, t, today)),
   }));
   const lines = [`查询「${q}」`];
   for (const sec of sections) {
@@ -852,7 +801,7 @@ const move: Handler = (store, deps, args) => {
       : ({ bucket: 'project', projectId: findProject(snap, dest).id } as const);
   const c = applyUsecase(store, moveTask(snap, deps, { id: task.id, to }));
   const after = store.snapshot();
-  const j = taskJson(after, findTask(after, task.id), deps.clock.today());
+  const j = taskView(after, findTask(after, task.id), deps.clock.today());
   const notes = [
     c.inheritedDeadline ? `继承项目 deadline ${c.inheritedDeadline}` : '',
     c.detachedFromParent ? '已脱离原父任务(INV-25.4)' : '',
@@ -890,7 +839,7 @@ const reorder: Handler = (store, deps, args) => {
     }),
   );
   const after = store.snapshot();
-  const j = taskJson(after, findTask(after, task.id), deps.clock.today());
+  const j = taskView(after, findTask(after, task.id), deps.clock.today());
   return {
     data: { taskId: c.taskId, parentTaskId: c.parentTaskId },
     text: `已重排: ${taskLine(j)}${c.parentTaskId !== null ? '(现为子任务)' : ''}`,
@@ -974,7 +923,7 @@ const update: Handler = (store, deps, args) => {
   if (Object.keys(patch).length === 0) throw new CliError('没有要更新的字段');
   applyUsecase(store, updateTask(snap, deps, { id: task.id, patch }));
   const after = store.snapshot();
-  const j = taskJson(after, findTask(after, task.id), deps.clock.today());
+  const j = taskView(after, findTask(after, task.id), deps.clock.today());
   return { data: j, text: `已更新: ${taskLine(j)}${danglingTimeHint(j)}` };
 };
 
@@ -984,19 +933,19 @@ const show: Handler = (store, deps, args) => {
   const snap = store.snapshot();
   const t = findTask(snap, ref);
   const today = deps.clock.today();
-  const j = taskJson(snap, t, today);
+  const j = taskView(snap, t, today);
   const reminders = snap.reminders
     .filter((r) => r.taskId === t.id)
     .map((r) => r.remindAt + (r.dispatched ? '(已提醒)' : ''));
   // 子任务树(D-21;≤5 层,排除已删除)
-  interface SubtaskJson extends TaskJson {
+  interface SubtaskJson extends TaskView {
     children: SubtaskJson[];
   }
   const subtree = (parent: Task): SubtaskJson[] =>
     snap.tasks
       .filter((x) => x.parentTaskId === parent.id && x.status !== 'deleted')
       .sort(bySort)
-      .map((x) => ({ ...taskJson(snap, x, today), children: subtree(x) }));
+      .map((x) => ({ ...taskView(snap, x, today), children: subtree(x) }));
   const subtasks = subtree(t);
   const subtaskLines: string[] = [];
   const walk = (nodes: SubtaskJson[], depth: number): void => {

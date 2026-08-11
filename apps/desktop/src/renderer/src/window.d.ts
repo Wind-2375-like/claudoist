@@ -97,8 +97,12 @@ declare global {
       inspectPushed: () => Promise<WriteResultVM>;
     };
     agent: {
-      send: (text: string, images: { data: string; mediaType: string }[]) => Promise<void>;
-      interrupt: () => Promise<void>;
+      status: () => Promise<unknown>;
+      startSession: (resume: boolean) => Promise<unknown>;
+      newSession: () => Promise<unknown>;
+      destroySession: () => Promise<unknown>;
+      send: (text: string, images: { data: string; mediaType: string }[]) => Promise<unknown>;
+      interrupt: () => Promise<unknown>;
       onStream: (cb: (msg: unknown) => void) => () => void;
     };
   }

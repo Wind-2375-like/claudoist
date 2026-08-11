@@ -1,12 +1,15 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
-import { runSpikeTurn, spikeInterrupt, type SpikeImage } from './agent/spike';
+// spike 仅保留 --spike-test 打包冒烟通道(M1);正式会话在 agent/sessionManager.ts
+import { runSpikeTurn, type SpikeImage } from './agent/spike';
 import { initStore } from './db';
 import { systemClock } from './clock';
 import { watchDbForExternalWrites } from './dbWatch';
 import { broadcastChanged, createGtdViews, registerGtdIpc } from './ipc/gtd';
 import { inspectAppCalendar, registerGoogleIpc } from './ipc/google';
+import { registerAgentIpc } from './ipc/agent';
+import { runAgentSmoke } from './agent/smoke';
 
 // dev/prod 数据完全隔离(docs/DESIGN.md §9.2):必须在 app ready 之前设置。
 if (!app.isPackaged) {
@@ -15,6 +18,8 @@ if (!app.isPackaged) {
 
 // dev 验证通道:--spike-test(M1)、--dump=views、--screenshot=<path>(M4)
 const spikeArg = process.argv.find((a) => a.startsWith('--spike-test='));
+// M8 冒烟:验证 skill 真被子进程加载、只读工具面真注册、一次真实往返
+const agentSmokeArg = process.argv.find((a) => a.startsWith('--agent-smoke'));
 const dumpArg = process.argv.find((a) => a.startsWith('--dump='));
 const screenshotArg = process.argv.find((a) => a.startsWith('--screenshot='));
 // 截图前依次点这些选择器(可重复传;拍需要先导航再展开的界面)
@@ -56,15 +61,6 @@ ipcMain.handle('app:info', () => ({
   packaged: app.isPackaged,
 }));
 
-ipcMain.handle('agent:send', (event, payload: { text: string; images: SpikeImage[] }) => {
-  const contents = event.sender;
-  void runSpikeTurn(payload.text, payload.images ?? [], (msg) => {
-    if (!contents.isDestroyed()) contents.send('agent:stream', msg);
-  });
-});
-
-ipcMain.handle('agent:interrupt', () => spikeInterrupt());
-
 async function runSpikeTest(arg: string): Promise<void> {
   const text = arg.slice('--spike-test='.length) || 'Reply with exactly: SPIKE_OK';
   const imageArg = process.argv.find((a) => a.startsWith('--spike-image='));
@@ -104,7 +100,9 @@ async function runSpikeTest(arg: string): Promise<void> {
 }
 
 const gotLock = app.requestSingleInstanceLock();
-if (spikeArg) {
+if (agentSmokeArg) {
+  void app.whenReady().then(() => runAgentSmoke(initStore(), systemClock, agentSmokeArg));
+} else if (spikeArg) {
   void app.whenReady().then(() => runSpikeTest(spikeArg));
 } else if (dumpArg === '--dump=google') {
   // 无头复查专用日历的真实内容:本地指针无法证明 Google 侧已清干净
@@ -151,6 +149,7 @@ if (spikeArg) {
       { clock: systemClock, idGen: { next: () => crypto.randomUUID() } },
       () => broadcastChanged('agent'),
     );
+    registerAgentIpc(store, systemClock);
     watchDbForExternalWrites(() => broadcastChanged('agent'));
     const win = createWindow();
     if (screenshotArg) {

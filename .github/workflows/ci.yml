@@ -41,6 +41,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      # 不变量覆盖 + system prompt 引用的 INV 编号仍然有效(M8:规则会演进,靠人读拦不住)
+      - run: pnpm --filter @gtd/domain check-coverage
+      - run: pnpm check-prompt
 
   build:
     runs-on: macos-latest

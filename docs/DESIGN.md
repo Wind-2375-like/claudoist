@@ -500,6 +500,24 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
 
 ---
 
+### 6.10 M8 实现要点(2026-08-11 落地,以下为**实测结论**)
+
+| 事实 | 依据 |
+|---|---|
+| `allowedTools` 只是"免确认自动放行"名单;**收窄工具面靠 `tools`** | `sdk.d.ts:1399/1455`;冒烟实测 `tools: []` 后 `system/init.tools` 里内置工具清零 |
+| `tools: []` 会**连 `Skill` 一起关掉**,skill 就加载了也调不动 | 冒烟第一轮实测:`builtins: []` 且 agent 无法进入 skill。故取 `tools: ['Skill']` |
+| `system/init` 回报 `skills` 是**发现**到的(含用户 `~/.claude/skills`),`options.skills` 是**启用过滤器** | 冒烟实测发现 20 个、启用 1 个;未列出的对模型隐藏且 Skill 工具拒绝。再加上不给 Read/Bash,用户私人 skill 既看不到也调不动 |
+| `env` 一旦设置就**整体替换** `process.env`,不合并 | `sdk.d.ts:1475`;必须先 spread,否则 PATH/HOME 全丢 |
+| `maxBudgetUsd` 确实存在 | `sdk.d.ts:1707`,超限返回 `error_max_budget_usd` |
+| 控制方法(`interrupt`/`setModel`/`setPermissionMode`)**仅 streaming-input 可用** | `sdk.d.ts:2358-2377` |
+
+**M8 有意留白**(不在本里程碑做,避免验收标准与实现对不上):
+
+- `conversations` 表与 `agent_audit` **不写**。M8 只维持一条会话,续接靠 settings 里的
+  `agent.lastSessionId`;会话列表/fork/删除是 M10,而只读期所有工具都自动放行、没有权限
+  决定可记,audit 会话行只会产生噪音。迁移 v14 已把 `sdk_session_id` 改可空,M9/M10 接上即可。
+- 模型/effort/thinking 切换、图片以外的附件:M10。
+
 ### 6.9 Agent Skills:GTD 流程的载体(D-28,2026-08-11 用户定案)
 
 **择事(Engage/Focus)与周回顾(Weekly Review)不做成桌面端的独立功能。** 它们本质上是

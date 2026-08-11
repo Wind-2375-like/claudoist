@@ -47,7 +47,7 @@
 | M5 | 捕捉与理清(经 R/R2/R3 三次用户反馈重塑) | 捕捉、Todoist 式单卡快速添加、容器模型(D-20)、平面项目 + 任务子树/评论/详情弹窗(D-21)、CLI 通道(M5C) | ✅ |
 | M6 | 日历 | 日历统一(D-23,CalendarItem 消解为定时任务)、本地周网格、Google 日历同步(D-25/D-26)、时区(D-27) | ✅ |
 | M7 | Search + Filters | ⌘K 全局搜索、Filters & Labels 视图(流程类功能改由 agent skill 承载,D-28) | 🔄 |
-| M8 | Agent 只读版 | SDK 接入 + API key onboarding + 流式聊天 + 只读工具 + 成本护栏 | ⬜ |
+| M8 | Agent 只读版 | SDK 会话 + 认证引导 + 流式聊天与工具 chip + 13 个只读工具 + 护栏 + engage skill | 🔄 |
 | M9 | Agent 写入 + 权限 | 写工具 + canUseTool 审批 + 权限模式 + agent_audit + 实时刷新 | ⬜ |
 | M10 | Agent 面板补全 | 会话管理/fork、图片粘贴、附件、模型与 effort 切换、用量账本、coaching evals | ⬜ |
 | M11 | 打包加固与打磨 | 无 Node 机器全流程复验、notarization、主题、错误上报面 | ⬜ |
@@ -516,10 +516,25 @@
 - 护栏:`maxTurns` + `maxBudgetUsd`(SDK 确有该选项;settings 键名统一为 `maxBudgetUsd`,语义 = **每会话**)。**中断分两级**:`agent:interrupt` 走 `query()` 返回对象的 **`interrupt()`**(仅 streaming-input 可用)= 只终止当前 turn、会话可继续;**AbortController 只用于销毁会话与应用退出** —— 在长活会话模型下 abort 会终止整个 `query()`,与"会话可继续"直接冲突。应用退出清理子进程。
 - 流式渲染:`stream_event` 状态机(text_delta / tool_use chip + input_json_delta / tool_result 折叠附着)。
 
+**实现记录(2026-08-11)**
+
+- `packages/agent-tools`(原空壳)落地:`readTools.ts` 是**纯逻辑层**(不 import SDK,可直接对拍 domain),`index.ts` 把它包成 13 个 `tool()` 定义 + `createSdkMcpServer({name:'gtd'})`。
+- `apps/desktop/src/main/agent/`:`sessionManager.ts`(长驻 streaming-input 会话、手写可推送 AsyncIterable、两级中断)、`systemPrompt.ts`(固化不变量 + 状态快照)、`skills.ts`(每次启动把 SKILL.md 写出到 `<userData>/.claude/skills/`)、`auth.ts`(本地文件级登录探测,不发网络请求)、`smoke.ts`。
+- `packages/domain/src/rules/taskView.ts` 新增:CLI 的 `--json` 与 agent 工具共用同一份任务投影(此前 CLI 独有,再抄一份必然漂移)。
+- 新门禁 `pnpm check-prompt` 进 CI:断言 prompt 引用的 INV 编号存在且未退役(已验证能抓到把 INV-21 改成已退役的 INV-24)。`check-coverage` 一并进 CI。
+- 新无头通道 `pnpm agent-smoke`:实测 skill 加载、工具面、只读保证、真实往返。
+
+**实测修定(冒烟发现,文档与直觉都不对的三处)**
+
+1. `tools: []` 会**连内置 `Skill` 一起关掉** —— skill 加载了却调不动。改为 `tools: ['Skill']`,冒烟断言"内置工具集合恰为 {Skill}"。
+2. `system/init.skills` 报的是**发现**到的 skill(含用户 `~/.claude/skills` 里的 20 个私人 skill),`options.skills` 才是**启用过滤器**。加上不给 Read/Bash,用户私人 skill 既看不到也调不动 —— 但这个区分必须写清,否则会误判成隔离失败。
+3. M1 spike 的 `agent:send`/`agent:interrupt` handler 还挂在 `index.ts` 顶层,与新通道**重复注册**导致主进程启动即抛。SpikeChat 删除时一并清掉(`--spike-test` 打包冒烟通道保留)。
+4. workspace 包以 TS 源码消费,`@gtd/agent-tools` 必须加进 `electron.vite.config.ts` 的 `externalizeDepsPlugin` 排除名单,否则 Node 直接加载裸 TS 报 ERR_MODULE_NOT_FOUND。
+
 **验收标准**
 
 *认证*
-- [ ] 已登录本机 Claude Code 的环境:右栏首次发消息**零配置**成功(不注入 API key、不设 `CLAUDE_CONFIG_DIR`)
+- [x] 已登录本机 Claude Code 的环境:右栏首次发消息**零配置**成功(不注入 API key、不设 `CLAUDE_CONFIG_DIR`)
 - [ ] 未登录环境:面板给可操作引导(终端 `claude` 登录后点重试),**无需重启**即可恢复
 - [ ] 在 `~/.claude/settings.json` 放一条会改变行为的设置,应用行为不受影响(`settingSources` 排除 `'user'` 生效)
 - [ ] 备用 API key 只存在 safeStorage 加密文件;日志、IPC payload、`agent_audit` 里 grep 不到明文
@@ -530,17 +545,17 @@
 - [ ] `conversations` 行在 query 起飞前插入,`sdk_session_id` 拿到后回填(迁移 v14 已使其可空)
 
 *只读工具*
-- [ ] 问「这周之前必须做完什么?」→ 经**可见的工具 chip** 得到正确答案,且走 `run_filter`(`deadline before: +7 days`)
+- [x] 问「这周之前必须做完什么?」→ 经**可见的工具 chip** 得到正确答案,且走 `run_filter`(`deadline before: +7 days`)
 - [ ] 问「这周要做什么?」返回**计划日**口径,与上一条**结果不同**(INV-33.2 两个日期字段不混用)
 - [ ] Someday/Reference 里的任务能被 `search` 找到;软删任务搜不到,且 agent 不因此断言"不存在"
 - [ ] `get_engage_recommendations` 与 `pnpm --silent cli engage --json` 同参数下逐条一致(INV-20.6 对拍)
-- [ ] **无任何写路径**:`tools: []`(内置 Bash/Write/Edit 全关)+ 写工具未注册;要求 agent 改数据时它**明说没有写权限**,不假装完成(INV-15)
-- [ ] 工具清单不含已退役工具;`list_inbox` 返回 `bucket='inbox'` 的 Task 而非 `inbox_items`
+- [x] **无任何写路径**:`tools: ['Skill']`(Bash/Write/Edit 全关,冒烟断言内置集合恰为 {Skill})+ 写工具未注册;要求 agent 改数据时它**明说没有写权限**,不假装完成(INV-15)
+- [x] 工具清单不含已退役工具;`list_inbox` 返回 `bucket='inbox'` 的 Task 而非 `inbox_items`
 
 *prompt 与护栏*
 - [ ] 会话起始快照含:日期、标签及活跃计数、inbox 数、各项目未完成数、今日计划数;**不含** contexts、不含孤儿数
 - [ ] 易错项抽查全对:priority 5 最高(且能主动提示与 Todoist 相反)、energy 方向、waiting-for 计入项目余活动、someday 激活 = **移到任意容器**、完成父任务**会**连带完成 active 子树
-- [ ] prompt 常量与 INVARIANTS 的同步有机器检查(内嵌 INV 编号 + check 脚本进 CI)
+- [x] prompt 常量与 INVARIANTS 的同步有机器检查(内嵌 INV 编号 + check 脚本进 CI)
 - [ ] 中断**只终止当前 turn**(`q.interrupt()`),同一会话可继续;AbortController 仅用于销毁会话与退出
 - [ ] `maxTurns` / `maxBudgetUsd` 触顶给出可理解提示而非静默截断;退出后 `claude` 子进程无残留
 
@@ -549,8 +564,8 @@
 - [ ] 一轮内多次工具调用各自成 chip、顺序与实际一致;中断后已渲染内容保留
 
 *skill 与建议按钮(D-28 只读部分)*
-- [ ] **skill 加载机制冒烟**:dev 与**打包版**均确认 skill 被子进程实际加载(不重定向 CONFIG_DIR、`settingSources` 排除 `'user'` 的前提下)
-- [ ] composer 下方出现建议按钮;点击 = 发预置提示,可随时改口/跳步(不是状态机);流式中禁用
+- [x] **skill 加载机制冒烟(dev)**:`system/init.skills` 含 gtd-engage,且真实往返里 agent 调用了 Skill → get_engage_recommendations。**打包版待验**(M11 打包加固时补)(不重定向 CONFIG_DIR、`settingSources` 排除 `'user'` 的前提下)
+- [x] composer 下方出现建议按钮;点击 = 发预置提示,可随时改口/跳步(不是状态机);流式中禁用
 - [ ] 「帮我挑一件事做」走 engage 只读半程:先列今天计划(时刻序、不受标签过滤),再问标签/分钟/精力,给 top-7 + "另有 N 条",**在"做完了吗"处停下**并说明写操作留 M9
 - [ ] skill 不自行重写过滤:输出与 `get_engage_recommendations` 逐条一致;transcript 里无"自己 list 再筛"的痕迹
 

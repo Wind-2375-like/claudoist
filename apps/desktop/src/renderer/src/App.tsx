@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ProjectListItemVM, SearchHitVM } from '../../shared/viewModels';
-import { SpikeChat } from './SpikeChat';
+import { AgentPanel } from './AgentPanel';
 import { TaskCard } from './TaskCard';
 import { ProjectModal } from './ProjectModal';
 import { SettingsModal } from './SettingsModal';
@@ -517,14 +517,8 @@ export function App(): React.JSX.Element {
         style={{ width: right.width }}
         className="flex shrink-0 flex-col border-l border-neutral-200 bg-neutral-900 text-neutral-100"
       >
-        <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-3">
-          <span className="text-sm font-semibold">Agent</span>
-          <div className="flex gap-2 text-neutral-400">
-            <span title="历史会话(M10)">🕘</span>
-            <span title="新建会话(M10)">＋</span>
-          </div>
-        </div>
-        <SpikeChat />
+        {/* 标题栏由 AgentPanel 自己画(它要显示登录态与新会话按钮) */}
+        <AgentPanel />
       </aside>
     </div>
   );

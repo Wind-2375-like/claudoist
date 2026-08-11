@@ -128,9 +128,14 @@ const googleApi = {
 };
 
 const agentApi = {
-  send: (text: string, images: { data: string; mediaType: string }[]): Promise<void> =>
+  status: (): Promise<unknown> => ipcRenderer.invoke('agent:status'),
+  startSession: (resume: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('agent:session.start', { resume }),
+  newSession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.new'),
+  destroySession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.destroy'),
+  send: (text: string, images: { data: string; mediaType: string }[]): Promise<unknown> =>
     ipcRenderer.invoke('agent:send', { text, images }),
-  interrupt: (): Promise<void> => ipcRenderer.invoke('agent:interrupt'),
+  interrupt: (): Promise<unknown> => ipcRenderer.invoke('agent:interrupt'),
   onStream: (cb: (msg: unknown) => void): (() => void) => {
     const listener = (_e: unknown, msg: unknown): void => cb(msg);
     ipcRenderer.on('agent:stream', listener);

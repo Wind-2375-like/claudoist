@@ -16,7 +16,9 @@
     "test": "vitest run",
     "smoke": "pnpm --filter @gtd/desktop dev -- --dump=views",
     "seed": "pnpm --filter @gtd/storage-sqlite seed",
-    "cli": "tsx packages/cli/src/main.ts"
+    "cli": "tsx packages/cli/src/main.ts",
+    "check-prompt": "node apps/desktop/scripts/check-prompt-sync.mjs",
+    "agent-smoke": "pnpm --filter @gtd/desktop dev -- --agent-smoke"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
