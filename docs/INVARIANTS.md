@@ -304,15 +304,15 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 #### INV-20 Engage 过滤、排序与 calendar-first ⚠SP(过滤方向)
 
 **规则**:
-1. **Calendar-first(D-23/M6a 版)**:进入 engage 先列出**今天计划**(`scheduledDate === today`)的全部 active 任务,按 §2.5 时刻序(全天在前、startTime 升序,`todaysTimedTasks`);有则优先提议处理。该段是**当天硬性日程,与所选 context 无关**,故不随 context/分钟/精力过滤(桌面面板与 CLI `engage --context` 同此口径)。
+1. **Calendar-first(D-23/M6a 版)**:进入 engage 先列出**今天计划**(`scheduledDate === today`)的全部 active 任务,按 §2.5 时刻序(全天在前、startTime 升序,`todaysTimedTasks`);有则优先提议处理。该段是**当天硬性日程,与所选 context 无关**,故不随 context/分钟/精力过滤(agent skill 与 CLI `engage --context` 同此口径)。
 2. 任务推荐:选定 context 后,候选 = 该 context 的 active Task,依次过滤 `estimatedMinutes <= 可用分钟`(默认 60)与 `energy <= 用户 energy`(INV-02)。
-   **INV-20.2**:第 1 条已列出的(`scheduledDate === today`)**不再进候选** —— 已承诺的事轮不到"挑",两处都列只会让同一条任务在一个面板里出现两次。过期计划(`scheduledDate < today`)不属该段,仍可挑。
+   **INV-20.2**:第 1 条已列出的(`scheduledDate === today`)**不再进候选** —— 已承诺的事轮不到"挑",两处都列只会让同一条任务在一轮择事里出现两次。过期计划(`scheduledDate < today`)不属该段,仍可挑。
 3. 排序:**priority 降序**,稳定排序(同优先级保持创建序);**最多展示 7 条**(`ENGAGE_TOP_N`)。
 4. **deadline 不参与排序**,仅随行显示(CLI 的已知留白,如需改变先改本文档)。
 5. 推荐是只读计算;完成任务是独立的写操作(agent 工具 `get_engage_recommendations` 为只读,完成走 `complete_task`)。
-6. **单一过滤口径**:全部匹配项由 `engageMatches` 给出,候选 = 其前 7 条,"另有 N 条未列出"= `matches.length - 7`。桌面 `views.engage` 与 CLI `engage` 都不得自行重写这套过滤条件(曾因两处各写一遍而使计数与列表口径不一致)。
+6. **单一过滤口径**:全部匹配项由 `engageMatches` 给出,候选 = 其前 7 条,"另有 N 条未列出"= `matches.length - 7`。任何载体(CLI `engage`、agent skill、将来的任何 UI)都不得自行重写这套过滤条件——曾因桌面 `views.engage` 与 CLI 各写一遍,使"另有 N 条"与列表口径不一致(该面板已随 D-28 撤除)。
 **为什么**:GTD 的四标准择事模型(情境→时间→精力→优先级),顺序即算法。
-**验收**:8 条同 context 候选 → 只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤;今天有计划任务(含带时间)时推荐面板先按时刻序呈现它们,且这些任务不在候选段重复出现;桌面面板与 `pnpm cli engage` 同参数下候选与"另有 N 条"完全一致。
+**验收**:8 条同 context 候选 → 只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤;今天有计划任务(含带时间)时先按时刻序呈现它们,且这些任务不在候选段重复出现;`pnpm cli engage` 与 agent skill 同参数下候选与"另有 N 条"完全一致。
 
 #### INV-21 Someday 孵化语义(D-20/D-21 修订)⚠SP
 
@@ -656,7 +656,7 @@ orphans = [ p | p.status='active' ∧ ¬hasActiveNextAction(p) ∧ ¬hasActiveCh
 
 ### 〔退役 D-21〕4.11 Weekly Review(六步)
 
-每一步的每个条目决定即提交 **[TX/项]**(CLI 仅 Step 2/3/4 的判定攒到 review 结尾统一落盘,Step 1/5 借道 clarify 逐条落盘、修复流程亦中途落盘;桌面版全部收紧为逐项;向导可中断续跑,见 §5 D-10)。
+每一步的每个条目决定即提交 **[TX/项]**(CLI 仅 Step 2/3/4 的判定攒到 review 结尾统一落盘,Step 1/5 借道 clarify 逐条落盘、修复流程亦中途落盘;桌面版全部收紧为逐项;**D-28 起载体 = agent skill,无向导 UI**,"可中断续跑"由对话本身承担,见 §5 D-10/D-28)。
 
 ```
 Step 1/6 清空收件箱:
@@ -704,7 +704,7 @@ Step 6/6 通览日历(只读):
   未完成 CalendarItem 按 date 升序、同日全天在前、再按 time 升序列出
 ```
 
-### 4.12 Engage(择事执行 / Focus;D-21 后向导态删除,M7 以 engageRanking 纯规则重建——其中的孤儿检查步骤随 D-21 作废)
+### 4.12 Engage(择事执行 / Focus;D-21 后向导态删除,规则实现为 `engageRanking`;**D-28 起载体 = agent skill + CLI,不做 UI 向导**——其中的孤儿检查步骤随 D-21 作废)
 
 ```
 1. Calendar-first(INV-20.1):
@@ -713,7 +713,7 @@ Step 6/6 通览日历(只读):
      是 → 选择一项 → "做完了吗?"
            是 → done=true → 日历版完成后追问(§4.7)
      (CLI: 处理完一个日历项即结束本轮, 且该分支不做孤儿检查 —
-      桌面 Focus 处理完可继续进入任务推荐, §5 D-12; 孤儿由常驻徽章覆盖)
+      agent skill 处理完可继续进入任务推荐, §5 D-12; 孤儿机制随 D-21 退役)
 2. 选择当前 context(逐个显示活跃计数)
 3. 该 context 无 active Task → 结束
 4. "有多少分钟?"(默认 60)→ 过滤 estimatedMinutes <= t
@@ -773,9 +773,9 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-07 | 日期是自由文本,零校验;坏格式破坏排序与 today 匹配(§6 BUG-05) | 新输入强校验;读取路径对存量非法值宽容(不崩溃、标记"需修正")(INV-03) | 写入侧收紧、读取侧宽容,历史/外部数据不致瘫痪应用 |
 | D-08 | `Project.action_ids` 仅追加簿记,充满悬挂 id(§6 BUG-04) | 字段删除;一切按 `projectId` 扫描 | CLI 的活跃逻辑本来就只按 projectId 查询,字段名存实亡 |
 | D-09 | 删除 context 时其中的 action 随存储桶**永久删除**(确认后) | 确认后 Task 软删除进 Trash,可恢复(恢复时重选 context)(INV-24.4) | 与 D-01 同理;一次确认蒸发整张清单过于危险 |
-| D-10 | 持久化 = 每次变更整文件重写 JSON;weekly review 部分决定攒到结尾统一落盘 | SQLite 逐决定事务提交 + `gtd:changed` 推送;review 向导可中断续跑 | 崩溃安全等级不降(INV-17)且长向导可恢复 |
+| D-10 | 持久化 = 每次变更整文件重写 JSON;weekly review 部分决定攒到结尾统一落盘 | SQLite 逐决定事务提交 + `gtd:changed` 推送;review 逐项落盘,中断续跑由对话上下文承担(D-28 后无向导) | 崩溃安全等级不降(INV-17)且长向导可恢复 |
 | D-11 | clarify 中完成 DDL 分解后,**仍无条件**要求为父项目再定义一个直属行动 | 分解已产生活跃后代时默认跳过该步(提供可选入口) | 父项目已有活跃子项目、非孤儿;强制直属行动违背左边缘哲学(§4.9) |
-| D-12 | engage 处理完一个日历项后**本轮直接结束**,不进入任务推荐 | Focus 面板处理完日历项后可继续任务推荐;calendar-first 的**优先次序**保持不变 | 会话式 GUI 无需强制退出;不变量只在"日历优先于任务" |
+| D-12 | engage 处理完一个日历项后**本轮直接结束**,不进入任务推荐 | agent skill 处理完日历项后可继续任务推荐(D-28 前曾为 Focus 面板);calendar-first 的**优先次序**保持不变 | 会话式 GUI 无需强制退出;不变量只在"日历优先于任务" |
 | D-13 | 孤儿检查只挂在两个流程出口(且有不触发的旁路,INV-07) | 常驻孤儿徽章,每次 `gtd:changed` 重算;修复仍由用户发起、逐项征询 | GUI 可持续显示;征询原则不变 |
 | D-14 | priority 以 `P1`–`P5` 数字直接显示 | 选择器与展示用文字(最高/高/中/低/最低),存储不变(INV-01) | 防止用户以 Todoist 习惯(p1=最高)误读 |
 | D-15 | `_after_action_completed` 不检查项目是否已完成(§6 BUG-02) | 已 `complete` 的项目不再触发任何完成追问(§4.7 守卫) | CLI 疏漏;重复追问且可能重复触发级联 |
@@ -783,6 +783,10 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-17 | DDL 分解只在"创建带 deadline 项目"的流程内触发(§4.4),无对既有项目的独立入口 | My Projects 对任何有 deadline 的项目提供 "Break down by deadline"(§4.14) | 编辑能力普遍化后分解不应绑定创建时机;分解流程本体(§4.9)不变 |
 | D-18 | 理清 = 强制逐题问答(§4.3 交互形态) | **理清双路径(2026-08-08 用户定案)**:① 手动 specify —— Inbox 条目展开为 Todoist 式卡片,直接补属性转为 Task,或转为 Project,或归档 Someday/Reference/Trash;② 交给 Claude 对话理清(M8/M9 经 MCP 工具)。分步问答状态机**保留为内部机制**(agent 驱动与 Weekly Review 内嵌用),UI 无独立入口 | 逐题问答对日常理清过重;§4.3 的**去向语义**(六种去向、deadline 继承、逐项一次事务 = 一次确认)全部保留,变的只是交互载体 |
 | D-19 | Action 无"计划哪天做"概念(日程只能是 CalendarItem) | Task 新增 `scheduledDate`(与 deadline 并存)。(后续 D-23/M6a:CalendarItem 并入 Task,时间即 `startTime`) | Todoist 式 today/tomorrow 快速安排是用户核心工作流;时刻与最迟完成日的语义区分保留(§2.5) |
+| D-28 | `engage` / `review` 是 CLI 的交互式命令(分步问答向导) | **流程类功能不做 UI,改由 agent skill 承载(2026-08-11 用户定案)**:择事与周回顾**本质是一串原子操作的编排**,固化成向导 UI 等于把"何时该怎么想"写死在按钮里。算法(INV-20、§4.11、§4.12)原样保留在 domain;载体改为 agent skill + 聊天输入框下方的建议按钮(DESIGN §6.9),中栏不再有 Focus 面板/回顾向导。M7 范围收缩为 Search + Filters & Labels;已实现的 Focus 面板据此撤除,CLI `engage` 保留 | ✅ 已定 |
+| D-27 | 无时区概念,时间即本地墙上时间 | **浮动时间 vs 指定时区(2026-08-10 用户定案,INV-31,M6d)**:`Task.timeZone`(null = 浮动,随设备时区解释;非 null = 绑定 IANA 时区),借鉴 Todoist 的 Floating time | ✅ 已定 |
+| D-26 | 无外部日历写入 | **任务 → 专用 Claudoist 日历的双向同步(2026-08-10 用户定案,INV-30,M6c-3b)**:仅写**本应用创建**的日历(scope `calendar.app.created`),**默认关闭**,指纹去重 + 删除复查 + 本地脏数据优先 | ✅ 已定 |
+| D-25 | 外部日历事件只读展示 | **外部事件镜像为真任务(2026-08-10 用户定案,INV-29,M6c-3a)**:可完成/加标签/子任务/评论、参与 Today 与 engage;仅标题与时间归 Google 所有,本地改动**永不回写** | ✅ 已定 |
 | D-24 | (D-21/22)任务顺序仅按 createdAt,无手动排序;无拖拽 | **手动排序 + 拖拽重排/嵌套(2026-08-09 用户定案,INV-27)**:`Task.sortOrder`,同级组按 sortOrder+createdAt 排;拖拽既可换位也可拖成子任务(reorderTask:设 parentTaskId + 整组重排,约束沿用 INV-25 深度/环/容器);CLI `reorder` 命令对齐。迁移 v5 加 sort_order | ✅ 已定 |
 | D-23 | (D-20~22)CalendarItem 是与 Task 分离的"硬景观"实体,Today 有独立日程段;无外部日历同步 | **日历统一 + Google 同步(2026-08-09 用户定案,规划中,M6)**:取消 hard-landscape 特殊区分,**任务与日历事件统一**(带时间的任务即日历 block);任务↔本地日历双向同步;日历网格支持 all-day、小时格四等分单击、拖选 time-block 创建任务;完成任务不从日历/Google 删除,仅标记完成;删除 block 才双向传播。**Google Calendar OAuth + 双向 pull/push,可选账号**。domain 以 Task 时间字段替代 CalendarItem:**M6a 已实施(2026-08-09 用户选型)** —— `scheduledDate + startTime(HH:MM,null=全天)+ durationMinutes(null 回退 estimatedMinutes)`,迁移 0006(日历数据迁任务、提醒随迁、表退役);Google 映射:有 startTime→timed event,无→all-day。日历网格 UI = M6b,Google 同步 = M6c | 🚧 M6a 已实施 |
 | D-22 | (D-21)完成子任务不级联,`activeSubtaskCount` 仅提示 | **完成向下级联(2026-08-09 用户定案)**:完成父任务 = 一并完成整棵 active 子树(仅向下;勾子任务不勾父),`completedSubtaskCount` 报告数量,UI 完成控件 hover 提示防误操作(不弹确认)。子任务支持与顶层任务相同的属性集(labels/reminders 等),添加子任务用同一表单;单击任务弹 Todoist 式两栏详情(左内容/右属性,右栏含 Move to);Today 硬边界与任务统一为行式列表。INV-26.1 修订,INV-25/INV-15 补充 | ✅ 已定 |

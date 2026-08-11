@@ -198,8 +198,8 @@ export function registerGoogleIpc(store: GtdStore, deps: FlowDeps, onChanged: ()
         if (payload.enabled || !payload.purge)
           return { consequences: { enabled: payload.enabled } };
 
-        const removed = await purgePushed(store, onChanged);
-        return { consequences: { enabled: false, removed } };
+        const r = await purgeAppCalendar(store, onChanged);
+        return { consequences: { enabled: false, ...r } };
       } catch (e) {
         return failed(e);
       }
@@ -221,10 +221,27 @@ export function registerGoogleIpc(store: GtdStore, deps: FlowDeps, onChanged: ()
    * 而是真正的任务:可完成、可加标签/子任务/评论;只有标题与时间归 Google 拥有。
    * 本地的任何改动都不回写 Google。
    */
-  /** 单独撤下已推送的事件(**不必开启推送**即可清理历史残留)。 */
+  /** 单独清空专用日历(**不必开启推送**即可清理历史残留)。 */
   ipcMain.handle('google:push.purge', async (): Promise<WriteResultVM> => {
     try {
-      return { consequences: { removed: await purgePushed(store, onChanged) } };
+      return { consequences: await purgeAppCalendar(store, onChanged) };
+    } catch (e) {
+      return failed(e);
+    }
+  });
+
+  /**
+   * 只读复查:专用日历里**当前实际**还有多少事件。
+   *
+   * 必须与 status.pushedCount 区分开 —— 后者只数本地指针,清理一执行必然归零,
+   * 因此它从来不能证明 Google 那边真的干净了。
+   */
+  ipcMain.handle('google:push.inspect', async (): Promise<WriteResultVM> => {
+    try {
+      const r = await inspectAppCalendar();
+      return {
+        consequences: { connected: r.connected, count: r.events.length, account: r.account },
+      };
     } catch (e) {
       return failed(e);
     }
@@ -323,6 +340,8 @@ function minutesBetween(start: string, end: string): number {
 /** 专用日历名(用户在 Google 里看到的名字);其 id 缓存在 settings。 */
 const APP_CALENDAR_NAME = 'Claudoist';
 const APP_CAL_KEY = 'google.appCalendarId';
+/** 专用日历归属的账号邮箱 —— 多账号下 accounts[0] 会变,不能用它推断 */
+const APP_CAL_ACCOUNT_KEY = 'google.appCalendarAccount';
 /**
  * 是否把任务推送到专用日历。**默认关闭** —— 往用户的 Google 账号里写东西必须是
  * 显式选择(2026-08-10:此前常开,用户发现账号里凭空多了一个日历)。
@@ -346,16 +365,22 @@ async function pushToAppCalendar(
   if (!account) return {};
 
   let calendarId = settings.get<string>(APP_CAL_KEY);
+  // 归属账号与日历 id 一起记:日后清理/复查要按创建者账号去调,accounts[0] 会变
+  const remember = (id: string): void => {
+    settings.set(APP_CAL_KEY, id);
+    settings.set(APP_CAL_ACCOUNT_KEY, account.email);
+  };
   if (calendarId === null) {
     calendarId = await ensureAppCalendar(account.email, APP_CALENDAR_NAME);
-    settings.set(APP_CAL_KEY, calendarId);
+    remember(calendarId);
   } else {
     // 缓存的日历可能已被用户在 Google 里删掉 → 重新确保一次,否则整个同步永久静默停摆
     try {
       await listEvents(account.email, [calendarId], window.from, window.from);
+      if (settings.get<string>(APP_CAL_ACCOUNT_KEY) === null) remember(calendarId);
     } catch {
       calendarId = await ensureAppCalendar(account.email, APP_CALENDAR_NAME);
-      settings.set(APP_CAL_KEY, calendarId);
+      remember(calendarId);
     }
   }
 
@@ -466,30 +491,97 @@ async function pushToAppCalendar(
   return { pushed: plan.upsert.length, unpushed: plan.remove.length, pulled, removed };
 }
 
-/** 删除所有我们推过的事件并清账;返回实际删掉的数量。 */
-async function purgePushed(store: GtdStore, onChanged: () => void): Promise<number> {
+/**
+ * 解析专用日历的目标账号 + 日历 id。
+ *
+ * 账号必须显式存下来:多账号下 `accounts[0]` 未必是当初创建该日历的那个账号
+ * (顺序会随连接/断开变化),拿错账号会让每次删除都 404 —— 而旧实现照样把本地
+ * 指针清掉,事件就此失联。老装机没有这个键,回落到首个账号。
+ */
+async function appCalendarTarget(): Promise<{ email: string; calendarId: string } | null> {
   const settings = settingsStore();
-  const vault = await loadVault();
-  const account = vault.accounts[0];
   const calendarId = settings.get<string>(APP_CAL_KEY);
-  const pushed = store.snapshot().tasks.filter((t) => t.pushedEventId !== null);
-  let removed = 0;
-  if (account && calendarId !== null) {
-    for (const t of pushed) {
-      try {
-        await deleteEvent(account.email, calendarId, t.pushedEventId!);
-        removed += 1;
-      } catch (err) {
-        console.error(`[google] 撤下事件失败 ${t.pushedEventId}:`, err);
-      }
+  if (calendarId === null) return null;
+  const vault = await loadVault();
+  if (vault.accounts.length === 0) return null;
+  const owner = settings.get<string>(APP_CAL_ACCOUNT_KEY);
+  const hit = owner !== null ? vault.accounts.find((a) => a.email === owner) : undefined;
+  const account = hit ?? vault.accounts[0];
+  return account ? { email: account.email, calendarId } : null;
+}
+
+/** 专用日历里现存事件的**原始** id(全天事件在 listEvents 里被展开成 `id:日期`,须去重)。 */
+async function appCalendarEventIds(target: {
+  email: string;
+  calendarId: string;
+}): Promise<string[]> {
+  // 该日历只有我们写,窗口开到最大即可枚举全部;去重后即真实事件数
+  const evs = await listEvents(target.email, [target.calendarId], '2000-01-01', '2100-01-01');
+  return [...new Set(evs.map((e) => e.sourceEventId))];
+}
+
+/**
+ * 只读复查专用日历的真实内容(设置页"检查"按钮与 `--dump=google` 共用)。
+ * 与 `status.pushedCount` 的区别见 `google:push.inspect` 的注释。
+ */
+export async function inspectAppCalendar(): Promise<{
+  connected: boolean;
+  account: string | null;
+  calendarId: string | null;
+  events: { id: string; summary: string; date: string; startTime: string | null }[];
+}> {
+  const target = await appCalendarTarget();
+  if (target === null) {
+    return { connected: false, account: null, calendarId: null, events: [] };
+  }
+  const evs = await listEvents(target.email, [target.calendarId], '2000-01-01', '2100-01-01');
+  const seen = new Set<string>();
+  const events = evs
+    .filter((e) => !seen.has(e.sourceEventId) && seen.add(e.sourceEventId))
+    .map((e) => ({
+      id: e.sourceEventId,
+      summary: e.summary,
+      date: e.date,
+      startTime: e.startTime,
+    }));
+  return { connected: true, account: target.email, calendarId: target.calendarId, events };
+}
+
+/**
+ * 清空专用日历:**以日历里实际存在的事件为准**枚举后删除,再复查一遍。
+ *
+ * 旧实现按本地 `pushedEventId` 逐条删,且无论删成没删成都把指针清空 —— 于是
+ * (a) 任何一次删除失败都会留下再也定位不到的僵尸事件;(b) 账号/日历解析不到时
+ * 一个都没删,却同样清空指针、横幅消失,看起来"干净了"。现在:枚举 → 删除 →
+ * 复查,只对**复查后确认已不存在**的事件清指针;解析不到目标直接报错,不动本地。
+ */
+async function purgeAppCalendar(
+  store: GtdStore,
+  onChanged: () => void,
+): Promise<{ removed: number; remaining: number }> {
+  const target = await appCalendarTarget();
+  if (target === null) {
+    throw new Error('找不到专用日历(未连接账号,或日历尚未创建)—— 未改动任何本地记录');
+  }
+  const before = await appCalendarEventIds(target);
+  for (const id of before) {
+    try {
+      await deleteEvent(target.email, target.calendarId, id); // 410/404 幂等成功
+    } catch (err) {
+      console.error(`[google] 撤下事件失败 ${id}:`, err);
     }
   }
-  if (pushed.length > 0) {
+  // 复查:删除结果以 Google 的实际状态为准,不以调用是否抛错为准
+  const after = new Set(await appCalendarEventIds(target));
+  const cleared = store
+    .snapshot()
+    .tasks.filter((t) => t.pushedEventId !== null && !after.has(t.pushedEventId));
+  if (cleared.length > 0) {
     store.apply(
-      recordPushed(pushed.map((t) => ({ taskId: t.id, eventId: null, fingerprint: null }))),
+      recordPushed(cleared.map((t) => ({ taskId: t.id, eventId: null, fingerprint: null }))),
       'agent',
     );
     onChanged();
   }
-  return removed;
+  return { removed: before.length - after.size, remaining: after.size };
 }

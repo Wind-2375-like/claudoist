@@ -11,14 +11,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.E
   const calendars = useGoogleCalendars(status.data?.connected === true);
   const [busy, setBusy] = useState<string | null>(null);
 
+  /**
+   * `ok` 用于**成功也要回执**的动作(清理/复查):这类操作的效果在别人的账号里,
+   * 界面上看不见 —— 没有回执就无从判断它到底做了什么(2026-08-11:清理按下后
+   * 无任何提示,横幅又只按本地指针消失,导致"删没删掉"不可知)。
+   */
   const run = async (
     label: string,
     fn: () => Promise<{ error: string } | unknown>,
+    ok?: (consequences: Record<string, unknown>) => string,
   ): Promise<void> => {
     setBusy(label);
     try {
-      const r = (await fn()) as { error?: string };
+      const r = (await fn()) as { error?: string; consequences?: Record<string, unknown> };
       if (r && typeof r === 'object' && 'error' in r && r.error) toast(r.error);
+      else if (ok) toast(ok(r?.consequences ?? {}));
     } finally {
       setBusy(null);
       await status.refetch();
@@ -253,13 +260,38 @@ export function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.E
                           )
                         )
                           return;
-                        void run('purge', () => window.google.purgePushed());
+                        void run(
+                          'purge',
+                          () => window.google.purgePushed(),
+                          (c) =>
+                            Number(c.remaining ?? 0) > 0
+                              ? `已删除 ${String(c.removed ?? 0)} 个,还剩 ${String(c.remaining)} 个没删掉 —— 请再试一次`
+                              : `已从「${s.pushCalendarName}」删除 ${String(c.removed ?? 0)} 个事件,日历已清空`,
+                        );
                       }}
                     >
                       {busy === 'purge' ? '清理中…' : '清理'}
                     </button>
                   </div>
                 )}
+                {/* 本地指针清零 ≠ Google 侧干净,所以复查始终可用,不随横幅消失 */}
+                <button
+                  type="button"
+                  className="mt-2 text-[11px] text-neutral-500 underline hover:text-neutral-800"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    void run(
+                      'inspect',
+                      () => window.google.inspectPushed(),
+                      (c) =>
+                        c.connected === false
+                          ? '尚未创建专用日历(没有可清理的事件)'
+                          : `「${s.pushCalendarName}」(${String(c.account ?? '')})中现有 ${String(c.count ?? 0)} 个事件`,
+                    );
+                  }}
+                >
+                  {busy === 'inspect' ? '检查中…' : '检查专用日历里实际还有多少事件'}
+                </button>
               </div>
             </div>
           )}

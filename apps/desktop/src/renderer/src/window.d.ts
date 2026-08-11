@@ -1,6 +1,5 @@
 import type {
   CalendarRangeVM,
-  EngageVM,
   GoogleCalendarVM,
   GoogleStatusVM,
   AddSubtaskInputVM,
@@ -37,11 +36,6 @@ declare global {
       taskDetail: (id: string) => Promise<TaskDetailVM | null>;
       today: () => Promise<TodayVM>;
       upstreamList: () => Promise<TaskTreeVM[]>;
-      engage: (
-        contextId: string,
-        minutes: number,
-        energy: 'low' | 'medium' | 'high',
-      ) => Promise<EngageVM>;
       calendarRange: (from: string, days: number) => Promise<CalendarRangeVM>;
       contextsList: () => Promise<ContextVM[]>;
       onChanged: (cb: (ev: GtdChangedEvent) => void) => () => void;
@@ -86,6 +80,8 @@ declare global {
       sync: (from: string, to: string) => Promise<WriteResultVM>;
       setPushEnabled: (enabled: boolean, purge: boolean) => Promise<WriteResultVM>;
       purgePushed: () => Promise<WriteResultVM>;
+      /** 只读复查专用日历真实事件数(pushedCount 只数本地指针,证明不了 Google 侧) */
+      inspectPushed: () => Promise<WriteResultVM>;
     };
     agent: {
       send: (text: string, images: { data: string; mediaType: string }[]) => Promise<void>;

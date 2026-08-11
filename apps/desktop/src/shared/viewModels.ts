@@ -173,21 +173,6 @@ export interface GoogleCalendarVM {
   accountEmail: string;
 }
 
-/**
- * Focus/Engage(INV-20/M7a):calendar-first + 四标准择事。
- * 排序与过滤全部来自 domain `engageRanking`,UI 只负责呈现。
- */
-export interface EngageVM {
-  /** 今天已排期的 active 任务(全天在前、再按 startTime);有则先处理 */
-  calendarFirst: TaskVM[];
-  /** 该 context 下满足 时间/精力 的候选,priority 降序,最多 7 条 */
-  candidates: TaskVM[];
-  /** 候选上限(展示"还有 N 条被截断"用) */
-  topN: number;
-  /** 过滤前的候选总数 */
-  matched: number;
-}
-
 /** 侧栏徽章计数(someday/reference)。 */
 export interface BucketCountsVM {
   someday: number;

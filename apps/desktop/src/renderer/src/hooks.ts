@@ -67,19 +67,6 @@ export function useUpstream() {
   return useQuery({ queryKey: ['upstream'], queryFn: () => window.gtd.upstreamList() });
 }
 
-/** Focus/Engage 候选(INV-20/M7a);未选情境时不请求。 */
-export function useEngage(
-  contextId: string | null,
-  minutes: number,
-  energy: 'low' | 'medium' | 'high',
-) {
-  return useQuery({
-    queryKey: ['engage', contextId, minutes, energy],
-    queryFn: () => window.gtd.engage(contextId!, minutes, energy),
-    enabled: contextId !== null,
-  });
-}
-
 export function useContexts() {
   return useQuery({ queryKey: ['contexts'], queryFn: () => window.gtd.contextsList() });
 }

@@ -13,9 +13,7 @@ import {
   createProjectDirect,
   deleteReminder,
   deleteTask,
-  ENGAGE_TOP_N,
   descendantTaskIds,
-  engageMatches,
   isTaskListRoot,
   isUsecaseError,
   isValidIsoDate,
@@ -29,7 +27,6 @@ import {
   subtreeHeight,
   taskDepth,
   tasksWithInheritedDeadline,
-  todaysTimedTasks,
   updateProject,
   updateTask,
   MAX_SUBTASK_DEPTH,
@@ -40,7 +37,6 @@ import type {
   ProjectListItemVM,
   ProjectViewVM,
   CalendarRangeVM,
-  EngageVM,
   TaskDetailVM,
   TaskTreeVM,
   TaskVM,
@@ -63,8 +59,6 @@ export interface GtdViews {
   today(): TodayVM;
   /** 外部日历镜像任务(D-25/INV-29):独立容器,不与 Inbox 混淆 */
   upstream(): TaskTreeVM[];
-  /** Focus/Engage(INV-20/M7a) */
-  engage(contextId: string, minutes: number, energy: 'low' | 'medium' | 'high'): EngageVM;
   /** 日历区间(D-23/INV-28/M6b):from 起连续 days 天 */
   calendarRange(from: string, days: number): CalendarRangeVM;
   contexts(): ContextVM[];
@@ -273,20 +267,6 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
         })
         .map((t) => treeVM(snap, t, today));
     },
-    engage(contextId, minutes, energy) {
-      const snap = store.snapshot();
-      const today = clock.today();
-      // 排序/过滤一律走 domain 规则(INV-20),UI 与 CLI 因此天然同口径;
-      // matched 取自同一次匹配,避免"未列出 N 条"与候选用两套条件
-      const matches = engageMatches(snap, contextId, minutes, energy, today);
-      return {
-        // INV-20.1 日历优先段是当天硬性日程,与所选 context 无关,故不参与过滤
-        calendarFirst: todaysTimedTasks(snap, today).map((t) => taskVM(snap, t, today)),
-        candidates: matches.slice(0, ENGAGE_TOP_N).map((t) => taskVM(snap, t, today)),
-        topN: ENGAGE_TOP_N,
-        matched: matches.length,
-      };
-    },
     today() {
       const snap = store.snapshot();
       const today = clock.today();
@@ -383,11 +363,6 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   ipcMain.handle('gtd:task.detail', (_e, payload: { id: string }) => views.taskDetail(payload.id));
   ipcMain.handle('gtd:today', () => views.today());
   ipcMain.handle('gtd:upstream.list', () => views.upstream());
-  ipcMain.handle(
-    'gtd:engage',
-    (_e, p: { contextId: string; minutes: number; energy: 'low' | 'medium' | 'high' }) =>
-      views.engage(p.contextId, p.minutes, p.energy),
-  );
   ipcMain.handle('gtd:calendar.range', (_e, payload: { from: string; days: number }) =>
     views.calendarRange(payload.from, payload.days),
   );

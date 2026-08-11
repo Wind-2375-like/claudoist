@@ -46,7 +46,7 @@
 | M4 | 只读壳 | main 开库 + IPC 读通道 + 侧栏与 Inbox/My Projects/Today 只读视图 | ✅ |
 | M5 | 捕捉与理清(经 R/R2/R3 三次用户反馈重塑) | 捕捉、Todoist 式单卡快速添加、容器模型(D-20)、平面项目 + 任务子树/评论/详情弹窗(D-21)、CLI 通道(M5C) | 🔄 |
 | M6 | 日历 | 日历统一(D-23,CalendarItem 消解为定时任务)、本地周网格、Google 日历同步(D-25/D-26)、时区(D-27) | ✅ |
-| M7 | GTD 流程 | Focus/Engage 面板(engageRanking 纯规则,无向导状态机)、Weekly Review 向导、Search(⌘K)+ Filters & Labels | 🔄 |
+| M7 | Search + Filters | ⌘K 全局搜索、Filters & Labels 视图(流程类功能改由 agent skill 承载,D-28) | 🔄 |
 | M8 | Agent 只读版 | SDK 接入 + API key onboarding + 流式聊天 + 只读工具 + 成本护栏 | ⬜ |
 | M9 | Agent 写入 + 权限 | 写工具 + canUseTool 审批 + 权限模式 + agent_audit + 实时刷新 | ⬜ |
 | M10 | Agent 面板补全 | 会话管理/fork、图片粘贴、附件、模型与 effort 切换、用量账本、coaching evals | ⬜ |
@@ -442,41 +442,47 @@
 
 ---
 
-### M7 — GTD 流程
+### M7 — Search + Filters & Labels
 
-**目标**:Focus/engage 面板、Weekly Review 向导、Search 与 Filters & Labels 视图。
+**目标**:⌘K 全局搜索、Filters & Labels 视图。
 
-> **范围修订(2026-08-10,M6 验收后)**:本节原文写于 D-21/D-22/D-23 之前,以下条目已随决策**退役**,不再实现:
+> **范围重定(2026-08-11,D-28 用户定案)**:**流程类功能不做 UI**。择事(Focus/Engage)
+> 与周回顾(Weekly Review)本质是一串原子操作的编排,它们的算法保留在 domain
+> (INV-20、INVARIANTS §4.11/§4.12)不变,但**载体改为 agent skill + 聊天输入框下方的
+> 建议按钮**(DESIGN §6.9),归入 M8–M10。M7 因此只剩两件视图工作。
+>
+> 据此撤除:**M7a 桌面 Focus 面板**(2026-08-10 实现,2026-08-11 移除 —— 面板 UI、
+> `gtd:engage` 通道、`EngageVM`、`useEngage` 全部删除;domain `engageRanking` 与 CLI
+> `engage` **保留**,它们正是 skill 的执行底座);**M7b Weekly Review 向导**(未开工)。
+>
+> **前一轮范围修订(2026-08-10,M6 验收后)**仍然有效:
 > - ~~常驻孤儿徽章 / Fix-orphans sheet~~ → D-21 项目平面化,孤儿机制整体退役(INV-06/07/09)。
 > - ~~"所有子项目已完成 → 也完成父项目?"级联 sheet~~ → D-21 无子项目;D-22 起完成沿**子任务向下**级联且不征询。项目层面的"已无余下活动"仍按 INV-14 以**完成后果**呈现(已于 M5R 实现为提示条)。
-> - ~~Weekly Review 第 3 步"项目树完整性清扫"~~ → 改为平面项目的"无 next action 警告";~~第 6 步"calendar 通读"~~ → D-23 日历已统一,改为在 Calendar 视图内自行通读,不单列步骤。
 > - 父项目 deadline 编辑的继承同步提示 **已在 M5R 实现**(ProjectModal 先读 `projectInheritCount` 再一次性征询)。
->
-> Search 与 Filters & Labels 由 M6 顺延至此(侧栏占位当前标注 M7)。
 
 **子步**
 
-- **M7a — Focus/Engage 面板**(2026-08-10 完成):Today 头部 "▶ Focus" → calendar-first(今天已排期任务按时刻序先给)→ 选 context(带计数,默认第一个)→ 可用分钟 → 当前 energy → top-7 候选(domain `engageCandidates`:`estimatedMinutes ≤ 可用分钟` ∧ `energy ≤ 用户 energy`,priority 降序稳定,最多 7 条)→ 行内完成 → 完成后果提示(INV-14)。CLI `engage` 同口径。
-  - [x] 8 条同 context 候选只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤
-  - [x] 今天有已排期任务时先呈现它们(全天在前、再按 startTime)
-  - [x] someday/reference 容器的任务不进候选
-  - [x] 完成走 TaskRow 同一路径,故自动继承 INV-14 完成后果提示与 D-22 向下级联
-  - [x] CLI `engage --context= --minutes= --energy=` 与面板同序同内容(含 "另有 N 条未列出")
-- **M7a 实施中修定**:
-  - **INV-20.2 新增**:今天已排期的任务原本在"已排期"与"候选"两段**重复出现**;改为 `engageMatches` 排除 `scheduledDate === today`(已承诺的事轮不到"挑")。过期计划仍可挑。
-  - **过滤口径下沉**:`views.engage` 曾把候选过滤条件抄一遍算 `matched`(→ "另有 N 条"与列表可能各说各话);新增 domain `engageMatches`(不截断),`engageCandidates` = 其前 N 条,两个 surface 共用。CLI 同步补上 `matched`/`topN` 与 "另有 N 条未列出"。
-  - **面板默认选中第一个 context**:否则 calendar-first 这段"已承诺的事"要等用户先点一下情境才出现,与其语义相悖;默认值与 CLI 不带 `--context` 一致。
-  - **新验证通道 `--screenshot-click=<selector>`**:原 `--screenshot` 只能拍默认视图,弹窗/面板拍不到。现可先点一个选择器再截图(Focus 面板挂 `data-testid="focus-open"`;M7b 向导、M7c ⌘K 同法)。
-- **M7b — Weekly Review 向导**(5 步,可中断续跑,进度存 `settings`):1 处理 Inbox · 2 逐 context 相关性清扫("不相关"= 软删除,Trash 可恢复)· 3 项目健康(无 active next action 的项目告警)· 4 waiting-for 清扫(INV-23 follow-up 模板)· 5 someday 分诊(激活 = moveTask 回 Inbox/项目,INV-21)。
-- **M7c — Search(⌘K)+ Filters & Labels 视图**:domain 已有 `searchAll` 与 `evalFilter` + 预置 filters,补 UI 与 IPC。
+- **M7a — Search(⌘K)**:全局命令面板。数据源 `gtd:search` → domain `searchAll`。
+  **先修模型漂移**:`searchAll` 现搜的是 D-20 之前的 `snap.inbox` / `snap.listItems`,
+  而 Inbox/Someday/Reference 早已是带 `bucket` 的 Task —— 这三组实际上永远搜不到东西,
+  必须按容器模型重写,并补上"已完成/已删除"与日历型任务的区分。
+- **M7b — Filters & Labels 视图**:侧栏 Filters & Labels 项接上真实视图。
+  `FilterQuery` 是**结构化对象**(contextId / labelIds / energyMax / maxMinutes /
+  priorityMin / dueOnOrBefore / noProject / textQuery),不是 Todoist 的查询字符串,
+  UI 因此是一组受控控件而非表达式编辑器;domain 已有 `evalFilter` + filter CRUD +
+  label CRUD,补 IPC 与 UI。
 
 **验收标准**
 
-- [ ] 对 [./INVARIANTS.md](./INVARIANTS.md) 的 engage(INV-20)、weekly review、after-completion(INV-14/15)、someday 激活(INV-21)、follow-up(INV-23)逐条走查通过
-- [ ] calendar-first 生效;推荐排序与 domain `engageRanking` 一致
-- [ ] Review 第 2 步"不相关"执行软删除(status='deleted',Trash 可恢复)
-- [ ] 完成级联从不自动跨实体发生(项目完成始终另行征询)
-- [ ] Weekly Review 中断后可恢复进度
+- [ ] ⌘K 任意界面可唤起;输入即搜,结果按类型分组;回车/点击跳到对应视图并高亮目标
+- [ ] 搜索覆盖当前容器模型:Inbox/Someday/Reference/项目任务(含子任务)、项目、已完成、
+      Upstream 镜像、waiting-for;已完成/已删除项有明确标记,不与活跃项混淆
+- [ ] `searchAll` 的旧模型分组(`snap.inbox`/`listItems`)清理干净,不再返回恒空分组
+- [ ] Filters & Labels 视图可新建/改名/删除 filter,点击 filter 显示命中的任务列表
+- [ ] 标签可新建/改名/删除;删除标签时其任务关联一并清理;点击标签显示带该标签的任务
+- [ ] filter 结果与 domain `evalFilter` 完全一致(UI 不得自行过滤,INV-20.6 同类纪律)
+- [ ] CLI 补 `search` 命令,与 ⌘K 同口径
+- [ ] 三份文档同步更新;`pnpm test/typecheck/lint/check-coverage/smoke` 全绿
 
 **用户反馈**
 
@@ -486,7 +492,7 @@
 
 ### M8 — Agent 只读版
 
-**目标**:右栏 agent 面板上线(只读):SDK 会话管理、API key onboarding、流式聊天 + 工具 chip、只读 GTD 工具、成本护栏、中断。
+**目标**:右栏 agent 面板上线(只读):SDK 会话管理、API key onboarding、流式聊天 + 工具 chip、只读 GTD 工具、成本护栏、中断;**GTD 流程 skill 的只读部分**(D-28)。
 
 **范围要点**
 - `sessionManager.ts`:每会话一个长驻 streaming-input `query()`(`prompt` 为 `AsyncIterable<SDKUserMessage>`),`includePartialMessages: true`,`SDKMessage` 序列化后经 `agent:stream` 推给 renderer。
@@ -549,7 +555,8 @@
 - 拖拽附件:文件复制进 `userData/attachments/<uuid>/`,该目录为唯一稳定的 `additionalDirectories` 根(避免逐目录授权);附件 chip 展开为绝对路径供内置 `Read`。
 - 模型 / effort 切换:end-and-resume(仅 turn 间隙可切、流式中禁用控件、短暂 handoff 提示);thinking 三态(Off / On-hidden 带计费警告 / On-shown 折叠灰块)。
 - 用量账本:每条 `ResultMessage` 的 cost/usage 累计入 `conversations` 与全局 ledger;footer 显示本会话 / 全部历史成本。
-- **Coaching evals**:录制 clarify / engage / review / decompose 的 agent 会话脚本,对照 playbook 断言,作为 system prompt 与工具序列的回归测试。
+- **GTD 流程 skill 全集(D-28)**:`engage` / `weekly-review` / `clarify` / `decompose` 四个 skill (内容 = INVARIANTS §4.11/§4.12 的步骤纪律 + 该调哪些工具 + 何时必须停下征询,INV-15),外加 composer 下方的建议按钮(点击 = 发预置提示,不是状态机)。
+- **Coaching evals**:录制 clarify / engage / review / decompose 的 agent 会话脚本,对照 playbook 断言,作为 system prompt 与工具序列的回归测试 —— 即上述 skill 的回归测试。
 
 **验收标准**
 - [ ] 退出应用重启后 resume 会话,上下文完整(agent 记得此前对话)
@@ -594,6 +601,8 @@
 
 ## 5. 决策日志
 
+> **编号权威在 [./INVARIANTS.md](./INVARIANTS.md) §5 的 `D-xx` 表**(本表无编号列,且 D-25 起未再逐条同步)。新决策一律先写进那张表,本表只留概述。
+
 | 日期 | 决策 | 说明 | 状态 |
 |---|---|---|---|
 | 2026-08-08 | 采用 CLEAN 分层架构 + 评审嫁接项 | 获胜方案:`@gtd/domain`(纯 TS)← `@gtd/storage-sqlite` / `@gtd/agent-tools` ← `apps/desktop`,Electron + Agent SDK in main;并入 13 项评审嫁接项(里程碑重排 spike 提前、`agent_audit`、写工具后果返回、destructive class、system prompt 固化不变量、actor 事件、附件暂存目录、父 deadline 编辑提示、图片兜底、priority 显示规则、`reminders`、coaching evals、monorepo 降级预案)。详见 [./DESIGN.md](./DESIGN.md) | ✅ 已定 |
@@ -613,6 +622,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-08-11 | **D-28 范围重定**:流程类功能(Focus/Engage、Weekly Review)不做 UI,算法保留在 domain,载体改为 agent skill + composer 建议按钮(DESIGN §6.9,归 M8–M10);M7 收缩为 Search(⌘K)+ Filters & Labels。已实现的桌面 Focus 面板撤除。INVARIANTS §5 补齐 D-25/26/27 表行并新增 D-28;INV-20 与 §4.11/§4.12 的载体表述改写。另修 Google 专用日历清理的三处缺陷(删除失败仍清本地指针、目标账号取 accounts[0]、清理无回执且横幅只按本地指针消失)|
 | 2026-08-08 | 文档初版:协作流程、Definition of Done、里程碑 M0–M11(全部 ⬜)、决策日志、变更记录 |
 | 2026-08-08 | 用户裁决落档:auth = 自用(复用本机 Claude Code 登录,API key 为备用);审批弹窗 UI 规格写入 DESIGN.md §6.5;M1/M8/M11 相应调整;M0 开工(🔄) |
 | 2026-08-08 | M1 技术验证完成待用户验收:auth 定案(不重定向 CLAUDE_CONFIG_DIR)、图片原生可用、打包 = asarUnpack + 路径重写二件套(原生二进制,无需系统 Node);DESIGN §4.3/§5.2/§6.1/§6.2/§7/§9 与风险表 1/3/9 按实证定稿 |

@@ -6,7 +6,7 @@ import { initStore } from './db';
 import { systemClock } from './clock';
 import { watchDbForExternalWrites } from './dbWatch';
 import { broadcastChanged, createGtdViews, registerGtdIpc } from './ipc/gtd';
-import { registerGoogleIpc } from './ipc/google';
+import { inspectAppCalendar, registerGoogleIpc } from './ipc/google';
 
 // dev/prod 数据完全隔离(docs/DESIGN.md §9.2):必须在 app ready 之前设置。
 if (!app.isPackaged) {
@@ -104,6 +104,18 @@ async function runSpikeTest(arg: string): Promise<void> {
 const gotLock = app.requestSingleInstanceLock();
 if (spikeArg) {
   void app.whenReady().then(() => runSpikeTest(spikeArg));
+} else if (dumpArg === '--dump=google') {
+  // 无头复查专用日历的真实内容:本地指针无法证明 Google 侧已清干净
+  void app.whenReady().then(async () => {
+    initStore();
+    try {
+      process.stdout.write(`[GOOGLE_DUMP] ${JSON.stringify(await inspectAppCalendar())}\n`);
+      app.exit(0);
+    } catch (e) {
+      process.stdout.write(`[GOOGLE_DUMP] ${JSON.stringify({ error: String(e) })}\n`);
+      app.exit(1);
+    }
+  });
 } else if (dumpArg) {
   // 无头输出视图 JSON(与 IPC handler 同一代码路径),供自动验收对拍
   void app.whenReady().then(() => {

@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CalendarRangeVM,
-  EngageVM,
   GoogleCalendarVM,
   GoogleStatusVM,
   AddSubtaskInputVM,
@@ -41,11 +40,6 @@ const gtdApi = {
     ipcRenderer.invoke('gtd:task.detail', { id }),
   today: (): Promise<TodayVM> => ipcRenderer.invoke('gtd:today'),
   upstreamList: (): Promise<TaskTreeVM[]> => ipcRenderer.invoke('gtd:upstream.list'),
-  engage: (
-    contextId: string,
-    minutes: number,
-    energy: 'low' | 'medium' | 'high',
-  ): Promise<EngageVM> => ipcRenderer.invoke('gtd:engage', { contextId, minutes, energy }),
   calendarRange: (from: string, days: number): Promise<CalendarRangeVM> =>
     ipcRenderer.invoke('gtd:calendar.range', { from, days }),
   contextsList: (): Promise<ContextVM[]> => ipcRenderer.invoke('gtd:contexts.list'),
@@ -114,6 +108,7 @@ const googleApi = {
   setPushEnabled: (enabled: boolean, purge: boolean): Promise<WriteResultVM> =>
     ipcRenderer.invoke('google:push.setEnabled', { enabled, purge }),
   purgePushed: (): Promise<WriteResultVM> => ipcRenderer.invoke('google:push.purge'),
+  inspectPushed: (): Promise<WriteResultVM> => ipcRenderer.invoke('google:push.inspect'),
 };
 
 const agentApi = {
