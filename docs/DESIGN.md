@@ -574,7 +574,7 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
   - deadline 的双轨可视化(due chip)与拖拽改 deadline 顺延至后续里程碑;当前 deadline 仍在行内 🎯 徽标显示。
 - **Filters & Labels**:Labels 区 = 自由 labels + contexts(contexts 置顶、徽章样式、删除受 domain 规则约束)+ 虚拟 **@waiting_for** 视图(由 waiting_for 表支撑;详情面板保留 delegated_to、起始日期、Resolve、Create-follow-up——绝不摊平成普通 label)。Filters 区 = 保存的 `filters` 行,由 domain 的 `filterQuery` 解释器求值;预置:"Low energy · <15 min"、"Due this week"、"No project"、"High priority next"。Filter 编辑器 = query_json 字段表单。
 - **My Projects(D-21 平面化,Todoist 对齐)**:侧栏分组头 "My Projects" 带 **+**(新建项目对话框:名称 + 可选 deadline)与**折叠箭头**(toggle 列表);点击分组头文字 → **总览视图**:每个项目一行,名称 + **进度条与百分比**(progress = done/(done+active),active+done=0 时显示 0%)。分组下每个项目一行:# 名称 + **未完成任务数徽章**;右键 → 编辑(改名 / deadline,改 deadline 按 §5.4 征询传播)/ 标记完成;点击 → **单项目视图**:头部(名称、deadline chip),任务列表(根任务成行,带子任务的行显示子任务计数;与 Inbox 同 TaskRow),底部内联 **"+ Add task"**(默认落本项目)。无孤儿徽章、无健康标记、无 Break-down 向导(D-21 退役)。
-- **GTD 组(侧栏下方,D-20 精简)**:仅三项——**Someday/Maybe** 与 **Reference**(各 = 对应 bucket 的任务列表,同 TaskRow 组件,**侧栏带未完成计数徽章**,可 Move 回任意容器;不参与 Today/engage)、**Completed**(done 任务按完成时间倒序,无徽章;随量增长的归档策略——按月分组 + 懒加载——排入后续里程碑)。**Trash 视图与 Weekly Review 侧栏项移除**:删除 = 右键软删(数据层可恢复)。
+- **GTD 组(侧栏下方,D-20 精简;Upstream 不入栏,见下)**:仅三项——**Someday/Maybe** 与 **Reference**(各 = 对应 bucket 的任务列表,同 TaskRow 组件,**侧栏带未完成计数徽章**,可 Move 回任意容器;不参与 Today/engage)、**Completed**(done 任务按完成时间倒序,无徽章;随量增长的归档策略——按月分组 + 懒加载——排入后续里程碑)。**Trash 视图与 Weekly Review 侧栏项移除**:删除 = 右键软删(数据层可恢复)。
 - **Reminders**:任务与 calendar 条目详情、快速添加对话框均可设提醒;main 调度器到点弹系统通知,点击通知聚焦对应条目。
 - **Agent 面板(右栏)**:§7 全部功能。
 

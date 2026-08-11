@@ -360,7 +360,8 @@ export function App(): React.JSX.Element {
 
         <div className="mt-6 px-2 text-xs font-semibold text-neutral-500">GTD</div>
         <nav className="mt-1 space-y-0.5">
-          {navItem('upstream', '🔗', 'Upstream', bucketCounts.data?.upstream)}
+          {/* Upstream(Google 镜像)不进侧栏:条目太多,徽章长期是个大数字,喧宾夺主。
+              镜像任务本来就在 Calendar/Today 上各就各位;这个容器视图保留,经 ⌘K 命中可达。 */}
           {navItem('someday', '🌙', 'Someday/Maybe', bucketCounts.data?.someday)}
           {navItem('reference', '📚', 'Reference', bucketCounts.data?.reference)}
           {navItem('completed', '☑️', 'Completed')}
