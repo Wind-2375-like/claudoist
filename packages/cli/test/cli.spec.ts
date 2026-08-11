@@ -31,11 +31,12 @@ describe('@gtd/cli 命令层(真实 sqlite 库)', () => {
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it('空库 add 报缺 context;context-add 后可用', () => {
-    expect(() => run('add', args(['写周报']))).toThrow(CliError);
-    run('context-add', args(['电脑']));
-    const ctxs = run('contexts') as { name: string }[];
-    expect(ctxs.map((c) => c.name)).toEqual(['@电脑']); // INV-24.1 自动 @ 前缀
+  it('D-30:空库直接 add 即可(无 context 前置);label-add 建标签', () => {
+    const t = run('add', args(['写周报'])) as { title: string };
+    expect(t.title).toBe('写周报');
+    run('label-add', args(['电脑']));
+    const ls = run('labels') as { name: string }[];
+    expect(ls.map((l) => l.name)).toEqual(['电脑']);
   });
 
   it('add 带属性入 inbox;--json data 含 id', () => {
@@ -61,7 +62,7 @@ describe('@gtd/cli 命令层(真实 sqlite 库)', () => {
     expect(rows).toHaveLength(2); // 重复内容合法
     expect(rows.every((r) => r.bucket === 'inbox')).toBe(true);
     const inbox = run('list', args(['inbox'])) as unknown[];
-    expect(inbox).toHaveLength(3);
+    expect(inbox).toHaveLength(4); // 前两个用例各留一条「写周报」+ 本例两条
   });
 
   it('move:id 前缀引用 → someday', () => {

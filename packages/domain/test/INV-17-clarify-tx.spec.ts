@@ -3,7 +3,7 @@ import { captureToInbox } from '../src/usecases/capture';
 import { deleteTask } from '../src/usecases/tasks';
 import { quickAddTask } from '../src/usecases/tasks';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, label, snapshot, task } from './helpers';
+import { deps, label, snapshot, task } from './helpers';
 
 /**
  * INV-17(D-21 修订载体):一次用户决定 = 一个命令批 = 一个事务。
@@ -12,14 +12,12 @@ import { ctx, deps, label, snapshot, task } from './helpers';
  */
 describe('INV-17 命令批原子性:一次决定的全部产物在同一批', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1' })],
     labels: [label({ id: 'l1' })],
   });
 
   it('quickAdd 带 label + 提醒 → createTask/assignLabel/createReminder 同批', () => {
     const r = quickAddTask(base, deps(), {
       title: 'x',
-      contextId: 'c1',
       labelIds: ['l1'],
       reminderAt: '2026-08-09T09:00',
     });
@@ -29,7 +27,6 @@ describe('INV-17 命令批原子性:一次决定的全部产物在同一批', ()
 
   it('级联软删 → 整棵子树的 updateTask 在同一批,不分两次(INV-26)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({ id: 't1' }),
         task({ id: 't2', parentTaskId: 't1' }),

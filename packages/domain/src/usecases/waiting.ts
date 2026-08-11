@@ -98,10 +98,7 @@ export function createFollowUp(
   const w = snap.waiting.find((x) => x.id === input.waitingForId);
   if (!w) return { error: `等待项不存在: ${input.waitingForId}` };
   if (w.resolved) return { error: `等待项已解决,无需催办: ${input.waitingForId}` };
-  if (!snap.contexts.some((c) => !c.archived)) {
-    return { error: '无可用 context,无法创建催办行动' };
-  }
-  const { task, command } = buildFollowUpTask(snap, deps, w);
+  const { task, commands } = buildFollowUpTask(snap, deps, w);
   // 只发 createTask;不发任何 updateWaitingFor(INV-23)
-  return { commands: [command], consequences: { followUpCreated: task.id } };
+  return { commands, consequences: { followUpCreated: task.id } };
 }

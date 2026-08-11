@@ -4,7 +4,7 @@ import { addComment } from '../src/usecases/comments';
 import { isTaskListRoot } from '../src/rules/subtasks';
 import { applyToSnapshot } from '../src/index';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, snapshot, task } from './helpers';
+import { deps, snapshot, task } from './helpers';
 
 /**
  * INV-26(D-22):完成向下级联(completedSubtaskCount);软删级联 active 子树
@@ -12,12 +12,11 @@ import { ctx, deps, snapshot, task } from './helpers';
  */
 describe('INV-26 子树完成/删除纪律', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1' })],
     tasks: [
-      task({ id: 't1', contextId: 'c1' }),
-      task({ id: 't2', contextId: 'c1', parentTaskId: 't1' }),
-      task({ id: 't3', contextId: 'c1', parentTaskId: 't1' }),
-      task({ id: 't4', contextId: 'c1', parentTaskId: 't2' }),
+      task({ id: 't1' }),
+      task({ id: 't2', parentTaskId: 't1' }),
+      task({ id: 't3', parentTaskId: 't1' }),
+      task({ id: 't4', parentTaskId: 't2' }),
     ],
   });
 
@@ -43,11 +42,10 @@ describe('INV-26 子树完成/删除纪律', () => {
 
   it('级联只完成 active 后代:已 done 的后代不重复计入', () => {
     const withDone = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
-        task({ id: 't1', contextId: 'c1' }),
-        task({ id: 'td', contextId: 'c1', parentTaskId: 't1', status: 'done', completedAt: 'T0' }),
-        task({ id: 'ta', contextId: 'c1', parentTaskId: 't1' }),
+        task({ id: 't1' }),
+        task({ id: 'td', parentTaskId: 't1', status: 'done', completedAt: 'T0' }),
+        task({ id: 'ta', parentTaskId: 't1' }),
       ],
     });
     const r = completeTask(withDone, deps(), { id: 't1' });
@@ -143,11 +141,10 @@ describe('INV-26 子树完成/删除纪律', () => {
 
   it('回归:级联只删 active 后代 —— done 子任务保持 done,完成记录/项目进度不受影响', () => {
     const withDone = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
-        task({ id: 't1', contextId: 'c1' }),
-        task({ id: 'td', contextId: 'c1', parentTaskId: 't1', status: 'done', completedAt: 'T0' }),
-        task({ id: 'ta', contextId: 'c1', parentTaskId: 't1' }),
+        task({ id: 't1' }),
+        task({ id: 'td', parentTaskId: 't1', status: 'done', completedAt: 'T0' }),
+        task({ id: 'ta', parentTaskId: 't1' }),
       ],
     });
     const r = deleteTask(withDone, deps(), { id: 't1' });
@@ -160,10 +157,7 @@ describe('INV-26 子树完成/删除纪律', () => {
 
   it('回归:恢复"删除前已完成"的任务 → 回 done 且保留 completedAt(不洗记录)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
-      tasks: [
-        task({ id: 'td', contextId: 'c1', status: 'deleted', deletedAt: 'T1', completedAt: 'T0' }),
-      ],
+      tasks: [task({ id: 'td', status: 'deleted', deletedAt: 'T1', completedAt: 'T0' })],
     });
     const r = restoreTask(snap, deps(), { id: 'td' });
     if (isUsecaseError(r)) throw new Error(r.error);

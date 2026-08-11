@@ -46,11 +46,9 @@ describe('schema 与 DESIGN §5.1 对齐', () => {
       'created_at',
     ]);
     const db = openDb(':memory:');
+    // D-30:tasks 已无 context_id
     db.prepare(
-      "INSERT INTO contexts (id,name,sort_order,created_at) VALUES ('c1','@x',0,'t')",
-    ).run();
-    db.prepare(
-      "INSERT INTO tasks (id,title,context_id,estimated_minutes,energy,priority,status,created_at) VALUES ('t1','x','c1',15,'medium',3,'active','t')",
+      "INSERT INTO tasks (id,title,estimated_minutes,energy,priority,status,created_at) VALUES ('t1','x',15,'medium',3,'active','t')",
     ).run();
     const ok = db.prepare(
       'INSERT INTO reminders (id,task_id,remind_at,created_at) VALUES (?,?,?,?)',

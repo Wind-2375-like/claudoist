@@ -44,7 +44,7 @@
 | M2 | 领域核心 | `@gtd/domain` 实体/规则/流程状态机,INVARIANTS.md 每条不变量一个命名测试 | ✅ |
 | M3 | 存储层 | `@gtd/storage-sqlite` 实现 GtdStore(node:sqlite)+ 迁移 + contract 测试 + `pnpm seed` | ✅ |
 | M4 | 只读壳 | main 开库 + IPC 读通道 + 侧栏与 Inbox/My Projects/Today 只读视图 | ✅ |
-| M5 | 捕捉与理清(经 R/R2/R3 三次用户反馈重塑) | 捕捉、Todoist 式单卡快速添加、容器模型(D-20)、平面项目 + 任务子树/评论/详情弹窗(D-21)、CLI 通道(M5C) | 🔄 |
+| M5 | 捕捉与理清(经 R/R2/R3 三次用户反馈重塑) | 捕捉、Todoist 式单卡快速添加、容器模型(D-20)、平面项目 + 任务子树/评论/详情弹窗(D-21)、CLI 通道(M5C) | ✅ |
 | M6 | 日历 | 日历统一(D-23,CalendarItem 消解为定时任务)、本地周网格、Google 日历同步(D-25/D-26)、时区(D-27) | ✅ |
 | M7 | Search + Filters | ⌘K 全局搜索、Filters & Labels 视图(流程类功能改由 agent skill 承载,D-28) | 🔄 |
 | M8 | Agent 只读版 | SDK 接入 + API key onboarding + 流式聊天 + 只读工具 + 成本护栏 | ⬜ |
@@ -231,6 +231,7 @@
 
 **用户反馈**
 
+- **2026-08-11(验收通过)**:M5 及其 R/R2/C/R3/R4/R5/R6 七轮返工整体验收通过。逐条清单未勾选 —— 这些功能自 M6 起已在日常使用中持续验证,七轮返工本身即由实际试用反馈驱动。
 - 2026-08-08(方向修正,触发 M5R 返工):分步理清向导太复杂,不想按 GTD 逐题点击。要求:Add task 像 Todoist 一样简约(单卡 + 可选属性);Inbox 理清 = 用户直接 specify(转 today/tomorrow 单步任务或多步项目,可选 date/deadline/priority/reminders/labels)或与 Claude 对话清空;user 与 agent 共享待理清视图。三项取舍经问答定案(见决策日志):移除向导入口、Task 加 `scheduledDate`、attachment→M10 / location 不做。
 
 **M5R 实现记录(2026-08-08)**

@@ -13,7 +13,6 @@ export interface Task {
   id: Id;
   title: string;
   /** 必填恰好一个 context(INV-24.2) */
-  contextId: Id;
   estimatedMinutes: number;
   /** 写入侧限 Energy;读取侧宽容未知字符串按 medium 参与比较(INV-02) */
   energy: string;

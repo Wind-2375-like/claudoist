@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { statusSummary } from '../src/usecases/status';
-import { ctx, deps, inboxItem, project, snapshot, task, waitingFor } from './helpers';
+import { deps, inboxItem, project, snapshot, task, waitingFor } from './helpers';
 
 describe('uc-status statusSummary(§4.15 只读汇总)', () => {
   it('全区口径:计数、排序、分组、树、统计', () => {
     const snap = snapshot({
-      contexts: [
-        ctx({ id: 'c2', name: '@phone', sortOrder: 1 }),
-        ctx({ id: 'c1', name: '@home', sortOrder: 0 }),
-        ctx({ id: 'c3', name: '@gone', sortOrder: 2, archived: true }),
-      ],
       inbox: [inboxItem({ id: 'i2', position: 5 }), inboxItem({ id: 'i1', position: 2 })],
       projects: [
         project({ id: 'pa', outcome: 'A' }),
@@ -17,11 +12,13 @@ describe('uc-status statusSummary(§4.15 只读汇总)', () => {
         project({ id: 'pc', outcome: 'C', status: 'complete' }),
       ],
       tasks: [
-        task({ id: 't1', contextId: 'c1', projectId: 'pb' }),
-        task({ id: 't2', contextId: 'c2', projectId: null }),
-        task({ id: 't3', contextId: 'c1', status: 'done' }),
-        task({ id: 't4', contextId: 'c1', status: 'deleted' }),
+        task({ id: 't1', projectId: 'pb' }),
+        task({ id: 't2', projectId: null }),
+        task({ id: 't3', status: 'done' }),
+        task({ id: 't4', status: 'deleted' }),
       ],
+      labels: [{ id: 'lw', name: 'work', color: null }],
+      taskLabels: [{ taskId: 't1', labelId: 'lw' }],
       waiting: [waitingFor({ id: 'w1' }), waitingFor({ id: 'w2', resolved: true })],
       listItems: [
         { id: 's1', kind: 'someday', text: '学钢琴', createdAt: '2026-08-01T00:00:00' },
@@ -41,11 +38,10 @@ describe('uc-status statusSummary(§4.15 只读汇总)', () => {
     expect(s.projects[1]!.stats.activeCount).toBe(1); // t1 在 pb
     expect(s.projects[1]!.stats.progress).toBe(0);
 
-    // active Task 按 context 分组(sortOrder 升序;archived context 不列;done/deleted 不计)
-    expect(s.tasksByContext.map((g) => g.context.id)).toEqual(['c1', 'c2']);
-    expect(s.tasksByContext[0]!.tasks.map((x) => x.task.id)).toEqual(['t1']);
-    expect(s.tasksByContext[0]!.tasks[0]!.projectBreadcrumb).toBe('B'); // 平面化:即项目名
-    expect(s.tasksByContext[1]!.tasks[0]!.projectBreadcrumb).toBeNull();
+    // D-30:active Task 按**标签**分组(按标签名排序;done/deleted 不计)
+    expect(s.tasksByLabel.map((g) => g.label.name)).toEqual(['work']);
+    expect(s.tasksByLabel[0]!.tasks.map((x) => x.task.id)).toEqual(['t1']);
+    expect(s.tasksByLabel[0]!.tasks[0]!.projectBreadcrumb).toBe('B'); // 平面化:即项目名
 
     // 未解决 waiting;someday/reference;统计口径(§2.8)
     expect(s.waiting.map((w) => w.id)).toEqual(['w1']);

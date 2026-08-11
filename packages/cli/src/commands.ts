@@ -12,7 +12,6 @@ import type {
 import {
   ENGAGE_TOP_N,
   addComment,
-  addContext,
   addDaysIso,
   blockEndMinutes,
   calendarDay,
@@ -186,20 +185,6 @@ function findProject(snap: GtdSnapshot, ref: string): Project {
   throw new CliError(`找不到项目: ${ref}(可用 id/id 前缀/名称全等;projects 命令查看)`);
 }
 
-function resolveContextId(snap: GtdSnapshot, ref: string | undefined): Id {
-  const active = snap.contexts.filter((c) => !c.archived);
-  if (ref === undefined) {
-    const def = [...active].sort((a, b) => a.sortOrder - b.sortOrder)[0];
-    if (!def) throw new CliError('没有可用 context(先 context-add <名称>)');
-    return def.id;
-  }
-  const hit = active.find((c) => c.id === ref || c.name === ref);
-  if (!hit) {
-    throw new CliError(`找不到 context: ${ref}(现有:${active.map((c) => c.name).join(', ')})`);
-  }
-  return hit.id;
-}
-
 function resolveLabelIds(snap: GtdSnapshot, csv: string): Id[] {
   return csv.split(',').map((raw) => {
     const name = raw.trim();
@@ -222,7 +207,6 @@ interface TaskJson {
   project: string | null;
   projectId: Id | null;
   description: string;
-  context: string;
   scheduledDate: IsoDate | null;
   deadline: IsoDate | null;
   overdue: boolean;
@@ -247,7 +231,6 @@ function taskJson(snap: GtdSnapshot, t: Task, today: IsoDate): TaskJson {
     project: t.projectId !== null ? projectBreadcrumb(snap, t.projectId) || null : null,
     projectId: t.projectId,
     description: t.description,
-    context: snap.contexts.find((c) => c.id === t.contextId)?.name ?? '?',
     scheduledDate: t.scheduledDate,
     deadline: t.deadline,
     overdue: t.deadline !== null && t.deadline < today,
@@ -280,7 +263,6 @@ function taskLine(j: TaskJson): string {
   if (j.deadline !== null) bits.push(`⏰${j.deadline}${j.overdue ? '(过期)' : ''}`);
   if (j.priority !== 3) bits.push(`优先级:${j.priorityLabel}`); // 非默认才展示(D-14 文字)
   if (j.labels.length > 0) bits.push(j.labels.map((l) => `#${l}`).join(' '));
-  bits.push(j.context); // context 名自带 @ 前缀(INV-24.1)
   return bits.join('  ');
 }
 
@@ -297,7 +279,7 @@ const add: Handler = (store, deps, args) => {
   const title = args.positionals.join(' ').trim();
   if (!title)
     throw new CliError(
-      '用法: add <标题> [--parent=父任务(建子任务)] [--desc=] [--project=] [--date=] [--deadline=] [--time=HH:MM] [--duration=分钟] [--priority=1..5] [--labels=a,b] [--remind=YYYY-MM-DDTHH:MM] [--context=] [--minutes=] [--energy=low|medium|high]',
+      '用法: add <标题> [--parent=父任务(建子任务)] [--desc=] [--project=] [--date=] [--deadline=] [--time=HH:MM] [--duration=分钟] [--priority=1..5] [--labels=a,b] [--remind=YYYY-MM-DDTHH:MM] [--minutes=] [--energy=low|medium|high]',
     );
   const snap = store.snapshot();
   const projectRef = opt(args, 'project');
@@ -315,12 +297,11 @@ const add: Handler = (store, deps, args) => {
   const tz = opt(args, 'tz');
   const durationRaw = opt(args, 'duration');
   const duration = durationRaw !== undefined ? parseDuration(durationRaw, false) : undefined;
-  // --parent = 建子任务(INV-25:容器/项目/context 继承父,≤5 层;D-22 支持完整属性集)
+  // --parent = 建子任务(INV-25:容器/项目继承父,≤5 层;D-22 支持完整属性集)
   if (parentRef !== undefined) {
     if (projectRef !== undefined)
       throw new CliError('--parent 与 --project 不能同用(子任务跟随父任务的项目)');
     const parent = findTask(snap, parentRef);
-    const context = opt(args, 'context');
     const c = applyUsecase(
       store,
       addSubtask(snap, deps, {
@@ -332,7 +313,6 @@ const add: Handler = (store, deps, args) => {
         ...(priority !== undefined && { priority: Number(priority) }),
         ...(minutes !== undefined && { estimatedMinutes: Number(minutes) }),
         ...(energy !== undefined && { energy: parseEnergy(energy) }),
-        ...(context !== undefined && { contextId: resolveContextId(snap, context) }),
         ...(labels !== undefined && { labelIds: resolveLabelIds(snap, labels) }),
         ...(remind !== undefined && { reminderAt: remind }),
         ...(time !== undefined && { startTime: time }),
@@ -349,7 +329,6 @@ const add: Handler = (store, deps, args) => {
   }
   const input = {
     title,
-    contextId: resolveContextId(snap, opt(args, 'context')),
     ...(projectRef !== undefined && { projectId: findProject(snap, projectRef).id }),
     ...(desc !== undefined && { description: desc }),
     ...(date !== undefined && { scheduledDate: parseDay(date, deps.clock) }),
@@ -537,35 +516,44 @@ const calendar: Handler = (store, deps, args) => {
 
 /**
  * Focus/Engage(INV-20;与桌面 FocusPanel **同一套 domain 规则**,改动需同步)。
- * calendar-first:今天已排期任务先列;随后是该 context 下 时间/精力 匹配的 top-7。
+ * calendar-first:今天已排期任务先列;随后是该标签下 时间/精力 匹配的 top-7(D-30)。
  */
 const engage: Handler = (store, deps, args) => {
   const snap = store.snapshot();
   const today = deps.clock.today();
-  const contextRef = opt(args, 'context');
+  const labelRef = opt(args, 'label');
   const minutesRaw = opt(args, 'minutes') ?? '60';
   const minutes = Number(minutesRaw);
   if (!Number.isInteger(minutes) || minutes < 1) {
     throw new CliError(`--minutes 需为正整数,得到 "${minutesRaw}"`);
   }
   const energy = parseEnergy(opt(args, 'energy') ?? 'medium');
-  const contextId = resolveContextId(snap, contextRef);
-  const contextName = snap.contexts.find((c) => c.id === contextId)?.name ?? '?';
+  // D-30:不给 --label 就是"不按标签过滤",看全部候选
+  const label =
+    labelRef === undefined
+      ? undefined
+      : snap.labels.find((l) => l.id === labelRef || l.name === labelRef.replace(/^@/, ''));
+  if (labelRef !== undefined && label === undefined) {
+    const have = snap.labels.map((l) => `@${l.name}`).join(', ') || '(无)';
+    throw new CliError(`找不到标签: ${labelRef}(现有:${have})`);
+  }
+  const labelId = label?.id ?? null;
+  const labelName = label === undefined ? '全部标签' : `@${label.name}`;
 
-  // INV-20.1:日历优先段 = 当天硬性日程,与 --context 无关,故不随之过滤
+  // INV-20.1:日历优先段 = 当天硬性日程,与 --label 无关,故不随之过滤
   const first = todaysTimedTasks(snap, today).map((t) => taskJson(snap, t, today));
-  const matches = engageMatches(snap, contextId, minutes, energy, today);
+  const matches = engageMatches(snap, labelId, minutes, energy, today);
   const cands = matches.slice(0, ENGAGE_TOP_N).map((t) => taskJson(snap, t, today));
   const hidden = matches.length - cands.length;
   const text = [
-    `Focus ${contextName} · ≤${minutes} 分钟 · 精力 ${energy}`,
+    `Focus ${labelName} · ≤${minutes} 分钟 · 精力 ${energy}`,
     taskSection('今天已排期(先处理)', first),
     taskSection(`候选(优先级前 ${ENGAGE_TOP_N})`, cands),
     ...(hidden > 0 ? [`另有 ${hidden} 条符合条件的任务未列出。`] : []),
   ].join('\n\n');
   return {
     data: {
-      context: contextName,
+      label: labelName,
       minutes,
       energy,
       calendarFirst: first,
@@ -881,7 +869,7 @@ const update: Handler = (store, deps, args) => {
   const ref = args.positionals[0];
   if (!ref) {
     throw new CliError(
-      '用法: update <任务> [--title=] [--desc=] [--date=|none] [--deadline=|none] [--time=HH:MM|none] [--duration=分钟|none] [--priority=] [--context=] [--minutes=] [--energy=]',
+      '用法: update <任务> [--title=] [--desc=] [--date=|none] [--deadline=|none] [--time=HH:MM|none] [--duration=分钟|none] [--priority=] [--minutes=] [--energy=]',
     );
   }
   const snap = store.snapshot();
@@ -891,7 +879,6 @@ const update: Handler = (store, deps, args) => {
   const date = opt(args, 'date');
   const deadline = opt(args, 'deadline');
   const priority = opt(args, 'priority');
-  const context = opt(args, 'context');
   const minutes = opt(args, 'minutes');
   const energy = opt(args, 'energy');
   const time = opt(args, 'time');
@@ -907,7 +894,6 @@ const update: Handler = (store, deps, args) => {
       deadline: deadline === 'none' ? null : parseDay(deadline, deps.clock),
     }),
     ...(priority !== undefined && { priority: Number(priority) }),
-    ...(context !== undefined && { contextId: resolveContextId(snap, context) }),
     ...(minutes !== undefined && { estimatedMinutes: Number(minutes) }),
     ...(energy !== undefined && { energy: parseEnergy(energy) }),
     ...(time !== undefined && { startTime: time === 'none' ? null : time }),
@@ -965,7 +951,7 @@ const show: Handler = (store, deps, args) => {
     j.description && `描述: ${j.description}`,
     j.scheduledDate !== null && `计划日期: ${j.scheduledDate}`,
     j.deadline !== null && `deadline: ${j.deadline}${j.overdue ? '(过期)' : ''}`,
-    `优先级: ${j.priorityLabel}  ·  ${j.context}  ·  ${j.estimatedMinutes} 分钟  ·  精力 ${j.energy}`,
+    `优先级: ${j.priorityLabel}  ·  ${j.estimatedMinutes} 分钟  ·  精力 ${j.energy}`,
     j.labels.length > 0 && `labels: ${j.labels.join(', ')}`,
     reminders.length > 0 && `提醒: ${reminders.join(', ')}`,
     j.completedAt !== null && `完成于: ${j.completedAt}`,
@@ -974,33 +960,6 @@ const show: Handler = (store, deps, args) => {
       `评论:\n${comments.map((c) => `  [${c.createdAt.replace('T', ' ')}] ${c.body}`).join('\n')}`,
   ].filter(Boolean);
   return { data: { ...j, reminders, subtasks, comments }, text: lines.join('\n') };
-};
-
-const contexts: Handler = (store, _deps, _args) => {
-  const snap = store.snapshot();
-  const rows = snap.contexts
-    .filter((c) => !c.archived)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      activeTaskCount: snap.tasks.filter((t) => t.contextId === c.id && t.status === 'active')
-        .length,
-    }));
-  return {
-    data: rows,
-    text:
-      rows.length === 0
-        ? '(无 context;context-add <名称> 新建)'
-        : rows.map((c) => `- ${c.name}(${c.activeTaskCount} 行动)  ${c.id.slice(0, 8)}`).join('\n'),
-  };
-};
-
-const contextAdd: Handler = (store, deps, args) => {
-  const name = args.positionals.join(' ').trim();
-  if (!name) throw new CliError('用法: context-add <名称>');
-  const c = applyUsecase(store, addContext(store.snapshot(), deps, { name }));
-  return { data: c, text: `已创建 context: ${name}` };
 };
 
 const labels: Handler = (store, _deps, _args) => {
@@ -1030,12 +989,12 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
              [--date=today|tomorrow|YYYY-MM-DD] [--deadline=]
              [--time=HH:MM(日历 block,D-23)] [--duration=分钟] [--tz=floating|IANA]
              [--priority=1..5(1最高,5最低)] [--labels=a,b] [--remind=YYYY-MM-DDTHH:MM]
-             [--context=] [--minutes=] [--energy=low|medium|high]
+             [--minutes=] [--energy=low|medium|high]
   capture <想法> [<想法>...]        逐条捕捉进 Inbox(零判断,INV-16)
   list [inbox|someday|reference|project|completed|all]   completed 可加 --limit=N
   today                             统一待办(计划 ≤ 今天 ∪ 截止 ≤ 今天;带时间任务按时刻排)
   calendar [--from=today|tomorrow|YYYY-MM-DD] [--days=1..31]  日历周视图(全天段 + 定时段,INV-28)
-  engage [--context=] [--minutes=60] [--energy=low|medium|high]  择事:calendar-first + top-7(INV-20)
+  engage [--label=] [--minutes=60] [--energy=low|medium|high]  择事:calendar-first + top-7(INV-20)
   search <关键词> [--limit=50]                      跨实体搜索(任务/项目/等待项,与 ⌘K 同口径)
   show <任务>                       任务详情(含子任务树 / 评论 / 提醒)
   comment <任务> <内容>             加评论
@@ -1049,7 +1008,7 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
   project-update <项目> [--name=] [--deadline=|none] [--propagate|--keep-tasks]
                                     改 deadline 命中继承行动时须显式二选一(INV-12)
   project-complete <项目>           标记项目完成(任务状态不动,INV-15)
-  contexts / context-add <名称>     labels / label-add <名称>
+  labels / label-add <名称>         标签管理(D-30:情境已并入标签,写作 @名字)
 
 任务/项目引用:完整 id、id 前缀(唯一)或标题全等。--json 输出 {ok, db, data}(data 含 id)。
 DB 定位:CLAUDOIST_DB 环境变量 > --db= > --prod/--dev > 自动(dev 库存在且 prod 不存在则 dev,否则 prod)。`;
@@ -1074,8 +1033,6 @@ const HANDLERS: Record<string, Handler> = {
   'project-add': projectAdd,
   'project-update': projectUpdate,
   'project-complete': projectComplete,
-  contexts,
-  'context-add': contextAdd,
   labels,
   'label-add': labelAdd,
 };
@@ -1084,7 +1041,7 @@ const HANDLERS: Record<string, Handler> = {
 const GLOBAL_OPTS = ['json', 'db', 'dev', 'prod', 'help'];
 const COMMAND_OPTS: Record<string, string[]> = {
   calendar: ['from', 'days'],
-  engage: ['context', 'minutes', 'energy'],
+  engage: ['label', 'minutes', 'energy'],
   search: ['limit'],
   add: [
     'parent',
@@ -1098,7 +1055,6 @@ const COMMAND_OPTS: Record<string, string[]> = {
     'priority',
     'labels',
     'remind',
-    'context',
     'minutes',
     'energy',
   ],
@@ -1120,7 +1076,6 @@ const COMMAND_OPTS: Record<string, string[]> = {
     'duration',
     'tz',
     'priority',
-    'context',
     'minutes',
     'energy',
   ],
@@ -1129,8 +1084,6 @@ const COMMAND_OPTS: Record<string, string[]> = {
   'project-add': ['deadline'],
   'project-update': ['name', 'deadline', 'propagate', 'keep-tasks'],
   'project-complete': [],
-  contexts: [],
-  'context-add': [],
   labels: [],
   'label-add': [],
 };

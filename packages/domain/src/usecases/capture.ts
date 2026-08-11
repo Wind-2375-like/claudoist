@@ -19,17 +19,13 @@ export interface CaptureConsequences {
 /**
  * INV-16 捕捉零判断(载体随 D-20 改为 createTask):逐条在 Inbox 建任务,
  * 不解析、不去重、不追问任何元数据;重复内容合法;空白跳过,标题原文保存。
- * context 取 sortOrder 最小的 active context(捕捉时不打扰用户选择)。
+ * D-30 起任务没有必填的情境字段 —— 标签是可选多值,捕捉时一个都不加。
  */
 export function captureToInbox(
   snap: GtdSnapshot,
   deps: FlowDeps,
   input: CaptureInput,
 ): UsecaseResult<CaptureConsequences> {
-  const defaultContext = snap.contexts
-    .filter((c) => !c.archived)
-    .sort((a, b) => a.sortOrder - b.sortOrder)[0];
-  if (!defaultContext) return { error: '没有可用 context(至少需要一个)' };
   const commands: Command[] = [];
   const createdIds: Id[] = [];
   // 同一批捕捉逐条追加到 inbox 根组末尾(INV-27):base + i(snap 不随批更新,故手动递增)
@@ -40,7 +36,6 @@ export function captureToInbox(
     const task: Task = {
       id: deps.idGen.next(),
       title: text,
-      contextId: defaultContext.id,
       estimatedMinutes: TASK_DEFAULTS.estimatedMinutes,
       energy: TASK_DEFAULTS.energy,
       priority: TASK_DEFAULTS.priority,

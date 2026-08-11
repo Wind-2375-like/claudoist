@@ -120,7 +120,7 @@ export function TaskRow({
               key={l.id}
               className="hidden rounded bg-amber-50 px-1 py-0.5 text-amber-700 @md:inline"
             >
-              {l.name}
+              @{l.name}
             </span>
           ))}
           {showCompletedAt && task.completedAt && <span>{task.completedAt.slice(0, 10)} 完成</span>}

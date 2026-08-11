@@ -26,7 +26,7 @@ describe('BUG-04 防复刻:无 action_ids,一切按 projectId 扫描', () => {
 
   it('状态汇总的项目分组同样按 projectId 派生', () => {
     const p = project({ id: 'p1' });
-    const snap = snapshot({ projects: [p], tasks: [task({ projectId: 'p1', contextId: 'c1' })] });
+    const snap = snapshot({ projects: [p], tasks: [task({ projectId: 'p1' })] });
     const summary = statusSummary(snap, deps(), {});
     expect(JSON.stringify(summary)).not.toContain('actionIds');
   });

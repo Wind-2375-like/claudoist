@@ -4,7 +4,7 @@ import type {
   GoogleStatusVM,
   AddSubtaskInputVM,
   BucketCountsVM,
-  ContextVM,
+  LabelListItemVM,
   GtdChangedEvent,
   MoveTargetVM,
   ProjectListItemVM,
@@ -39,7 +39,6 @@ declare global {
       upstreamList: () => Promise<TaskTreeVM[]>;
       search: (query: string) => Promise<SearchVM>;
       calendarRange: (from: string, days: number) => Promise<CalendarRangeVM>;
-      contextsList: () => Promise<ContextVM[]>;
       onChanged: (cb: (ev: GtdChangedEvent) => void) => () => void;
       capture: (texts: string[]) => Promise<WriteResultVM>;
       taskCreate: (input: QuickAddTaskInputVM) => Promise<WriteResultVM>;
@@ -48,8 +47,7 @@ declare global {
       taskSetLabels: (id: string, labelIds: string[]) => Promise<WriteResultVM>;
       reminderAdd: (taskId: string, remindAt: string) => Promise<WriteResultVM>;
       reminderDelete: (id: string) => Promise<WriteResultVM>;
-      contextAdd: (name: string) => Promise<WriteResultVM<{ contextId?: string }>>;
-      labelsList: () => Promise<{ id: string; name: string }[]>;
+      labelsList: () => Promise<LabelListItemVM[]>;
       taskMove: (input: { id: string; to: MoveTargetVM }) => Promise<WriteResultVM>;
       taskReorder: (input: {
         id: string;

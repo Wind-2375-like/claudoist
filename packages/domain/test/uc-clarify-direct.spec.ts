@@ -6,12 +6,11 @@ import {
   clarifyInboxToTask,
   isUsecaseError,
 } from '../src/index';
-import { ctx, deps, inboxItem, label, project, snapshot } from './helpers';
+import { deps, inboxItem, label, project, snapshot } from './helpers';
 
 /** D-18 理清路径①:卡片直接 specify;单条目一次事务(INV-17)。 */
 describe('clarifyDirect:inbox 条目直接转化', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1', name: '@computer' })],
     labels: [label({ id: 'l1', name: 'next' })],
     projects: [project({ id: 'p1', deadline: '2026-09-01' })],
     inbox: [inboxItem({ id: 'i1', text: '给论文加 ablation', position: 1 })],
@@ -22,7 +21,6 @@ describe('clarifyDirect:inbox 条目直接转化', () => {
       inboxItemId: 'i1',
       task: {
         title: '跑 ablation 实验',
-        contextId: 'c1',
         projectId: 'p1',
         scheduledDate: '2026-08-09',
         labelIds: ['l1'],
@@ -72,7 +70,7 @@ describe('clarifyDirect:inbox 条目直接转化', () => {
   it('子操作失败(坏日期/幽灵条目)→ 返回错误、零命令', () => {
     const bad = clarifyInboxToTask(base, deps(), {
       inboxItemId: 'i1',
-      task: { title: 'x', contextId: 'c1', scheduledDate: '2026-8-9' },
+      task: { title: 'x', scheduledDate: '2026-8-9' },
     });
     expect(isUsecaseError(bad)).toBe(true);
     const ghost = clarifyInboxToList(base, deps(), { inboxItemId: 'ghost', kind: 'trash' });

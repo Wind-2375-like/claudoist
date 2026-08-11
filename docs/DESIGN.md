@@ -99,7 +99,7 @@ open_gtd_agent/
 │   ├── domain/                       # @gtd/domain — 纯 TS,零框架依赖
 │   │   ├── src/
 │   │   │   ├── entities/             # task.ts, project.ts, waitingFor.ts, calendarItem.ts,
-│   │   │   │                         #   inboxItem.ts, context.ts, label.ts, filter.ts, reminder.ts
+│   │   │   │                         #   inboxItem.ts, label.ts, filter.ts, reminder.ts(context.ts 随 D-30 删除)
 │   │   │   ├── ports/                # gtdStore.ts(接口), clock.ts, idGen.ts
 │   │   │   ├── rules/                # deadlineInheritance.ts, projectHealth.ts, subtasks.ts,
 │   │   │   │                         #   energy.ts, engageRanking.ts, filterQuery.ts
@@ -197,14 +197,14 @@ open_gtd_agent/
 | `gtd:inbox.list` | R→M | Inbox 条目 |
 | `gtd:tasks.list` / `gtd:tasks.get` / `gtd:tasks.create` / `gtd:tasks.update` / `gtd:tasks.complete` / `gtd:tasks.delete` | R→M | Task CRUD(delete = 软删) |
 | `gtd:projects.list` / `gtd:project.view` / `gtd:projects.create` / `gtd:projects.update` / `gtd:projects.complete` | R→M | 项目**平面列表**(D-21:activeCount/doneCount/progress 徽章与进度)、单项目视图(根任务 + 子任务树);改 deadline 前 UI 先以只读规则取继承行动计数并征询,单次 `update` 带或不带 `propagateDeadline`(§5.4) |
-| `gtd:task.detail` / `gtd:task.addSubtask` / `gtd:task.comment.add` | R→M | 任务详情弹窗(子任务树 ≤5 层 + 评论 + reminders,D-21/22/INV-25/26);加子任务(继承父的容器/项目/context,支持完整属性集含 labels/reminders);加评论 |
+| `gtd:task.detail` / `gtd:task.addSubtask` / `gtd:task.comment.add` | R→M | 任务详情弹窗(子任务树 ≤5 层 + 评论 + reminders,D-21/22/INV-25/26);加子任务(继承父的容器/项目,支持完整属性集含 labels/reminders);加评论 |
 | `gtd:tasks.setLabels` / `gtd:reminders.add` / `gtd:reminders.delete` | R→M | 详情右栏就地编辑既有任务的 labels(diff 式指派)与 reminders(D-22) |
 | `gtd:tasks.reopen` | R→M | 撤销完成(done→active,仅当前任务不级联;误点完成圆圈的"再点一下复原",D-22) |
 | `gtd:calendar.complete` | R→M | 完成硬边界日历项(Today 行式渲染的完成圈,D-22) |
 | `gtd:calendar.list` / `gtd:calendar.create` / `gtd:calendar.complete` | R→M | Calendar 条目 |
 | `gtd:today` | R→M | Today 视图复合查询(hard landscape + due,含本地 today 日期与 overdue 预判)——M4 实装,避免 renderer 先取日期再二次查询 |
 | `gtd:waiting.list` / `gtd:waiting.create` / `gtd:waiting.resolve` | R→M | Waiting-for |
-| `gtd:contexts.list` / `gtd:contexts.add` / `gtd:contexts.remove` | R→M | Contexts(remove 由 domain 强制最后一个 context 不可删、有活跃任务需确认的规则) |
+| `gtd:labels.list` | R→M | 标签 + 活跃任务计数(D-30:contexts 通道随情境合并删除) |
 | `gtd:labels.list` / `gtd:labels.crud` / `gtd:filters.list` / `gtd:filters.crud` | R→M | Labels 与保存的 filters |
 | `gtd:lists.get` / `gtd:lists.move` | R→M | Someday/Reference/Trash 操作 |
 | `gtd:search` | R→M | 跨实体搜索(⌘K 数据源) |
@@ -234,16 +234,7 @@ SQLite(WAL 模式),全表 UUIDv4 主键。时间戳一律 ISO-8601 TEXT;本地�
 ### 5.1 完整 schema
 
 ```sql
-CREATE TABLE contexts (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,       -- '@' 前缀,由 domain 强制
-  sort_order INTEGER NOT NULL, created_at TEXT NOT NULL,
-  archived INTEGER NOT NULL DEFAULT 0                   -- "删除 context" = archive(§5.3);
-);                                                      --   行不物理删除,历史 FK 引用保持有效
-
-CREATE TABLE inbox_items (
-  id TEXT PRIMARY KEY, text TEXT NOT NULL,
-  created_at TEXT NOT NULL, position INTEGER NOT NULL   -- FIFO 用 position 保序
-);
+-- contexts 表随 D-30 删除(迁移 v11):情境并入 labels
 
 CREATE TABLE projects (                                 -- 平面列表(D-21,迁移 0004 去 parent_id)
   id TEXT PRIMARY KEY,
@@ -257,7 +248,7 @@ CREATE TABLE projects (                                 -- 平面列表(D-21,迁
 CREATE TABLE tasks (                                    -- 扁平表,取代 CLI 的 next_actions[ctx] 桶
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
-  context_id TEXT NOT NULL REFERENCES contexts(id),     -- 恰好一个,必填(GTD)
+  -- context_id 随 D-30 删除(迁移 v11):情境已并入 labels
   estimated_minutes INTEGER NOT NULL DEFAULT 15,
   energy TEXT NOT NULL DEFAULT 'medium' CHECK (energy IN ('low','medium','high')),
   priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
@@ -283,7 +274,6 @@ CREATE TABLE tasks (                                    -- 扁平表,取代 CLI 
                                                         --   带时间任务即日历 block(取代 calendar_items)
   duration_minutes INTEGER                              --   block 时长(分钟);NULL 回退 estimated_minutes
 );
-CREATE INDEX idx_tasks_context ON tasks(context_id, status);
 CREATE INDEX idx_tasks_project ON tasks(project_id, status);
 CREATE INDEX idx_tasks_parent ON tasks(parent_task_id);
 -- 注:CLI 的 project.action_ids 概念彻底不存在。一切按 project_id 外键查询。
@@ -317,11 +307,11 @@ CREATE TABLE labels ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, color TEXT
 CREATE TABLE task_labels (
   task_id TEXT NOT NULL REFERENCES tasks(id), label_id TEXT NOT NULL REFERENCES labels(id),
   PRIMARY KEY (task_id, label_id)
-);                                                      -- 自由 label 叠加在必填 context 之上
+);                                            -- D-30 起 label 是唯一的标签维度
 
 CREATE TABLE filters (                                  -- 保存的查询;预置 engage 风格 preset
   id TEXT PRIMARY KEY, name TEXT NOT NULL, position INTEGER NOT NULL,
-  query_json TEXT NOT NULL                              -- {context?, labels?, energyMax?, maxMinutes?,
+  query_json TEXT NOT NULL                              -- {labels?, energyMax?, maxMinutes?,
 );                                                      --  priorityMin?, dueWithinDays?, noProject?...}
 
 CREATE TABLE reminders (                                -- 提醒:挂在一个任务上(迁移 0006 重建,
@@ -365,7 +355,7 @@ CREATE TABLE settings ( key TEXT PRIMARY KEY, value_json TEXT NOT NULL );
 
 ### 5.3 Context 删除的存储机制
 
-行为语义见 [./INVARIANTS.md](./INVARIANTS.md) INV-24:UI 的"删除 context"在存储层实现为 **archive**(`archived=1`),而非删行——`tasks.context_id` 是 NOT NULL 外键,done/deleted 任务的历史引用必须保持有效。archived context 从一切选择器与列表中隐藏;其 active 任务在确认后软删除进 Trash(保留原 `context_id`);恢复这类任务时,若其 context 已 archived,要求重新指定 context。重名判定包含 archived 行(名称不复用)。
+〔退役 D-30〕本节原描述 context 的 archive 机制;情境已并入 label(INV-24 退役),标签删除只解除关联、不影响任务,因此不再需要 archive 这一层。
 
 ### 5.4 项目 deadline 编辑的传播(D-21 修订:仅项目→行动)
 
@@ -400,17 +390,17 @@ deadline 继承语义是 **copy-on-create/move**(INV-10/INV-12);CLI 没有任何
 | 工具 | 参数 | 返回 |
 |---|---|---|
 | `list_inbox` | — | inbox 条目(id、text、created) |
-| `list_tasks` | `{ status?, contextName?, projectId?, labels?, energyMax?, maxMinutes?, dueBefore?, query?, limit? }` | 匹配任务 + 项目面包屑 |
+| `list_tasks` | `{ status?, projectId?, labels?, energyMax?, maxMinutes?, dueBefore?, query?, limit? }` | 匹配任务 + 项目面包屑 |
 | `get_task` | `{ id }` | 完整任务 |
 | `list_projects` | `{ includeComplete?: boolean }` | 平面项目列表(D-21):deadline + activeCount/doneCount/progress |
 | `get_project` | `{ id }` | 项目 + 活跃任务(根任务与子任务树)/calendar/waiting + `hasActiveNextAction`(calendar 与 waiting 计入,见 INVARIANTS.md) |
 | `get_task_detail` | `{ id }` | 任务 + 子任务树(≤5 层)+ 评论(D-21) |
 | `list_calendar` | `{ fromDate?, toDate?, includeDone? }` | 按日期/时间排序的 calendar 条目 |
 | `list_waiting_for` | `{ includeResolved? }` | 委派项(受托人 + 起始日期) |
-| `list_contexts` | — | contexts + 活跃任务计数 |
+| `list_labels` | — | 标签 + 活跃任务计数(D-30) |
 | `list_labels` / `list_filters` | — | labels / 保存的 filters |
 | `search` | `{ query, kinds? }` | 跨实体命中(tasks、projects、inbox、someday、reference、done、calendar、waiting) |
-| `get_engage_recommendations` | `{ contextName, availableMinutes, energy }` | top-7 候选(min≤time ∧ energy≤user,priority 降序)+ 今日 calendar —— **只读;完成是独立写操作** |
+| `get_engage_recommendations` | `{ labelName?, availableMinutes, energy }` | top-7 候选(min≤time ∧ energy≤user,priority **升序**,1=最高 D-29)+ 今日 calendar —— **只读;完成是独立写操作** |
 | `get_status_summary` | — | 总览:各区计数 + 摘要(孤儿工具已随 D-21 删除) |
 
 **写工具(权限门控;全部返回 `consequences` 后果字段):**
@@ -421,10 +411,10 @@ deadline 继承语义是 **copy-on-create/move**(INV-10/INV-12);CLI 没有任何
 |---|---|---|---|
 | `capture` | `{ texts: string[] }` | 追加到 inbox(零摩擦;"提醒我…"的默认动作) | `createdIds` |
 | `move_task` | `{ id, to: {bucket} \| {bucket:'project', projectId} }` | 容器移动(D-20/D-21):根任务子树随动;子任务先脱离父;挪入有 deadline 项目静默继承(INV-10 move 版) | `inheritedDeadline`、`detachedFromParent` |
-| `add_subtask` | `{ parentTaskId, title, … }` | 建子任务(≤5 层;继承父的容器/项目/context,INV-25) | `inheritedDeadline` |
+| `add_subtask` | `{ parentTaskId, title, … }` | 建子任务(≤5 层;继承父的容器/项目,INV-25) | `inheritedDeadline` |
 | `add_comment` | `{ taskId, body }` | 任务评论(D-21) | — |
-| `create_task` | 任务字段(context 必填) | 插入活跃任务;所属项目有 deadline 时**无条件**覆盖为项目 deadline 副本(INV-10 静默继承,显式传入值亦被覆盖;M2 按 INVARIANTS 定案) | `inheritedDeadline` |
-| `update_task` | `{ id, patch }` | 编辑字段,含 context/label 迁移 | — |
+| `create_task` | 任务字段(D-30 后无 context) | 插入活跃任务;所属项目有 deadline 时**无条件**覆盖为项目 deadline 副本(INV-10 静默继承,显式传入值亦被覆盖;M2 按 INVARIANTS 定案) | `inheritedDeadline` |
+| `update_task` | `{ id, patch }` | 编辑字段,含 label 迁移 | — |
 | `complete_task` | `{ id }` | 标记完成;**向下级联完成整棵 active 子树**(D-22/INV-26.1;仅向下,勾子任务不勾父) | `projectHasRemainingActivity`、`parentCompletionCandidate`、`completedSubtaskCount` |
 | `reopen_task` | `{ id }` | 撤销完成(done→active,仅当前任务;父缺失/已删则脱离父) | — |
 | `delete_task` ⚠ | `{ id }` | 软删(status='deleted');active 子树级联软删,done 后代保留(INV-26.2) | `deletedSubtaskCount` |
@@ -433,12 +423,10 @@ deadline 继承语义是 **copy-on-create/move**(INV-10/INV-12);CLI 没有任何
 | `complete_project` | `{ id }` | 标记完成(不改变其任务状态) | `activeTaskCount`(>0 时 agent 应先向用户确认) |
 | `create_waiting_for` | `{ description, delegatedTo?, projectId? }` | 新委派 | — |
 | `resolve_waiting_for` | `{ id }` | 标记等待项已解决(`resolvedAt=now`);**不触发任何追问**(INV-14 边界),domain usecase 不附带后果 | (handler 如需 `projectHasRemainingActivity` 以只读规则补算) |
-| `create_follow_up` | `{ waitingForId }` | 对**未解决**的等待项按 INV-23 模板创建催办任务(`Follow up with X re: Y`、@phone 或 sortOrder 最小 context、5 分钟、low、priority 4、同项目);**不改变** `resolved` 状态(催办对象正是还没回音的委派,见 [./INVARIANTS.md](./INVARIANTS.md) INV-23) | `followUpCreated` |
+| `create_follow_up` | `{ waitingForId }` | 对**未解决**的等待项按 INV-23 模板创建催办任务(`Follow up with X re: Y`、有 `phone` 标签则带上、5 分钟、low、priority 2(高)、同项目);**不改变** `resolved` 状态(催办对象正是还没回音的委派,见 [./INVARIANTS.md](./INVARIANTS.md) INV-23) | `followUpCreated` |
 | `create_calendar_item` | `{ title, date, time?, projectId? }` | hard-landscape 条目 | — |
 | `complete_calendar_item` | `{ id }` | 完成 | 同 `complete_task` 的追问 payload |
 | ~~move_to_list~~ / ~~activate_someday~~ | — | 已并入 `move_task`(D-20/D-21 容器模型:归档/激活都是 bucket 移动) | — |
-| `add_context` | `{ name }` | 自动 @ 前缀、去重 | `normalizedName` |
-| `remove_context` ⚠ | `{ name }` | 删除 context(实现为 archive,§5.3);domain 强制:最后一个 context 不可删;含活跃任务时需先确认,确认后这些任务**软删除进 Trash**(INV-24) | `trashedTaskCount` |
 | `manage_labels` | `{ create?, assign?: {taskId, labelNames}, remove? }` | label CRUD/指派 | — |
 
 ⚠ = **destructive class**(§6.4)。
@@ -486,13 +474,13 @@ main 的 `canUseTool: async (toolName, input) => …` 阻塞在 promise 上:推 
    - calendar 条目与 waiting-for 都算项目的 active action(完成后果提示必须计入);
    - someday 激活必须回 inbox 重新 clarify,绝不直达 tasks;
    - 一切级联(项目完成、deadline 传播、完成后的下一步)必须先向用户提问、拿到确认后再单独调用写工具——收到 `consequences` 字段即视为"该提问了";子任务永不随父完成(INV-26)。
-2. **每次会话注入的轻量状态快照**(会话起始时由 main 组装):今天日期、contexts 列表及活跃计数、inbox 条数、各项目未完成计数。让 agent 开口即有正确的日期与全局形势,不必先打一轮读工具。
+2. **每次会话注入的轻量状态快照**(会话起始时由 main 组装):今天日期、标签列表及活跃计数(D-30)、inbox 条数、各项目未完成计数。让 agent 开口即有正确的日期与全局形势,不必先打一轮读工具。
 
 ### 6.7 CLI 操作通道(2026-08-09 用户定案)
 
 `packages/cli`(`@gtd/cli`,依赖方向同 desktop-main:只向内引 domain + storage)提供命令行任务操作,两重用途:**① Claude Code 经 Bash 工具直接操作任务**(M8/M9 MCP 工具之前即可用,之后与 MCP 并存——MCP 走 in-process 实时,CLI 适合脚本/批处理);**② 用户自己的终端操作**。
 
-- **调用**:`pnpm --silent cli <命令> [--json]`(`--silent` 保证 JSON 输出干净)。命令:`capture`、`add`(--desc/--date today|tomorrow|日期/--deadline/--priority/--project/--context/--labels/--remind;**--parent=<任务> 建子任务**,继承父的容器/项目/context,≤5 层,D-21)、`list`、`today`、`show`(含子任务树与评论)、`comment <任务> <文本>`、`move`(根任务子树随动;子任务先脱离父)、`complete`(返回子任务/项目余活动提示)、`delete`(子树级联软删,输出数量)、`update`、`projects`(平面 + 进度)、`project-add` / `project-update`(--name/--deadline,--propagate 触发 §5.4 传播)、`contexts` / `labels` 管理。任务/项目引用 = id / id 前缀 / 名称全等;`--json` 输出含 id,供 agent 消费。
+- **调用**:`pnpm --silent cli <命令> [--json]`(`--silent` 保证 JSON 输出干净)。命令:`capture`、`add`(--desc/--date today|tomorrow|日期/--deadline/--priority/--project/--labels/--remind;**--parent=<任务> 建子任务**,继承父的容器/项目,≤5 层,D-21)、`list`、`today`、`show`(含子任务树与评论)、`comment <任务> <文本>`、`move`(根任务子树随动;子任务先脱离父)、`complete`(返回子任务/项目余活动提示)、`delete`(子树级联软删,输出数量)、`update`、`projects`(平面 + 进度)、`project-add` / `project-update`(--name/--deadline,--propagate 触发 §5.4 传播)、`labels` / `label-add` 管理(D-30:contexts 命令随情境合并退役)。任务/项目引用 = id / id 前缀 / 名称全等;`--json` 输出含 id,供 agent 消费。
 - **DB 定位**:`CLAUDOIST_DB` env > `--db=` > `--prod`/`--dev` > 自动(dev 库存在且 prod 不存在 → dev,否则 prod);输出附带实际路径,杜绝写错库。
 - **并发**:同库多进程靠 SQLite WAL;连接统一 `busy_timeout` 2s;写路径仍是 domain usecase(与 UI/未来 MCP 同一套)。
 - **应用实时感知外部写入**:main 进程 `fs.watch` DB 与 `-wal` 文件,300ms 防抖后广播 `gtd:changed`(actor='agent')——CLI/agent 改数据,窗口内视图即时刷新。
@@ -556,13 +544,13 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
 
 业务规则细节(决策树、路由、级联、排序公式)一律以 [./INVARIANTS.md](./INVARIANTS.md) 为准,本节只描述 UI 结构与交互。
 
-- **Add task(全局 "+",⌘N;2026-08-08 M5 反馈定案为 Todoist 式单卡)**:一张卡片 —— Task name + Description 两行输入,下方属性 chip 行:**Date**(Today / Tomorrow / 自选 → `scheduledDate`)、**Deadline**、**Priority**(文字 最高/高/中/低/最低,存储 1–5,1=最高,不重编号)、**Labels**(多选)、**Reminders**(datetime,落 `reminders` 表;响铃调度 M6)、context 选择(内联新建),底部位置选择器(**Inbox ▾** / 任意项目)+ Cancel / Add task。**语义**:位置=Inbox 且未 specify 任何属性 → 纯捕捉(`createInboxItem`,零摩擦);specify 了任意属性或选了项目 → 直接建 Task(相当于已理清)。attachment 并入 M10;location 不做(决策日志)。
+- **Add task(全局 "+",⌘N;2026-08-08 M5 反馈定案为 Todoist 式单卡)**:一张卡片 —— Task name + Description 两行输入,下方属性 chip 行:**Date**(Today / Tomorrow / 自选 → `scheduledDate`)、**Deadline**、**Priority**(文字 最高/高/中/低/最低,存储 1–5,1=最高,不重编号)、**Labels**(多选)、**Reminders**(datetime,落 `reminders` 表;响铃调度 M6),底部位置选择器(**Inbox ▾** / 任意项目)+ Cancel / Add task。**语义**:位置=Inbox 且未 specify 任何属性 → 纯捕捉(`createInboxItem`,零摩擦);specify 了任意属性或选了项目 → 直接建 Task(相当于已理清)。attachment 并入 M10;location 不做(决策日志)。
 - **Search(⌘K,M7a;INV-32)**:自绘命令面板(未引 `cmdk` —— 只需输入框 + 列表 + ↑↓/↵/Esc,一个依赖换不来什么),数据源 `gtd:search` → domain `searchAll`。侧栏 Search 项与 ⌘K 等价。
   - **覆盖**:任务(标题 + 描述,含子任务、someday/reference、Upstream 镜像、已完成归档)与项目。容器模型下这些都是带 `bucket` 的 Task,故同属一组,由 VM 按容器给出二级说明(`Inbox · @home`、`发布 1.0 · @computer`、`已完成 2026-08-11`)。
   - **不列**:软删除项(无恢复入口,点了无处可去,INV-32.3)、等待项(桌面无该视图;CLI `search` 会列)。
   - **导航**:命中即跳到该条目的**容器视图**(而非它恰好出现的 Today/日历),任务再顺手打开详情弹窗;跨视图跳转的详情态由 App 层持有,各视图自己的详情态管不了别人。
   - 原规划里的命令动作("Focus mode"、"Start Weekly Review")**随 D-28 取消** —— 这些是 agent skill 的入口,不是搜索结果。
-- **TaskRow(全视图统一行组件)**:完成勾选圈(**complete↔reopen 可切换**:active 圈点击完成、done 圈点击撤销,D-22 误点即可复原)、标题、属性 chip(计划日 / 截止 / 优先级文字 / **label 名**(彩点+名称,不是数量)/ @context);**点击行主体(非勾选框)→ 任务详情弹窗**;右键菜单(完成 / 编辑 / 删除=软删);完成控件 **hover 提示**:带未完成子任务时提示"将连同 N 个子任务一起完成(误点可再点一下撤销)"(D-22 向下级联)。日历项(Today 硬边界)复用同一行式渲染(完成圈 + 标题 + 时间 chip),不再是独立卡片块。
+- **TaskRow(全视图统一行组件)**:完成勾选圈(**complete↔reopen 可切换**:active 圈点击完成、done 圈点击撤销,D-22 误点即可复原)、标题、属性 chip(计划日 / 截止 / 优先级文字 / **标签**(写作 `@名字`,D-30 起情境即标签));**点击行主体(非勾选框)→ 任务详情弹窗**;右键菜单(完成 / 编辑 / 删除=软删);完成控件 **hover 提示**:带未完成子任务时提示"将连同 N 个子任务一起完成(误点可再点一下撤销)"(D-22 向下级联)。日历项(Today 硬边界)复用同一行式渲染(完成圈 + 标题 + 时间 chip),不再是独立卡片块。
 - **任务详情弹窗(D-22 Todoist 式两栏,单击任务打开;与右键"编辑"的 TaskCard 不同)**:**左栏 = 内容** —— 完成圈 + 标题、描述、**子任务区**(直接子任务用 TaskRow 渲染,可右键完成/删除、单击下钻;"+ Add sub-task" 打开与添加任务相同的 TaskCard,默认继承父的位置/context,≤5 层)、**评论区**(时间序 + 输入框;附件 M10);**右栏 = 属性面板** —— Project/位置(可编辑,**Move to** Inbox/Someday/Reference/项目)、Date、Deadline、Priority、Labels、Reminders、@context,逐项点击就地编辑(经 `tasks.update`/`tasks.move`/label·reminder 通道)。下钻子任务时顶部显示返回按钮(标签 = 真实上一层标题,非父链)。
 - **Inbox(容器模型,INVARIANTS D-20,2026-08-09 定案)**:`bucket='inbox'` 的**任务列表**(仅根任务成行,子任务在详情内)——task 生在 Inbox,不挪不消失。右键"编辑"展开 TaskCard;**Move to** 选择器(Inbox / 项目 / Someday / Reference)执行容器移动;底部内联 "+ Add task"。理清 = 编辑属性 + Move(或勾完成);想让 Claude 理清就直接在右栏对话——**无专用按钮**。
 - **Today(D-21/D-23 日历统一:单一列表,全行式)**:**统一任务列表** = `scheduledDate ≤ 今天` ∪(`deadline ≤ 今天` 且未计划)的 active 任务(someday/reference 不入;过期高亮)。计划段排序:计划日升序 → **全天在前 → startTime 升序**(原 hard-landscape §2.5 排序语义并入,**无独立日程段** —— 带时间任务即日历 block,行上显示 🕐 时间·时长 chip)。TaskRow 渲染与 Inbox 完全一致;底部内联 **"+ Add task"**(默认 `scheduledDate=今天`);拖到底部虚线区 = 推迟到明天。**无 Focus 入口**——择事由 agent skill 承载(§6.9,D-28)。

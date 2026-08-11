@@ -30,12 +30,7 @@ const db = openDb(dbPath);
 const store = new SqliteGtdStore(db);
 
 const existing = store.snapshot();
-const nonEmpty =
-  existing.contexts.length +
-    existing.tasks.length +
-    existing.inbox.length +
-    existing.projects.length >
-  0;
+const nonEmpty = existing.tasks.length + existing.inbox.length + existing.projects.length > 0;
 if (nonEmpty) {
   console.error(`目标库非空(${dbPath})。默认拒绝写入;如需重建请加 --reset。`);
   process.exit(1);
@@ -56,20 +51,22 @@ const id = (): string => randomUUID();
 
 const commands: Command[] = [];
 
-// contexts(5 默认 + 1 演示)
-const ctxIds: Record<string, string> = {};
-['@computer', '@phone', '@errands', '@home', '@office', '@lab'].forEach((name, i) => {
-  const cid = id();
-  ctxIds[name] = cid;
-  commands.push({
-    kind: 'createContext',
-    context: { id: cid, name, sortOrder: i, archived: false, createdAt: T },
-  });
-});
-
-// labels
+// labels(D-30:原 contexts 已并入,名字不带 '@';home/errands 两边同名 → 天然合并)
 const labelIds: Record<string, string> = {};
-['read', 'next', 'waiting_for', 'calls', 'email', 'home', 'work', 'errands'].forEach((name) => {
+[
+  'computer',
+  'phone',
+  'errands',
+  'home',
+  'office',
+  'lab',
+  'read',
+  'next',
+  'waiting_for',
+  'calls',
+  'email',
+  'work',
+].forEach((name) => {
   const lid = id();
   labelIds[name] = lid;
   commands.push({ kind: 'createLabel', label: { id: lid, name, color: null } });
@@ -210,7 +207,6 @@ for (const [ti, t] of seedTasks.entries()) {
     task: {
       id: tid,
       title: t.title,
-      contextId: ctxIds[t.ctx]!,
       estimatedMinutes: t.min,
       energy: t.energy,
       priority: t.pri,
@@ -234,7 +230,8 @@ for (const [ti, t] of seedTasks.entries()) {
       timeZone: null,
     },
   });
-  for (const l of t.labels ?? []) {
+  // D-30:原 context 现在就是一个标签(去掉 '@');与 t.labels 去重由 assignLabel 幂等保证
+  for (const l of new Set([t.ctx.replace(/^@/, ''), ...(t.labels ?? [])])) {
     commands.push({ kind: 'assignLabel', taskId: tid, labelId: labelIds[l]! });
   }
 }
@@ -248,7 +245,6 @@ const subtask = (tid: string, title: string, parent: string | null, done = false
   task: {
     id: tid,
     title,
-    contextId: ctxIds['@computer']!,
     estimatedMinutes: 20,
     energy: 'medium',
     priority: 2,
@@ -293,7 +289,6 @@ function seedBucketTask(title: string, bucket: 'someday' | 'reference'): void {
     task: {
       id: id(),
       title,
-      contextId: ctxIds['@computer']!,
       estimatedMinutes: 15,
       energy: 'medium',
       priority: 3,
@@ -325,7 +320,6 @@ for (const [ri, title] of rawThoughts.entries()) {
     task: {
       id: id(),
       title,
-      contextId: ctxIds['@computer']!,
       estimatedMinutes: 15,
       energy: 'medium',
       priority: 3,
@@ -364,7 +358,6 @@ const timed = (
   task: {
     id: id(),
     title,
-    contextId: ctxIds['@computer']!,
     estimatedMinutes: 60,
     energy: 'medium',
     priority: 3,
@@ -445,6 +438,6 @@ store.apply(commands, 'user');
 const snap = store.snapshot();
 console.log(`seed 完成 → ${dbPath}`);
 console.log(
-  `  contexts ${snap.contexts.length} · inbox-tasks ${snap.tasks.filter((t) => t.bucket === 'inbox' && t.status === 'active').length} · projects ${snap.projects.length} · tasks ${snap.tasks.length} · waiting ${snap.waiting.length} · lists ${snap.listItems.length} · labels ${snap.labels.length} · filters ${snap.filters.length}`,
+  `  inbox-tasks ${snap.tasks.filter((t) => t.bucket === 'inbox' && t.status === 'active').length} · projects ${snap.projects.length} · tasks ${snap.tasks.length} · waiting ${snap.waiting.length} · lists ${snap.listItems.length} · labels ${snap.labels.length} · filters ${snap.filters.length}`,
 );
 db.close();

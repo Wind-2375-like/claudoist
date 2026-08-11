@@ -8,13 +8,12 @@ import {
   updateTask,
 } from '../src/index';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, snapshot, task } from './helpers';
+import { deps, snapshot, task } from './helpers';
 
 /** INV-30(D-26/M6c-3b):任务 ↔ 专用 Claudoist 日历的双向同步。 */
 describe('INV-30 推送计划', () => {
   it('已排期任务 → 待推送;未排期/已删除/外部镜像不推', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({ id: 'a', scheduledDate: '2026-08-12', startTime: '09:00', durationMinutes: 30 }),
         task({ id: 'b' }), // 未排期
@@ -28,12 +27,11 @@ describe('INV-30 推送计划', () => {
   it('指纹未变 → 不重复推送;改标题/时间/完成 → 重新推送', () => {
     const t = task({ id: 'a', scheduledDate: '2026-08-12', startTime: '09:00' });
     const pushed = { ...t, pushedEventId: 'ev1', pushedFingerprint: pushFingerprint(t) };
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [pushed] });
+    const snap = snapshot({ tasks: [pushed] });
     expect(planPush(snap).upsert).toHaveLength(0);
 
     for (const change of [{ title: '改名' }, { startTime: '10:00' }, { status: 'done' as const }]) {
       const changed = snapshot({
-        contexts: [ctx({ id: 'c1' })],
         tasks: [{ ...pushed, ...change }],
       });
       expect(planPush(changed).upsert).toHaveLength(1);
@@ -42,14 +40,13 @@ describe('INV-30 推送计划', () => {
 
   it('取消排期/删除已推送的任务 → 撤下事件', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [task({ id: 'a', scheduledDate: null, pushedEventId: 'ev1', pushedFingerprint: 'x' })],
     });
     expect(planPush(snap).remove).toEqual([{ taskId: 'a', eventId: 'ev1' }]);
   });
 
   it('recordPushed 把事件 id 与指纹写回任务', () => {
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [task({ id: 'a' })] });
+    const snap = snapshot({ tasks: [task({ id: 'a' })] });
     const after = applyToSnapshot(
       snap,
       recordPushed([{ taskId: 'a', eventId: 'ev9', fingerprint: 'fp' }]),
@@ -82,7 +79,7 @@ describe('INV-30 回同步(Google 侧改动 → 任务)', () => {
   };
 
   it('在 Google 里拖动 block → 任务改期', () => {
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [pushed()] });
+    const snap = snapshot({ tasks: [pushed()] });
     const { r, after } = run(snap, [
       {
         eventId: 'ev1',
@@ -101,7 +98,7 @@ describe('INV-30 回同步(Google 侧改动 → 任务)', () => {
   });
 
   it('在 Google 里删除 block → 任务软删(用户定案:删 block 才传播删除)', () => {
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [pushed()] });
+    const snap = snapshot({ tasks: [pushed()] });
     const { r, after } = run(snap, [
       {
         eventId: 'ev1',
@@ -118,7 +115,7 @@ describe('INV-30 回同步(Google 侧改动 → 任务)', () => {
 
   it('已完成的任务:日历改动不改期、删 block 只清账不复活', () => {
     const done = pushed({ status: 'done', completedAt: '2026-08-12T10:00:00' });
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [done] });
+    const snap = snapshot({ tasks: [done] });
     const moved = run(snap, [
       {
         eventId: 'ev1',
@@ -158,7 +155,7 @@ describe('INV-30 回同步(Google 侧改动 → 任务)', () => {
       pushedEventId: 'ev1',
       pushedFingerprint: pushFingerprint(stale),
     };
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [dirty] });
+    const snap = snapshot({ tasks: [dirty] });
     const { after } = run(snap, [
       {
         eventId: 'ev1',
@@ -174,7 +171,6 @@ describe('INV-30 回同步(Google 侧改动 → 任务)', () => {
 
   it('外部镜像任务不受专用日历回同步影响', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({
           id: 'm',
@@ -204,18 +200,13 @@ describe('INV-31 时区', () => {
   it('时区参与推送指纹:只改时区也会重推', () => {
     const t = task({ id: 'a', scheduledDate: '2026-08-12', startTime: '09:00' });
     const pushed = { ...t, pushedEventId: 'ev1', pushedFingerprint: pushFingerprint(t) };
-    expect(
-      planPush(snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [pushed] })).upsert,
-    ).toHaveLength(0);
+    expect(planPush(snapshot({ tasks: [pushed] })).upsert).toHaveLength(0);
     const zoned = { ...pushed, timeZone: 'America/New_York' };
-    expect(
-      planPush(snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [zoned] })).upsert,
-    ).toHaveLength(1);
+    expect(planPush(snapshot({ tasks: [zoned] })).upsert).toHaveLength(1);
   });
 
   it('推送计划带上时区(null = 浮动,推送时不指定时区)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({ id: 'f', scheduledDate: '2026-08-12', startTime: '09:00' }),
         task({
@@ -233,7 +224,6 @@ describe('INV-31 时区', () => {
 
   it('镜像任务的时区同样归外部所有(本地改被拒)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [task({ id: 'm', externalId: 'google:x:y:z', startTime: '09:00' })],
     });
     expect(
@@ -242,7 +232,7 @@ describe('INV-31 时区', () => {
   });
 
   it('无效时区被拒;null(浮动)合法', () => {
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [task({ id: 'a' })] });
+    const snap = snapshot({ tasks: [task({ id: 'a' })] });
     expect(
       'error' in updateTask(snap, deps(), { id: 'a', patch: { timeZone: 'Mars/Olympus' } }),
     ).toBe(true);

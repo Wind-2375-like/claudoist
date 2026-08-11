@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { completeTask } from '../src/usecases/tasks';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, project, snapshot, task, waitingFor } from './helpers';
+import { deps, project, snapshot, task, waitingFor } from './helpers';
 
 /**
  * INV-14(D-21 修订:后果返回,不弹向导):完成挂在项目下的 Task(含带时间任务,D-23)时
@@ -10,7 +10,6 @@ import { ctx, deps, project, snapshot, task, waitingFor } from './helpers';
  */
 describe('INV-14 完成后果提示(consequences 漏斗)', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1' })],
     projects: [
       project({ id: 'p1', outcome: '发布 v1' }),
       project({ id: 'pc', outcome: '已完项目', status: 'complete' }),

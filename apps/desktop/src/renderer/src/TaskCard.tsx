@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AddSubtaskInputVM, QuickAddTaskInputVM, TaskVM } from '../../shared/viewModels';
-import { useContexts, useLabels, useProjects } from './hooks';
+import { useLabels, useProjects } from './hooks';
 import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
 
 /**
  * Todoist 式统一卡片(D-20 容器模型):
  * - mode='add':位置=Inbox 且零属性 → 纯捕捉(任务生在 Inbox,不挪不消失);
  *   否则直建任务(位置=Someday/Reference 时先建后移)。
- * - mode='add' + parentTaskId:添加子任务(D-22)——同一表单,继承父的位置/context,
+ * - mode='add' + parentTaskId:添加子任务(D-22)——同一表单,继承父的位置,
  *   不显示 Move to 选择器(子任务随根,INV-25)。
  * - mode='edit':编辑既有任务属性;位置变化 = 容器移动(Move to)。
  */
@@ -27,10 +27,8 @@ export interface TaskCardProps {
   initialScheduled?: string;
   /** add 模式预选位置(项目视图的 Add task 传 projectId) */
   initialLocation?: string;
-  /** add 模式:作为该任务的子任务创建(D-22;继承父的位置/context,隐藏 Move to) */
+  /** add 模式:作为该任务的子任务创建(D-22;继承父的位置,隐藏 Move to) */
   parentTaskId?: string;
-  /** 子任务模式的父任务 contextId,用于默认 context */
-  parentContextId?: string;
   onClose: () => void;
 }
 
@@ -41,10 +39,8 @@ export function TaskCard({
   initialScheduled,
   initialLocation: initialLocationProp,
   parentTaskId,
-  parentContextId,
   onClose,
 }: TaskCardProps): React.JSX.Element {
-  const contexts = useContexts();
   const labels = useLabels();
   const projects = useProjects();
   const titleRef = useRef<HTMLInputElement>(null);
@@ -63,7 +59,6 @@ export function TaskCard({
   const [priority, setPriority] = useState(task?.priority ?? 3);
   const [labelIds, setLabelIds] = useState<string[]>(task?.labels.map((l) => l.id) ?? []);
   const [reminderAt, setReminderAt] = useState('');
-  const [contextId, setContextId] = useState(task?.contextId ?? parentContextId ?? '');
   const [location, setLocation] = useState(initialLocation);
   const [showChip, setShowChip] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -72,11 +67,6 @@ export function TaskCard({
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    const first = contexts.data?.[0];
-    if (first && !contextId) setContextId(first.id);
-  }, [contexts.data, contextId]);
 
   const specified =
     scheduled !== '' ||
@@ -117,7 +107,6 @@ export function TaskCard({
       if ((scheduled || null) !== task.scheduledDate) patch['scheduledDate'] = scheduled || null;
       if ((deadline || null) !== task.deadline) patch['deadline'] = deadline || null;
       if (priority !== task.priority) patch['priority'] = priority;
-      if (contextId !== task.contextId) patch['contextId'] = contextId;
       if (Object.keys(patch).length > 0) {
         const r = await window.gtd.taskUpdate({ id: task.id, patch });
         if (fail(r)) return;
@@ -130,7 +119,7 @@ export function TaskCard({
       return;
     }
 
-    // mode === 'add' + parentTaskId:创建子任务(D-22;继承父位置/context)
+    // mode === 'add' + parentTaskId:创建子任务(D-22;继承父位置)
     if (isSubtask) {
       const input: AddSubtaskInputVM = {
         parentTaskId: parentTaskId!,
@@ -139,7 +128,6 @@ export function TaskCard({
         ...(scheduled ? { scheduledDate: scheduled } : {}),
         ...(deadline ? { deadline } : {}),
         ...(priority !== 3 ? { priority } : {}),
-        ...(contextId ? { contextId } : {}),
         ...(labelIds.length > 0 ? { labelIds } : {}),
         ...(reminderAt ? { reminderAt: reminderAt.slice(0, 16) } : {}),
       };
@@ -163,7 +151,6 @@ export function TaskCard({
     }
     const input: QuickAddTaskInputVM = {
       title: title.trim(),
-      contextId,
       priority,
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(scheduled ? { scheduledDate: scheduled } : {}),
@@ -257,13 +244,6 @@ export function TaskCard({
             </button>
           </>
         )}
-        <button
-          type="button"
-          className={chipCls(false)}
-          onClick={() => setShowChip(showChip === 'context' ? null : 'context')}
-        >
-          {contexts.data?.find((c) => c.id === contextId)?.name ?? '@context'}
-        </button>
       </div>
 
       {showChip === 'date' && (
@@ -355,7 +335,7 @@ export function TaskCard({
                 )
               }
             >
-              {l.name}
+              @{l.name}
             </button>
           ))}
         </div>
@@ -371,30 +351,13 @@ export function TaskCard({
           <span className="text-xs text-neutral-400">落库即存;响铃 M6 上线</span>
         </div>
       )}
-      {showChip === 'context' && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {contexts.data?.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={chipCls(contextId === c.id)}
-              onClick={() => {
-                setContextId(c.id);
-                setShowChip(null);
-              }}
-            >
-              {c.name}
-            </button>
-          ))}
-        </div>
-      )}
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       {feedback && <p className="mt-2 text-xs text-green-600">{feedback}</p>}
 
       <div className="mt-4 flex items-center gap-2 border-t border-neutral-100 pt-3">
         {isSubtask ? (
-          <span className="text-xs text-neutral-400">子任务继承父任务的位置与 context</span>
+          <span className="text-xs text-neutral-400">子任务继承父任务的位置</span>
         ) : (
           <select
             className="max-w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-xs"

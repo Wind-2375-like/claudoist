@@ -1,6 +1,5 @@
 import type {
   Clock,
-  Context,
   FlowDeps,
   GtdSnapshot,
   IdGen,
@@ -31,22 +30,10 @@ export function deps(): FlowDeps {
 let fixtureSeq = 0;
 const fid = (): string => `fx-${++fixtureSeq}`;
 
-export function ctx(over: Partial<Context> = {}): Context {
-  return {
-    id: fid(),
-    name: `@ctx${fixtureSeq}`,
-    sortOrder: fixtureSeq,
-    archived: false,
-    createdAt: '2026-08-01T00:00:00',
-    ...over,
-  };
-}
-
 export function task(over: Partial<Task> = {}): Task {
   return {
     id: fid(),
     title: `task ${fixtureSeq}`,
-    contextId: 'c1',
     estimatedMinutes: 15,
     energy: 'medium',
     priority: 3,

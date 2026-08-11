@@ -3,7 +3,6 @@ import type { Task } from '../entities/task';
 import type { Project } from '../entities/project';
 import type { WaitingFor } from '../entities/waitingFor';
 import type { InboxItem } from '../entities/inboxItem';
-import type { Context } from '../entities/context';
 import type { ListItem } from '../entities/listItem';
 import type { Label, TaskLabel } from '../entities/label';
 import type { SavedFilter } from '../entities/filter';
@@ -15,7 +14,6 @@ import type { TaskComment } from '../entities/taskComment';
  * 存储适配器只需实现 snapshot() + apply()(docs/DESIGN.md §3.3)。
  */
 export interface GtdSnapshot {
-  contexts: Context[];
   inbox: InboxItem[];
   tasks: Task[];
   projects: Project[];
@@ -40,8 +38,6 @@ export type Command =
   | { kind: 'updateWaitingFor'; id: Id; patch: Partial<Omit<WaitingFor, 'id'>> }
   | { kind: 'createListItem'; item: ListItem }
   | { kind: 'deleteListItem'; id: Id }
-  | { kind: 'createContext'; context: Context }
-  | { kind: 'updateContext'; id: Id; patch: Partial<Omit<Context, 'id'>> }
   | { kind: 'createLabel'; label: Label }
   | { kind: 'deleteLabel'; id: Id }
   | { kind: 'assignLabel'; taskId: Id; labelId: Id }
@@ -67,7 +63,6 @@ export interface GtdStore {
 /** 纯函数:在内存快照上应用命令(测试与 contract 套件的参照实现)。 */
 export function applyToSnapshot(snap: GtdSnapshot, commands: Command[]): GtdSnapshot {
   const next: GtdSnapshot = {
-    contexts: [...snap.contexts],
     inbox: [...snap.inbox],
     tasks: [...snap.tasks],
     projects: [...snap.projects],
@@ -112,12 +107,6 @@ export function applyToSnapshot(snap: GtdSnapshot, commands: Command[]): GtdSnap
         break;
       case 'deleteListItem':
         next.listItems = next.listItems.filter((i) => i.id !== c.id);
-        break;
-      case 'createContext':
-        next.contexts = [...next.contexts, c.context];
-        break;
-      case 'updateContext':
-        next.contexts = patchById(next.contexts, c.id, c.patch);
         break;
       case 'createLabel':
         next.labels = [...next.labels, c.label];
@@ -167,7 +156,6 @@ export function applyToSnapshot(snap: GtdSnapshot, commands: Command[]): GtdSnap
 
 export function emptySnapshot(): GtdSnapshot {
   return {
-    contexts: [],
     inbox: [],
     tasks: [],
     projects: [],

@@ -12,8 +12,6 @@ export interface TaskVM {
   id: string;
   title: string;
   description: string;
-  contextId: string;
-  contextName: string;
   estimatedMinutes: number;
   energy: string;
   priority: number;
@@ -43,7 +41,8 @@ export interface TaskVM {
 export type MoveTargetVM =
   { bucket: 'inbox' | 'someday' | 'reference' } | { bucket: 'project'; projectId: string };
 
-export interface ContextVM {
+/** Filters & Labels 视图 / 选择器用:标签 + 活跃任务计数(D-30:情境已并入标签)。 */
+export interface LabelListItemVM {
   id: string;
   name: string;
   activeTaskCount: number;
@@ -183,7 +182,7 @@ export interface SearchHitVM {
   /** task 的 id(kind='task' 时可直接开详情弹窗)或 project 的 id */
   id: string;
   title: string;
-  /** 二级行:容器/项目 · context · 状态 */
+  /** 二级行:容器/项目 · 标签 · 状态 */
   subtitle: string;
   done: boolean;
   target: SearchTargetVM;
@@ -212,7 +211,6 @@ export interface GtdChangedEvent {
 
 export interface QuickAddTaskInputVM {
   title: string;
-  contextId: string;
   estimatedMinutes?: number;
   energy?: 'low' | 'medium' | 'high';
   priority?: number;
@@ -233,7 +231,6 @@ export interface AddSubtaskInputVM {
   priority?: number;
   deadline?: string;
   scheduledDate?: string;
-  contextId?: string;
   labelIds?: string[];
   reminderAt?: string;
   startTime?: string;

@@ -1,5 +1,5 @@
-import type { Context } from '../entities/context';
 import type { InboxItem } from '../entities/inboxItem';
+import type { Label } from '../entities/label';
 import type { ListItem } from '../entities/listItem';
 import type { Project } from '../entities/project';
 import type { Task } from '../entities/task';
@@ -19,8 +19,8 @@ export interface TaskWithBreadcrumb {
   projectBreadcrumb: string | null;
 }
 
-export interface ContextTaskGroup {
-  context: Context;
+export interface LabelTaskGroup {
+  label: Label;
   tasks: TaskWithBreadcrumb[];
 }
 
@@ -29,8 +29,8 @@ export interface StatusSummaryConsequences {
   inbox: { count: number; items: InboxItem[] };
   /** active 项目(D-21 平面)+ 统计 */
   projects: { project: Project; stats: ProjectStats }[];
-  /** active Task 按 context 分组(active context 按 sortOrder) */
-  tasksByContext: ContextTaskGroup[];
+  /** active Task 按标签分组(D-30:context 已并入 label;按标签名排序) */
+  tasksByLabel: LabelTaskGroup[];
   /** 未解决等待项 */
   waiting: WaitingFor[];
   someday: ListItem[];
@@ -49,15 +49,17 @@ export function statusSummary(
     task: t,
     projectBreadcrumb: t.projectId !== null ? projectBreadcrumb(snap, t.projectId) || null : null,
   });
-  const tasksByContext = snap.contexts
-    .filter((c) => !c.archived)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((context) => ({
-      context,
-      tasks: snap.tasks
-        .filter((t) => t.status === 'active' && t.contextId === context.id)
-        .map(withBreadcrumb),
-    }));
+  const tasksByLabel = [...snap.labels]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((label) => {
+      const ids = new Set(
+        snap.taskLabels.filter((tl) => tl.labelId === label.id).map((tl) => tl.taskId),
+      );
+      return {
+        label,
+        tasks: snap.tasks.filter((t) => t.status === 'active' && ids.has(t.id)).map(withBreadcrumb),
+      };
+    });
   return {
     commands: [],
     consequences: {
@@ -68,7 +70,7 @@ export function statusSummary(
       projects: snap.projects
         .filter((p) => p.status === 'active')
         .map((project) => ({ project, stats: projectStats(snap, project.id) })),
-      tasksByContext,
+      tasksByLabel,
       waiting: snap.waiting.filter((w) => !w.resolved),
       someday: snap.listItems.filter((i) => i.kind === 'someday'),
       reference: snap.listItems.filter((i) => i.kind === 'reference'),

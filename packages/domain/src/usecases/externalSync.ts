@@ -1,4 +1,3 @@
-import type { Id } from '../entities/common';
 import type { Task } from '../entities/task';
 import { TASK_DEFAULTS } from '../entities/task';
 import type { Command, GtdSnapshot } from '../ports/gtdStore';
@@ -30,7 +29,6 @@ export interface SyncExternalInput {
    */
   fetchedCalendarIds: string[];
   /** 默认 context(镜像任务必须有 context,INV-24) */
-  contextId: Id;
 }
 
 export interface SyncExternalConsequences {
@@ -44,9 +42,6 @@ export function syncExternalTasks(
   deps: FlowDeps,
   input: SyncExternalInput,
 ): UsecaseResult<SyncExternalConsequences> {
-  if (!snap.contexts.some((c) => c.id === input.contextId && !c.archived)) {
-    return { error: `context 不存在或已归档: ${input.contextId}` };
-  }
   const commands: Command[] = [];
   // 含已软删的镜像:同一事件再出现时**复活原任务**,而不是新建(既撞唯一索引,
   // 也会丢掉用户加在上面的标签/子任务/评论)
@@ -80,7 +75,6 @@ export function syncExternalTasks(
       const task: Task = {
         id: deps.idGen.next(),
         title: ev.title,
-        contextId: input.contextId,
         estimatedMinutes: ev.durationMinutes ?? TASK_DEFAULTS.estimatedMinutes,
         energy: TASK_DEFAULTS.energy,
         priority: TASK_DEFAULTS.priority,

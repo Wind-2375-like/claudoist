@@ -14,7 +14,7 @@ import {
   minutesOfDay,
   snapToQuarter,
 } from '../src/index';
-import { ctx, project, snapshot, task } from './helpers';
+import { project, snapshot, task } from './helpers';
 
 /** INV-28(D-23/M6b):日历网格口径 —— 哪些任务上日历、四等分吸附、block 区间换算。 */
 describe('INV-28 日历网格:刻度吸附与 block 区间', () => {
@@ -104,7 +104,6 @@ describe('INV-28 日历网格:某日的全天段与定时段', () => {
   const day = '2026-08-10';
   const base = () =>
     snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({ id: 'timed-late', scheduledDate: day, startTime: '15:00' }),
         task({ id: 'timed-early', scheduledDate: day, startTime: '09:30' }),
@@ -141,7 +140,6 @@ describe('INV-28 日历网格:某日的全天段与定时段', () => {
   it('全天段跨容器不按 sortOrder 排(否则与 Today 相互矛盾:项目任务会插到 inbox 中间)', () => {
     // inbox 组 sortOrder 0/1/2;项目任务在自己组内 sortOrder=0 但创建最晚
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       projects: [project({ id: 'p1' })],
       tasks: [
         task({
@@ -190,7 +188,6 @@ describe('INV-28 日历网格:某日的全天段与定时段', () => {
 
   it('startTime 非空但未计划哪天 → 不上日历(须与 scheduledDate 搭配)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [task({ id: 'dangling', scheduledDate: null, startTime: '10:00' })],
     });
     expect(calendarDay(snap, day).timed).toHaveLength(0);

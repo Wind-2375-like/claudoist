@@ -106,10 +106,13 @@ describe('迁移 v5 → v6(日历统一:calendar_items → 带时间任务)', ()
     const db = openDb(path);
     const store = new SqliteGtdStore(db);
     const snap = store.snapshot();
-    const fallback = snap.contexts.find((c) => c.name === '@migrated');
+    // D-30 后 context 已并入 label,v6 的 @migrated 兜底 context 变成同名标签
+    const fallback = snap.labels.find((l) => l.name === 'migrated');
     expect(fallback).toBeDefined();
     const migrated = snap.tasks.find((t) => t.id === 'calx')!;
-    expect(migrated.contextId).toBe(fallback!.id);
+    expect(snap.taskLabels.some((tl) => tl.taskId === 'calx' && tl.labelId === fallback!.id)).toBe(
+      true,
+    );
     expect(migrated.startTime).toBe('09:00');
     db.close();
   });

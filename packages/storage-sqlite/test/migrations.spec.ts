@@ -3,8 +3,8 @@ import { MIGRATIONS } from '../src/migrations/index';
 import { migrate, schemaVersion } from '../src/migrate';
 import { openDb } from '../src/db';
 
+// D-30:contexts 已并入 labels,迁移 v11 删表
 const EXPECTED_TABLES = [
-  'contexts',
   'inbox_items',
   'projects',
   'tasks',

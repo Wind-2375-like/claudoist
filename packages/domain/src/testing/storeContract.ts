@@ -24,7 +24,6 @@ function normalize(snap: GtdSnapshot): GtdSnapshot {
   const byId = <T extends { id: string }>(arr: T[]): T[] =>
     [...arr].sort((a, b) => (a.id < b.id ? -1 : 1));
   return {
-    contexts: byId(snap.contexts),
     inbox: byId(snap.inbox),
     tasks: byId(snap.tasks),
     projects: byId(snap.projects),
@@ -48,15 +47,10 @@ function expectSnapEqual(actual: GtdSnapshot, expected: GtdSnapshot, label: stri
 
 /** FK 合法的全命令覆盖脚本(分批,先建被引用实体)。 */
 function batches(): Command[][] {
-  const ctx = (id: string, name: string, order: number): Command => ({
-    kind: 'createContext',
-    context: { id, name, sortOrder: order, archived: false, createdAt: T0 },
-  });
   return [
-    // 批1:contexts + labels + inbox + filters
+    // 批1:labels + inbox + filters(D-30:contexts 已并入 labels)
     [
-      ctx('c1', '@computer', 0),
-      ctx('c2', '@phone', 1),
+      { kind: 'createLabel', label: { id: 'lctx1', name: 'computer', color: null } },
       { kind: 'createLabel', label: { id: 'l1', name: 'next', color: null } },
       { kind: 'createLabel', label: { id: 'l2', name: 'read', color: '#00f' } },
       { kind: 'createInboxItem', item: { id: 'i1', text: '想法A', createdAt: T0, position: 1 } },
@@ -95,7 +89,6 @@ function batches(): Command[][] {
         task: {
           id: 't1',
           title: '任务一',
-          contextId: 'c1',
           estimatedMinutes: 30,
           energy: 'high',
           priority: 5,
@@ -124,7 +117,6 @@ function batches(): Command[][] {
         task: {
           id: 't2',
           title: '任务二',
-          contextId: 'c2',
           estimatedMinutes: 5,
           energy: 'low',
           priority: 1,
@@ -153,7 +145,6 @@ function batches(): Command[][] {
         task: {
           id: 't3',
           title: '子任务(t1 之下,D-21)',
-          contextId: 'c1',
           estimatedMinutes: 15,
           energy: 'medium',
           priority: 3,
@@ -218,7 +209,6 @@ function batches(): Command[][] {
       { kind: 'updateTask', id: 't1', patch: { status: 'done', completedAt: T0, priority: 4 } },
       { kind: 'updateProject', id: 'p2', patch: { status: 'complete', completedAt: T0 } },
       { kind: 'updateWaitingFor', id: 'w1', patch: { resolved: true, resolvedAt: T0 } },
-      { kind: 'updateContext', id: 'c2', patch: { archived: true } },
       { kind: 'updateFilter', id: 'f1', patch: { name: '改名', query: { maxMinutes: 15 } } },
       { kind: 'deleteInboxItem', id: 'i2' },
       { kind: 'deleteListItem', id: 's1' },
@@ -313,7 +303,7 @@ export const storeContractScenarios: StoreContractScenario[] = [
       const [b1] = batches();
       store.apply(b1!, 'user');
       const before = store.snapshot();
-      store.apply([{ kind: 'updateContext', id: 'c1', patch: {} }], 'user');
+      store.apply([{ kind: 'updateFilter', id: 'f1', patch: {} }], 'user');
       expectSnapEqual(store.snapshot(), before, '空 patch');
     },
   },

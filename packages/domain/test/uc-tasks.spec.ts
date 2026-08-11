@@ -11,7 +11,7 @@ import { isUsecaseError } from '../src/usecases/types';
 import type { UsecaseResult } from '../src/usecases/types';
 import type { Command } from '../src/index';
 import { applyToSnapshot } from '../src/index';
-import { ctx, deps, snapshot, task } from './helpers';
+import { deps, snapshot, task } from './helpers';
 
 function ok<C>(r: UsecaseResult<C>): { commands: Command[]; consequences: C } {
   if (isUsecaseError(r)) throw new Error(r.error);
@@ -19,15 +19,14 @@ function ok<C>(r: UsecaseResult<C>): { commands: Command[]; consequences: C } {
 }
 
 describe('uc-tasks quickAddTask(§4.2 扩展版)', () => {
-  const base = () => snapshot({ contexts: [ctx({ id: 'c1' })] });
+  const base = () => snapshot({});
 
-  it('title/contextId 必填,其余默认(15 分钟 / medium / P3 / 无项目无 DDL)', () => {
-    const r = ok(quickAddTask(base(), deps(), { title: '买牛奶', contextId: 'c1' }));
+  it('title 必填,其余默认(15 分钟 / medium / P3 / 无项目无 DDL)', () => {
+    const r = ok(quickAddTask(base(), deps(), { title: '买牛奶' }));
     const cmd = r.commands[0]!;
     if (cmd.kind !== 'createTask') throw new Error('expected createTask');
     expect(cmd.task).toMatchObject({
       title: '买牛奶',
-      contextId: 'c1',
       estimatedMinutes: 15,
       energy: 'medium',
       priority: 3,
@@ -41,7 +40,6 @@ describe('uc-tasks quickAddTask(§4.2 扩展版)', () => {
     const r = ok(
       quickAddTask(base(), deps(), {
         title: 'x',
-        contextId: 'c1',
         estimatedMinutes: 0,
         priority: 9,
       }),
@@ -52,25 +50,18 @@ describe('uc-tasks quickAddTask(§4.2 扩展版)', () => {
     expect(cmd.task.priority).toBe(3);
   });
 
-  it('必填缺失/非法引用 → 错误:空 title、archived context、坏 deadline、不存在的项目', () => {
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' }), ctx({ id: 'c2', archived: true })] });
-    expect('error' in quickAddTask(snap, deps(), { title: ' ', contextId: 'c1' })).toBe(true);
-    expect('error' in quickAddTask(snap, deps(), { title: 'x', contextId: 'c2' })).toBe(true);
-    expect('error' in quickAddTask(snap, deps(), { title: 'x', contextId: 'nope' })).toBe(true);
-    expect(
-      'error' in quickAddTask(snap, deps(), { title: 'x', contextId: 'c1', deadline: '2026-1-5' }),
-    ).toBe(true);
-    expect(
-      'error' in quickAddTask(snap, deps(), { title: 'x', contextId: 'c1', projectId: 'nope' }),
-    ).toBe(true);
+  it('必填缺失/非法引用 → 错误:空 title、坏 deadline、不存在的项目', () => {
+    const snap = snapshot({});
+    expect('error' in quickAddTask(snap, deps(), { title: ' ' })).toBe(true);
+    expect('error' in quickAddTask(snap, deps(), { title: 'x', deadline: '2026-1-5' })).toBe(true);
+    expect('error' in quickAddTask(snap, deps(), { title: 'x', projectId: 'nope' })).toBe(true);
   });
 });
 
 describe('uc-tasks updateTask:patch 白名单 + INV-03 校验', () => {
   const base = () =>
     snapshot({
-      contexts: [ctx({ id: 'c1' }), ctx({ id: 'c2' })],
-      tasks: [task({ id: 't1', contextId: 'c1' })],
+      tasks: [task({ id: 't1' })],
     });
 
   it('白名单外字段被丢弃(status 不可经 patch 修改)', () => {
@@ -110,24 +101,18 @@ describe('uc-tasks updateTask:patch 白名单 + INV-03 校验', () => {
     });
   });
 
-  it('contextId 迁移:目标须存在且未归档;空 patch → 无命令', () => {
-    const r = ok(updateTask(base(), deps(), { id: 't1', patch: { contextId: 'c2' } }));
-    expect(r.commands).toHaveLength(1);
-    expect('error' in updateTask(base(), deps(), { id: 't1', patch: { contextId: 'nope' } })).toBe(
-      true,
-    );
-    expect(ok(updateTask(base(), deps(), { id: 't1', patch: {} })).commands).toEqual([]);
+  it('空 patch → 无命令', () => {
+    expect(ok(updateTask(base(), deps(), { id: 't1', patch: {} })).commands).toHaveLength(0);
   });
 });
 
 describe('uc-tasks 时间字段(D-23/M6a 日历统一)', () => {
-  const base = () => snapshot({ contexts: [ctx({ id: 'c1' })] });
+  const base = () => snapshot({});
 
   it('quickAddTask:startTime/durationMinutes 落库;缺省为 null', () => {
     const r = ok(
       quickAddTask(base(), deps(), {
         title: '组会',
-        contextId: 'c1',
         scheduledDate: '2026-08-10',
         startTime: '15:00',
         durationMinutes: 45,
@@ -137,7 +122,7 @@ describe('uc-tasks 时间字段(D-23/M6a 日历统一)', () => {
     if (cmd.kind !== 'createTask') throw new Error('expected createTask');
     expect(cmd.task.startTime).toBe('15:00');
     expect(cmd.task.durationMinutes).toBe(45);
-    const r2 = ok(quickAddTask(base(), deps(), { title: '普通', contextId: 'c1' }));
+    const r2 = ok(quickAddTask(base(), deps(), { title: '普通' }));
     const cmd2 = r2.commands[0]!;
     if (cmd2.kind !== 'createTask') throw new Error('expected createTask');
     expect(cmd2.task.startTime).toBeNull();
@@ -145,13 +130,9 @@ describe('uc-tasks 时间字段(D-23/M6a 日历统一)', () => {
   });
 
   it('校验:坏 HH:MM / 非正整数分钟 → 错误(add 与 update 同口径)', () => {
-    expect(
-      'error' in quickAddTask(base(), deps(), { title: 'x', contextId: 'c1', startTime: '25:00' }),
-    ).toBe(true);
-    expect(
-      'error' in quickAddTask(base(), deps(), { title: 'x', contextId: 'c1', durationMinutes: 0 }),
-    ).toBe(true);
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [task({ id: 't1' })] });
+    expect('error' in quickAddTask(base(), deps(), { title: 'x', startTime: '25:00' })).toBe(true);
+    expect('error' in quickAddTask(base(), deps(), { title: 'x', durationMinutes: 0 })).toBe(true);
+    const snap = snapshot({ tasks: [task({ id: 't1' })] });
     expect('error' in updateTask(snap, deps(), { id: 't1', patch: { startTime: '9am' } })).toBe(
       true,
     );
@@ -161,7 +142,7 @@ describe('uc-tasks 时间字段(D-23/M6a 日历统一)', () => {
   });
 
   it('updateTask:设置与清除(null)时间字段', () => {
-    const snap = snapshot({ contexts: [ctx({ id: 'c1' })], tasks: [task({ id: 't1' })] });
+    const snap = snapshot({ tasks: [task({ id: 't1' })] });
     const r = ok(
       updateTask(snap, deps(), { id: 't1', patch: { startTime: '08:30', durationMinutes: 30 } }),
     );
@@ -189,8 +170,7 @@ describe('uc-tasks 完成/软删/恢复状态机', () => {
 
   it('deleteTask → Trash;restoreTask → active 且清空 deletedAt(INV-22 口径)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
-      tasks: [task({ id: 't1', contextId: 'c1' })],
+      tasks: [task({ id: 't1' })],
     });
     const del = ok(deleteTask(snap, deps(), { id: 't1' }));
     const afterDel = applyToSnapshot(snap, del.commands);
@@ -202,15 +182,14 @@ describe('uc-tasks 完成/软删/恢复状态机', () => {
     expect(afterRes.tasks[0]!.deletedAt).toBeNull();
   });
 
-  it('restoreTask:context 已 archived → { error };非 deleted → { error }', () => {
+  it('restoreTask:deleted → 恢复;非 deleted → { error }(D-30 后无 context 前置)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1', archived: true })],
       tasks: [
-        task({ id: 't1', contextId: 'c1', status: 'deleted', deletedAt: '2026-08-07T00:00:00' }),
-        task({ id: 't2', contextId: 'c1', status: 'active' }),
+        task({ id: 't1', status: 'deleted', deletedAt: '2026-08-07T00:00:00' }),
+        task({ id: 't2', status: 'active' }),
       ],
     });
-    expect('error' in restoreTask(snap, deps(), { id: 't1' })).toBe(true);
+    expect('error' in restoreTask(snap, deps(), { id: 't1' })).toBe(false);
     expect('error' in restoreTask(snap, deps(), { id: 't2' })).toBe(true);
   });
 

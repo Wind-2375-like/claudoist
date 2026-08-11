@@ -20,7 +20,6 @@ function filterSnap(): GtdSnapshot {
       task({
         id: 'a',
         title: 'Buy milk',
-        contextId: 'c1',
         priority: 3,
         energy: 'low',
         estimatedMinutes: 15,
@@ -30,7 +29,6 @@ function filterSnap(): GtdSnapshot {
       task({
         id: 'b',
         title: 'write REPORT',
-        contextId: 'c1',
         priority: 1,
         energy: 'high',
         estimatedMinutes: 90,
@@ -40,7 +38,6 @@ function filterSnap(): GtdSnapshot {
       task({
         id: 'c',
         title: 'call mom',
-        contextId: 'c2',
         priority: 2,
         energy: 'urgent', // 未知值 → 按 medium 参与比较(INV-02)
         estimatedMinutes: 5,
@@ -90,8 +87,7 @@ describe('uc-filters evalFilter:各维度 + INV-01/INV-02 语义', () => {
     expect(ids(evalFilter(filterSnap(), { labelIds: [] }))).toEqual(['a', 'b', 'c']);
   });
 
-  it('contextId / maxMinutes / noProject / 组合', () => {
-    expect(ids(evalFilter(filterSnap(), { contextId: 'c2' }))).toEqual(['c']);
+  it('maxMinutes / noProject / 组合', () => {
     expect(ids(evalFilter(filterSnap(), { maxMinutes: 20 }))).toEqual(['a', 'c']);
     expect(ids(evalFilter(filterSnap(), { noProject: true }))).toEqual(['a', 'c']);
     expect(ids(evalFilter(filterSnap(), { noProject: true, priorityMax: 2 }))).toEqual(['c']);

@@ -6,7 +6,7 @@ import { isUsecaseError } from '../src/usecases/types';
 import type { UsecaseResult } from '../src/usecases/types';
 import type { Command } from '../src/index';
 import { applyToSnapshot } from '../src/index';
-import { ctx, deps, project, snapshot, task, waitingFor } from './helpers';
+import { deps, project, snapshot, task, waitingFor } from './helpers';
 
 function ok<C>(r: UsecaseResult<C>): { commands: Command[]; consequences: C } {
   if (isUsecaseError(r)) throw new Error(r.error);
@@ -128,10 +128,9 @@ describe('INV-15 completeProject:不级联、activeTaskCount 供确认', () => {
 describe('INV-15 其余后果字段口径', () => {
   it('quickAddTask:项目有 DDL → inheritedDeadline 后果 + 静默复制(INV-10)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       projects: [project({ id: 'p1', deadline: '2026-09-01' })],
     });
-    const r = ok(quickAddTask(snap, deps(), { title: '量尺寸', contextId: 'c1', projectId: 'p1' }));
+    const r = ok(quickAddTask(snap, deps(), { title: '量尺寸', projectId: 'p1' }));
     expect(r.consequences.inheritedDeadline).toBe('2026-09-01');
     const cmd = r.commands[0]!;
     if (cmd.kind !== 'createTask') throw new Error('expected createTask');
@@ -140,12 +139,9 @@ describe('INV-15 其余后果字段口径', () => {
 
   it('quickAddTask:已完成项目 → 拒绝(与 moveTask 同口径,不写进不可见容器)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       projects: [project({ id: 'pc', status: 'complete' })],
     });
-    expect(
-      'error' in quickAddTask(snap, deps(), { title: 'x', contextId: 'c1', projectId: 'pc' }),
-    ).toBe(true);
+    expect('error' in quickAddTask(snap, deps(), { title: 'x', projectId: 'pc' })).toBe(true);
   });
 
   it('deleteTask:deletedSubtaskCount 供确认文案(INV-26)', () => {

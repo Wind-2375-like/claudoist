@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { applyToSnapshot, captureToInbox, isUsecaseError } from '../src/index';
-import { ctx, deps, snapshot } from './helpers';
+import { deps, snapshot } from './helpers';
 
 /**
  * INV-16 捕捉零判断(载体随 D-20 改为"在 Inbox 建 Task"):
  * 不解析、不去重、不追问元数据;重复合法;原文保存。
  */
 describe('INV-16 捕捉零判断(D-20 容器载体)', () => {
-  const base = snapshot({
-    contexts: [
-      ctx({ id: 'c2', name: '@phone', sortOrder: 1 }),
-      ctx({ id: 'c1', name: '@computer', sortOrder: 0 }),
-    ],
-  });
+  const base = snapshot({});
 
   it('连续捕捉两条相同文本 → Inbox 出现两条任务(重复合法)', () => {
     const r = captureToInbox(base, deps(), { texts: ['买牛奶', '买牛奶'] });
@@ -30,7 +25,6 @@ describe('INV-16 捕捉零判断(D-20 容器载体)', () => {
     expect(r.commands.map((c) => c.kind)).toEqual(['createTask']); // 零附加命令
     const after = applyToSnapshot(base, r.commands);
     const t = after.tasks[0]!;
-    expect(t.contextId).toBe('c1'); // sortOrder 0
     expect(t.priority).toBe(3);
     expect(t.deadline).toBeNull();
     expect(t.scheduledDate).toBeNull();
@@ -52,8 +46,8 @@ describe('INV-16 捕捉零判断(D-20 容器载体)', () => {
     expect(r.consequences.createdIds).toHaveLength(0);
   });
 
-  it('没有可用 context → 报错(捕捉的唯一前置)', () => {
+  it('D-30:捕捉不再有任何前置(标签可选,空库也能捕捉)', () => {
     const r = captureToInbox(snapshot(), deps(), { texts: ['x'] });
-    expect(isUsecaseError(r)).toBe(true);
+    expect(isUsecaseError(r)).toBe(false);
   });
 });

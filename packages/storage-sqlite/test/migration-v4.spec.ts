@@ -64,7 +64,6 @@ describe('迁移 v3 → v4(项目平面化 + 子任务 + 评论)', () => {
           task: {
             id: 't2',
             title: '子任务',
-            contextId: 'c1',
             estimatedMinutes: 15,
             energy: 'medium',
             priority: 3,

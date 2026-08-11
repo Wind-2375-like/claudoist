@@ -4,7 +4,6 @@ import {
   addComment,
   addDaysIso,
   calendarDay,
-  addContext,
   addReminder,
   addSubtask,
   captureToInbox,
@@ -34,7 +33,7 @@ import {
 } from '@gtd/domain';
 import type {
   BucketCountsVM,
-  ContextVM,
+  LabelListItemVM,
   ProjectListItemVM,
   ProjectViewVM,
   CalendarRangeVM,
@@ -67,7 +66,8 @@ export interface GtdViews {
   search(query: string): SearchVM;
   /** 日历区间(D-23/INV-28/M6b):from 起连续 days 天 */
   calendarRange(from: string, days: number): CalendarRangeVM;
-  contexts(): ContextVM[];
+  /** 标签(D-30:情境已并入)+ 活跃任务计数 */
+  labels(): LabelListItemVM[];
 }
 
 export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
@@ -75,8 +75,6 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
     id: t.id,
     title: t.title,
     description: t.description,
-    contextId: t.contextId,
-    contextName: snap.contexts.find((c) => c.id === t.contextId)?.name ?? '?',
     estimatedMinutes: t.estimatedMinutes,
     energy: t.energy,
     priority: t.priority,
@@ -303,7 +301,7 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
                   : t.bucket === 'reference'
                     ? 'Reference'
                     : 'Inbox';
-          const bits = [where, snap.contexts.find((c) => c.id === t.contextId)?.name];
+          const bits = [where];
           if (done) bits.push(`已完成 ${(t.completedAt ?? '').slice(0, 10)}`);
           else if (t.scheduledDate !== null) bits.push(`📅 ${t.scheduledDate}`);
           return {
@@ -385,16 +383,17 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
       });
       return { from: start, to: addDaysIso(start, count - 1), days: dayVMs };
     },
-    contexts() {
+    labels() {
       const snap = store.snapshot();
-      return snap.contexts
-        .filter((c) => !c.archived)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((c) => ({
-          id: c.id,
-          name: c.name,
-          activeTaskCount: snap.tasks.filter((t) => t.contextId === c.id && t.status === 'active')
-            .length,
+      const active = new Set(snap.tasks.filter((t) => t.status === 'active').map((t) => t.id));
+      return [...snap.labels]
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .map((l) => ({
+          id: l.id,
+          name: l.name,
+          activeTaskCount: snap.taskLabels.filter(
+            (tl) => tl.labelId === l.id && active.has(tl.taskId),
+          ).length,
         }));
     },
   };
@@ -426,7 +425,6 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   ipcMain.handle('gtd:calendar.range', (_e, payload: { from: string; days: number }) =>
     views.calendarRange(payload.from, payload.days),
   );
-  ipcMain.handle('gtd:contexts.list', () => views.contexts());
   // §5.4 单次调用模型:传播征询发生在写调用之前,这里给 UI 只读计数
   ipcMain.handle('gtd:projects.inheritCount', (_e, payload: { id: string }) => {
     const snap = store.snapshot();
@@ -469,12 +467,7 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   ipcMain.handle('gtd:reminders.delete', (_e, input: { id: string }) =>
     applyResult(deleteReminder(store.snapshot(), deps, input)),
   );
-  ipcMain.handle('gtd:contexts.add', (_e, payload: { name: string }) =>
-    applyResult(addContext(store.snapshot(), deps, { name: payload.name })),
-  );
-  ipcMain.handle('gtd:labels.list', () =>
-    store.snapshot().labels.map((l) => ({ id: l.id, name: l.name })),
-  );
+  ipcMain.handle('gtd:labels.list', () => views.labels());
 
   // ── 任务操作(D-20/D-21):move / update / complete / delete ──
   ipcMain.handle('gtd:tasks.move', (_e, input) =>

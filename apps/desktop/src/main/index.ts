@@ -130,7 +130,7 @@ if (spikeArg) {
         projectViews: projects.map((p) => views.projectView(p.id)),
         today: views.today(),
         calendar: views.calendarRange(systemClock.today(), 3),
-        contexts: views.contexts(),
+        labels: views.labels(),
         bucketCounts: views.bucketCounts(),
       })}\n`,
     );

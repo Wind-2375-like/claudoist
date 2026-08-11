@@ -4,14 +4,13 @@ import { addReminder, deleteReminder } from '../src/usecases/reminders';
 import { addSubtask } from '../src/usecases/tasks';
 import { applyToSnapshot } from '../src/index';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, label, snapshot, task } from './helpers';
+import { deps, label, snapshot, task } from './helpers';
 
 /** D-22 详情右栏就地编辑:setTaskLabels(diff)、reminder 增删;子任务完整属性集。 */
 describe('setTaskLabels(diff 式)', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1' })],
     labels: [label({ id: 'l1' }), label({ id: 'l2' }), label({ id: 'l3' })],
-    tasks: [task({ id: 't1', contextId: 'c1' })],
+    tasks: [task({ id: 't1' })],
     taskLabels: [{ taskId: 't1', labelId: 'l1' }],
   });
 
@@ -42,8 +41,7 @@ describe('setTaskLabels(diff 式)', () => {
 
 describe('reminder 增删', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1' })],
-    tasks: [task({ id: 't1', contextId: 'c1' })],
+    tasks: [task({ id: 't1' })],
   });
 
   it('addReminder 校验格式 + 落库;deleteReminder 幂等前置校验', () => {
@@ -62,9 +60,8 @@ describe('reminder 增删', () => {
 describe('addSubtask 完整属性集(D-22)', () => {
   it('label + reminder 一并落库(同一命令批)', () => {
     const base = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       labels: [label({ id: 'l1' })],
-      tasks: [task({ id: 't1', contextId: 'c1' })],
+      tasks: [task({ id: 't1' })],
     });
     const r = addSubtask(base, deps(), {
       parentTaskId: 't1',

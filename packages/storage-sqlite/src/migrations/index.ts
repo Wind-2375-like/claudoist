@@ -313,4 +313,31 @@ UPDATE filters
  WHERE json_extract(query_json, '$.priorityMin') IS NOT NULL;
 `,
   },
+  {
+    version: 11,
+    name: 'context-into-label',
+    // D-30:context 并入 label(与 Todoist 一致,只保留一种自由多值标签)。
+    //
+    // 名称口径:label 名**不含 '@'**('@' 只是过滤器语法与界面显示的前缀),
+    // 故 context '@home' → label 'home'。用户已有 label 'home'/'errands' 与
+    // context '@home'/'@errands' **撞名 → 直接合并**(2026-08-11 用户定案):
+    // INSERT OR IGNORE 撞上 labels.name 的 UNIQUE 约束时保留既有 label,
+    // 随后按**名字**而非 id 关联,两边的任务因此落到同一个标签上。
+    //
+    // 顺序要紧:先补 task_labels 再删列 —— 反过来就再也不知道谁属于哪个 context。
+    sql: `
+INSERT OR IGNORE INTO labels (id, name, color)
+SELECT c.id, ltrim(c.name, '@'), NULL FROM contexts c;
+
+INSERT OR IGNORE INTO task_labels (task_id, label_id)
+SELECT t.id, l.id
+  FROM tasks t
+  JOIN contexts c ON c.id = t.context_id
+  JOIN labels l ON l.name = ltrim(c.name, '@');
+
+DROP INDEX IF EXISTS idx_tasks_context;
+ALTER TABLE tasks DROP COLUMN context_id;
+DROP TABLE contexts;
+`,
+  },
 ];

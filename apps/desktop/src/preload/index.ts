@@ -5,7 +5,7 @@ import type {
   GoogleStatusVM,
   AddSubtaskInputVM,
   BucketCountsVM,
-  ContextVM,
+  LabelListItemVM,
   GtdChangedEvent,
   MoveTargetVM,
   ProjectListItemVM,
@@ -44,7 +44,6 @@ const gtdApi = {
   search: (query: string): Promise<SearchVM> => ipcRenderer.invoke('gtd:search', { query }),
   calendarRange: (from: string, days: number): Promise<CalendarRangeVM> =>
     ipcRenderer.invoke('gtd:calendar.range', { from, days }),
-  contextsList: (): Promise<ContextVM[]> => ipcRenderer.invoke('gtd:contexts.list'),
   onChanged: (cb: (ev: GtdChangedEvent) => void): (() => void) => {
     const listener = (_e: unknown, ev: GtdChangedEvent): void => cb(ev);
     ipcRenderer.on('gtd:changed', listener);
@@ -67,9 +66,7 @@ const gtdApi = {
     ipcRenderer.invoke('gtd:reminders.add', { taskId, remindAt }),
   reminderDelete: (id: string): Promise<WriteResultVM> =>
     ipcRenderer.invoke('gtd:reminders.delete', { id }),
-  contextAdd: (name: string): Promise<WriteResultVM<{ contextId?: string }>> =>
-    ipcRenderer.invoke('gtd:contexts.add', { name }),
-  labelsList: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke('gtd:labels.list'),
+  labelsList: (): Promise<LabelListItemVM[]> => ipcRenderer.invoke('gtd:labels.list'),
   taskMove: (input: { id: string; to: MoveTargetVM }): Promise<WriteResultVM> =>
     ipcRenderer.invoke('gtd:tasks.move', input),
   taskReorder: (input: {

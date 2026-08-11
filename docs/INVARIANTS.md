@@ -23,18 +23,11 @@
 
 存储层的 SQL 定义(表名、索引、FK)见 [./DESIGN.md](./DESIGN.md);本节定义**领域语义**:字段含义、默认值、约束。所有 id 为完整 UUIDv4(INV-04);所有时间戳为 ISO-8601 本地文本;所有日期为 `YYYY-MM-DD` 文本(INV-03)。
 
-### 2.1 Context(情境)
+### 〔退役 D-30〕2.1 Context(情境)
 
-GTD 情境即"完成行动所需的场所/工具"。**每个 active Task 必须恰好属于一个 Context**(CLI 中 context 既是 Action 字段又是存储桶键;桌面版归一为必填外键)。
+**2026-08-11 起不存在**。情境并入 label(见 §2.9 与 INV-24 的退役说明):label 名**不含** `@`,`@` 只是过滤器语法与界面显示的前缀。`Task.contextId` 字段、`contexts` 表、`sortOrder` / `archived` 语义一并作废;原"兜底 context 取 sortOrder 最小者"随之消失(INV-23 改为"存在 `phone` 标签就带上,否则不带")。
 
-| 字段 | 类型 | 默认 | 语义 |
-|---|---|---|---|
-| `id` | UUID | — | 主键 |
-| `name` | string,唯一 | — | 必须以 `@` 开头;用户输入无 `@` 时自动补前缀;大小写敏感;重名拒绝 |
-| `sortOrder` | int | 追加到末尾 | 显示顺序;**语义负载**:waiting-for follow-up 的兜底 context 取 `sortOrder` 最小者(INV-23) |
-| `createdAt` | timestamp | now | — |
-
-首次启动种子五个默认情境(顺序即 sortOrder):`@computer`、`@phone`、`@errands`、`@home`、`@office`。
+原默认情境 `@computer` / `@phone` / `@errands` / `@home` / `@office` 现在只是五个普通标签,可自由增删。
 
 ### 2.2 InboxItem(收件箱条目)
 
@@ -55,7 +48,6 @@ CLI 中 inbox 是裸字符串数组;桌面版升级为对象(§5 差异 D-04)。
 |---|---|---|---|
 | `id` | UUID | — | 主键 |
 | `title` | string | — | CLI 字段名 `text` |
-| `contextId` | UUID,**必填** | — | 恰好一个 context(GTD 纪律);context 是主要标签 |
 | `estimatedMinutes` | int | **15** | 预估用时;engage 按 `estimatedMinutes <= 可用分钟` 过滤;CLI 对非数字输入回退默认值 |
 | `energy` | `'low' \| 'medium' \| 'high'` | **`'medium'`** | 所需精力;比较序 low(1) < medium(2) < high(3);历史数据出现未知值时按 medium(2) 处理(INV-02) |
 | `priority` | int 1–5 | **3** | ⚠ **1 = 最高,5 = 最低**(D-29 起与 Todoist 的 p1=最高**同向**,见 INV-01);越界/非法输入回退默认 3 |
@@ -145,7 +137,7 @@ CLI 中三个裸字符串列表;桌面版统一为对象(§5 D-04)。
 
 桌面版新增、CLI 不存在,定义见 [./DESIGN.md](./DESIGN.md)。TaskComment(D-21)= 任务详情内的自由评论 `{id, taskId, body, createdAt}`,仅追加展示,不参与任何不变量计算。与本文档的关系只有三条规则:
 
-1. Label 是叠加在**必填 context 之上**的自由多值标签,不参与本文档任何不变量的计算。
+1. Label 是**唯一**的自由多值标签维度(D-30 起 context 已并入),不参与本文档任何不变量的计算。界面与过滤器语法写作 `@名字`,存储不含 `@`。
 2. `@waiting_for` 是由 WaitingFor 表支撑的**虚拟视图**,不得扁平化为普通 label——否则丢失 delegatedTo / since-date / resolve / follow-up 流程。
 3. Filter 是保存的查询,其解释器对 energy / priority 的比较必须复用 INV-01 / INV-02 的语义。
 
@@ -305,15 +297,15 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 #### INV-20 Engage 过滤、排序与 calendar-first ⚠SP(过滤方向)
 
 **规则**:
-1. **Calendar-first(D-23/M6a 版)**:进入 engage 先列出**今天计划**(`scheduledDate === today`)的全部 active 任务,按 §2.5 时刻序(全天在前、startTime 升序,`todaysTimedTasks`);有则优先提议处理。该段是**当天硬性日程,与所选 context 无关**,故不随 context/分钟/精力过滤(agent skill 与 CLI `engage --context` 同此口径)。
-2. 任务推荐:选定 context 后,候选 = 该 context 的 active Task,依次过滤 `estimatedMinutes <= 可用分钟`(默认 60)与 `energy <= 用户 energy`(INV-02)。
+1. **Calendar-first(D-23/M6a 版)**:进入 engage 先列出**今天计划**(`scheduledDate === today`)的全部 active 任务,按 §2.5 时刻序(全天在前、startTime 升序,`todaysTimedTasks`);有则优先提议处理。该段是**当天硬性日程,与所选标签无关**,故不随 标签/分钟/精力过滤(agent skill 与 CLI `engage --label` 同此口径)。
+2. 任务推荐:选定 context 后,候选 = 带该**标签**的 active Task(D-30 前是 context),依次过滤 `estimatedMinutes <= 可用分钟`(默认 60)与 `energy <= 用户 energy`(INV-02)。
    **INV-20.2**:第 1 条已列出的(`scheduledDate === today`)**不再进候选** —— 已承诺的事轮不到"挑",两处都列只会让同一条任务在一轮择事里出现两次。过期计划(`scheduledDate < today`)不属该段,仍可挑。
 3. 排序:**priority 降序**,稳定排序(同优先级保持创建序);**最多展示 7 条**(`ENGAGE_TOP_N`)。
 4. **deadline 不参与排序**,仅随行显示(CLI 的已知留白,如需改变先改本文档)。
 5. 推荐是只读计算;完成任务是独立的写操作(agent 工具 `get_engage_recommendations` 为只读,完成走 `complete_task`)。
 6. **单一过滤口径**:全部匹配项由 `engageMatches` 给出,候选 = 其前 7 条,"另有 N 条未列出"= `matches.length - 7`。任何载体(CLI `engage`、agent skill、将来的任何 UI)都不得自行重写这套过滤条件——曾因桌面 `views.engage` 与 CLI 各写一遍,使"另有 N 条"与列表口径不一致(该面板已随 D-28 撤除)。
 **为什么**:GTD 的四标准择事模型(情境→时间→精力→优先级),顺序即算法。
-**验收**:8 条同 context 候选 → 只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤;今天有计划任务(含带时间)时先按时刻序呈现它们,且这些任务不在候选段重复出现;`pnpm cli engage` 与 agent skill 同参数下候选与"另有 N 条"完全一致。
+**验收**:8 条同标签候选 → 只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤;今天有计划任务(含带时间)时先按时刻序呈现它们,且这些任务不在候选段重复出现;`pnpm cli engage` 与 agent skill 同参数下候选与"另有 N 条"完全一致。
 
 #### INV-21 Someday 孵化语义(D-20/D-21 修订)⚠SP
 
@@ -323,7 +315,7 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 
 #### INV-22 删除 = 软删除,可恢复(D-21 修订载体:右键删除)
 
-**规则**:任何入口(右键菜单、CLI `delete`、agent 工具)删除 Task 均为软删除:置 `status='deleted'`、`deletedAt=now`,数据保留、可恢复(restoreTask 回 `active` 并清 `deletedAt`;context 已归档时须先重指 context)。(CLI 前身是硬删除、无去处,§5 D-01;D-20 后无 Trash 视图,但数据层语义不变。)
+**规则**:任何入口(右键菜单、CLI `delete`、agent 工具)删除 Task 均为软删除:置 `status='deleted'`、`deletedAt=now`,数据保留、可恢复(restoreTask 回 `active` 并清 `deletedAt`;D-30 后无 context 前置)。(CLI 前身是硬删除、无去处,§5 D-01;D-20 后无 Trash 视图,但数据层语义不变。)
 **为什么**:硬删除危险且无必要;误操作率高。
 **验收**:删除的任务 `status='deleted'` 仍在表中;恢复后 `status='active'`、`deletedAt` 清空;重复删除报错。
 
@@ -334,27 +326,26 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 | 字段 | 值 |
 |---|---|
 | `title` | `Follow up with {delegatedTo} re: {description}` |
-| `contextId` | 名为 `@phone` 的 context;不存在则取 `sortOrder` 最小的 context |
 | `estimatedMinutes` | 5 |
 | `energy` | `'low'` |
-| `priority` | 4 |
+| `priority` | 2(「高」;D-29 翻转前是 4) |
 | `projectId` | 继承 WaitingFor 的 `projectId` |
 | `deadline` | 无 |
 
 创建 follow-up **不改变** WaitingFor 的 `resolved` 状态(催办的对象正是还没回音的委派)。
 **为什么**:固定模板让"追一下"零成本;follow-up 与 resolve 解耦是 CLI 的明确语义,捆绑会把"催办"误变成"已解决"。
-**验收**:对未解决项创建 follow-up → 新 Task 六字段逐一匹配、WaitingFor 仍 unresolved;无 `@phone` 时 context 落到 sortOrder 最小者。
+**验收**:对未解决项创建 follow-up → 新 Task 各字段逐一匹配、WaitingFor 仍 unresolved;存在 `phone` 标签时新任务带上它,不存在则不带任何标签(D-30)。
 
-#### INV-24 Context 规则
+#### 〔退役 D-30〕INV-24 Context 规则
 
-**规则**:
-1. 名称必须 `@` 前缀,输入无前缀自动补;重名(精确匹配)拒绝。
-2. 每个 active Task 必须恰好属于一个存在的 context(FK 保证;CLI 靠"load 时自愈失散桶 + 写入时自动建桶"达到近似效果,归一化存储后该自愈机制不再需要)。
-3. **不能删除最后一个** context。
-4. 删除含 active Task 的 context 必须先警告数量并确认;确认后这些 Task 软删除进 Trash(CLI 是随桶永久删除,§5 D-09),恢复时需重新指定 context。
-5. context 可在任何选择器中内联新建(clarify 定义行动、quick add 等),新建即持久化。
-**为什么**:context 是 GTD 的物理过滤维度,也是历史存储桶;规则 3、4 防止用户一键蒸发整张行动清单。
-**验收**:输入 `gym` → 存为 `@gym`;重复添加报错;仅剩一个 context 时删除按钮禁用;删除含 3 个活跃任务的 context → 确认文案含数量、任务进 Trash。
+**2026-08-11 起 context 实体不复存在**,整条退役:情境并入 **label**(与 Todoist 一致,只保留一种自由多值标签)。原规则的处置:
+
+- ~~名称必须 `@` 前缀~~ → label 名**不含** `@`;`@` 只是过滤器语法与界面显示的前缀(存 `home`,显示与书写皆为 `@home`)。
+- ~~每个 active Task 必须恰好属于一个 context~~ → **标签是可选多值**,任务可以一个标签都没有。这是本次合并**唯一的语义损失**:GTD 的"情境"从必填降级为普通标签,`captureToInbox` 因此不再有任何前置条件。
+- ~~不能删除最后一个 / 删除需警告确认 / 恢复时重指~~ → 删除标签只解除关联,不动任务(INV-22 的软删语义与之无关),故这些保护不再需要。
+- ~~内联新建~~ → 保留在标签选择器里。
+
+迁移 v11 把每个 context 变成同名(去 `@`)标签并给其任务补上关联;**撞名直接合并**(用户既有 context `@home`/`@errands` 与 label `home`/`errands` 合成同一个标签,2026-08-11 用户定案)。
 
 ### 子任务与评论(D-21,2026-08-09 用户定案)
 
@@ -799,6 +790,7 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-17 | DDL 分解只在"创建带 deadline 项目"的流程内触发(§4.4),无对既有项目的独立入口 | My Projects 对任何有 deadline 的项目提供 "Break down by deadline"(§4.14) | 编辑能力普遍化后分解不应绑定创建时机;分解流程本体(§4.9)不变 |
 | D-18 | 理清 = 强制逐题问答(§4.3 交互形态) | **理清双路径(2026-08-08 用户定案)**:① 手动 specify —— Inbox 条目展开为 Todoist 式卡片,直接补属性转为 Task,或转为 Project,或归档 Someday/Reference/Trash;② 交给 Claude 对话理清(M8/M9 经 MCP 工具)。分步问答状态机**保留为内部机制**(agent 驱动与 Weekly Review 内嵌用),UI 无独立入口 | 逐题问答对日常理清过重;§4.3 的**去向语义**(六种去向、deadline 继承、逐项一次事务 = 一次确认)全部保留,变的只是交互载体 |
 | D-19 | Action 无"计划哪天做"概念(日程只能是 CalendarItem) | Task 新增 `scheduledDate`(与 deadline 并存)。(后续 D-23/M6a:CalendarItem 并入 Task,时间即 `startTime`) | Todoist 式 today/tomorrow 快速安排是用户核心工作流;时刻与最迟完成日的语义区分保留(§2.5) |
+| D-30 | context 是必填单值实体,与 label 并存 | **context 并入 label(2026-08-11 用户定案,INV-24 退役)**:与 Todoist 一致只保留一种自由多值标签;label 名不含 `@`(`@` 是语法/显示前缀)。迁移 v11 把 context 变同名标签并补关联,**撞名直接合并**;tasks.context_id 与 contexts 表删除。engage 的"选情境"变成"选标签"(可不选 = 全部);捕捉不再有任何前置。语义损失:情境从必填降级为可选标签 | ✅ 已定 |
 | D-29 | priority 1 = 最低、5 = 最高(与 Todoist 相反) | **翻转为 1 = 最高、5 = 最低(2026-08-11 用户定案,INV-01)**:过滤器文本语法采用 Todoist 的 `p1 = 最高`,若存储不翻,同一应用里 `p1` 与 `--priority=1` 方向相反,必然出错。存量数据由迁移 v10 执行 `6 - priority`;值域/默认值/不重编号三条不变;`FilterQuery.priorityMin` 改名取补为 `priorityMax` | ✅ 已定 |
 | D-28 | `engage` / `review` 是 CLI 的交互式命令(分步问答向导) | **流程类功能不做 UI,改由 agent skill 承载(2026-08-11 用户定案)**:择事与周回顾**本质是一串原子操作的编排**,固化成向导 UI 等于把"何时该怎么想"写死在按钮里。算法(INV-20、§4.11、§4.12)原样保留在 domain;载体改为 agent skill + 聊天输入框下方的建议按钮(DESIGN §6.9),中栏不再有 Focus 面板/回顾向导。M7 范围收缩为 Search + Filters & Labels;已实现的 Focus 面板据此撤除,CLI `engage` 保留 | ✅ 已定 |
 | D-27 | 无时区概念,时间即本地墙上时间 | **浮动时间 vs 指定时区(2026-08-10 用户定案,INV-31,M6d)**:`Task.timeZone`(null = 浮动,随设备时区解释;非 null = 绑定 IANA 时区),借鉴 Todoist 的 Floating time | ✅ 已定 |

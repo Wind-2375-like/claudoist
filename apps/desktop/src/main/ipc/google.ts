@@ -257,10 +257,6 @@ export function registerGoogleIpc(store: GtdStore, deps: FlowDeps, onChanged: ()
           const merged = await mergedCalendars();
           const calendars = merged.list.filter((c) => c.shown);
           const snap = store.snapshot();
-          const contextId = [...snap.contexts]
-            .filter((c) => !c.archived)
-            .sort((a, b) => a.sortOrder - b.sortOrder)[0]?.id;
-          if (contextId === undefined) return { error: '没有可用 context' };
 
           const events: Parameters<typeof syncExternalTasks>[2]['events'] = [];
           // 只有**成功拉取**的日历才参与"退休"判定;任何失败都不得被当成"日历空了"
@@ -302,7 +298,6 @@ export function registerGoogleIpc(store: GtdStore, deps: FlowDeps, onChanged: ()
             events,
             // 账号级失败也算"有日历没拉到" → 整轮跳过退休
             fetchedCalendarIds: merged.failedAccounts > 0 ? [] : fetchedCalendarIds,
-            contextId,
           });
           if (isUsecaseError(r)) return { error: r.error };
           if (r.commands.length > 0) {

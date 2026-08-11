@@ -2,7 +2,6 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type {
   Actor,
   Command,
-  Context,
   GtdSnapshot,
   GtdStore,
   InboxItem,
@@ -31,14 +30,6 @@ const int = (b: boolean): number => (b ? 1 : 0);
 const s = (v: unknown): string => v as string;
 const sn = (v: unknown): string | null => (v === null ? null : (v as string));
 
-const rowToContext = (r: Row): Context => ({
-  id: s(r['id']),
-  name: s(r['name']),
-  sortOrder: r['sort_order'] as number,
-  archived: bool(r['archived']),
-  createdAt: s(r['created_at']),
-});
-
 const rowToInbox = (r: Row): InboxItem => ({
   id: s(r['id']),
   text: s(r['text']),
@@ -58,7 +49,6 @@ const rowToProject = (r: Row): Project => ({
 const rowToTask = (r: Row): Task => ({
   id: s(r['id']),
   title: s(r['title']),
-  contextId: s(r['context_id']),
   estimatedMinutes: r['estimated_minutes'] as number,
   energy: s(r['energy']),
   priority: r['priority'] as number,
@@ -141,12 +131,6 @@ const encJson = (v: unknown): SQLInputValue => JSON.stringify(v);
 const id0 = (v: unknown): SQLInputValue => v as SQLInputValue;
 
 const COLS: Record<string, ColumnSpec> = {
-  contexts: {
-    name: { col: 'name' },
-    sortOrder: { col: 'sort_order' },
-    archived: { col: 'archived', enc: encBool },
-    createdAt: { col: 'created_at' },
-  },
   inbox_items: {
     text: { col: 'text' },
     createdAt: { col: 'created_at' },
@@ -161,7 +145,6 @@ const COLS: Record<string, ColumnSpec> = {
   },
   tasks: {
     title: { col: 'title' },
-    contextId: { col: 'context_id' },
     estimatedMinutes: { col: 'estimated_minutes' },
     energy: { col: 'energy' },
     priority: { col: 'priority' },
@@ -227,7 +210,6 @@ export class SqliteGtdStore implements GtdStore {
     const all = (table: string): Row[] =>
       this.db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all() as Row[];
     return {
-      contexts: all('contexts').map(rowToContext),
       inbox: all('inbox_items').map(rowToInbox),
       tasks: all('tasks').map(rowToTask),
       projects: all('projects').map(rowToProject),
@@ -302,10 +284,6 @@ export class SqliteGtdStore implements GtdStore {
       case 'deleteListItem':
         this.db.prepare('DELETE FROM list_items WHERE id = ?').run(c.id);
         return;
-      case 'createContext':
-        return this.insert('contexts', c.context as unknown as Record<string, unknown>);
-      case 'updateContext':
-        return this.update('contexts', c.id, c.patch as Record<string, unknown>);
       case 'createLabel':
         return this.insert('labels', c.label as unknown as Record<string, unknown>);
       case 'deleteLabel':

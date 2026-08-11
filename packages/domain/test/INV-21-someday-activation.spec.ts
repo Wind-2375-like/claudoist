@@ -3,7 +3,7 @@ import { moveTask } from '../src/usecases/tasks';
 import { engageCandidates } from '../src/rules/engageRanking';
 import { applyToSnapshot } from '../src/index';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, project, snapshot, task, TODAY } from './helpers';
+import { deps, project, snapshot, task, TODAY } from './helpers';
 
 /**
  * INV-21 ⚠SP(D-20/D-21 修订):someday/reference = 孵化容器 ——
@@ -12,17 +12,16 @@ import { ctx, deps, project, snapshot, task, TODAY } from './helpers';
  */
 describe('INV-21 Someday 孵化语义(bucket 容器)', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1' })],
     projects: [project({ id: 'p1' })],
     tasks: [
-      task({ id: 't1', contextId: 'c1', bucket: 'someday' }),
-      task({ id: 't2', contextId: 'c1', bucket: 'reference' }),
-      task({ id: 't3', contextId: 'c1', bucket: 'inbox' }),
+      task({ id: 't1', bucket: 'someday' }),
+      task({ id: 't2', bucket: 'reference' }),
+      task({ id: 't3', bucket: 'inbox' }),
     ],
   });
 
   it('someday/reference 不进 engage 候选;inbox 进', () => {
-    const got = engageCandidates(base, 'c1', 60, 'high', TODAY);
+    const got = engageCandidates(base, null, 60, 'high', TODAY);
     expect(got.map((t) => t.id)).toEqual(['t3']);
   });
 
@@ -32,7 +31,7 @@ describe('INV-21 Someday 孵化语义(bucket 容器)', () => {
     const after = applyToSnapshot(base, r.commands);
     expect(after.tasks.find((t) => t.id === 't1')!.bucket).toBe('inbox');
     expect(
-      engageCandidates(after, 'c1', 60, 'high', TODAY)
+      engageCandidates(after, null, 60, 'high', TODAY)
         .map((t) => t.id)
         .sort(),
     ).toEqual(['t1', 't3']);

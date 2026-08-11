@@ -50,7 +50,6 @@ export function completionFollowUpConsequences(
 
 export interface QuickAddTaskInput {
   title: string;
-  contextId: Id;
   estimatedMinutes?: number;
   energy?: Energy;
   priority?: number;
@@ -85,8 +84,6 @@ export function quickAddTask(
 ): UsecaseResult<QuickAddTaskConsequences> {
   const title = input.title.trim();
   if (!title) return { error: 'title 不能为空' };
-  const context = snap.contexts.find((c) => c.id === input.contextId && !c.archived);
-  if (!context) return { error: `context 不存在或已归档: ${input.contextId}` };
   const projectId = input.projectId ?? null;
   // 与 moveTask 同口径:不能把新行动写进已完成项目(不可见容器)
   if (
@@ -125,7 +122,6 @@ export function quickAddTask(
   const task: Task = {
     id: deps.idGen.next(),
     title,
-    contextId: context.id,
     // 非法输入回退默认(INVARIANTS §2.3;0 分钟不合法,§6 次要怪癖)
     estimatedMinutes:
       em !== undefined && Number.isInteger(em) && em >= 1 ? em : TASK_DEFAULTS.estimatedMinutes,
@@ -351,7 +347,6 @@ export interface AddSubtaskInput {
   deadline?: IsoDate;
   scheduledDate?: IsoDate;
   /** 缺省继承父任务的 context */
-  contextId?: Id;
   /** D-22:子任务支持完整属性集(与顶层任务一致) */
   labelIds?: Id[];
   reminderAt?: string;
@@ -369,7 +364,7 @@ export interface AddSubtaskConsequences {
   inheritedDeadline?: IsoDate;
 }
 
-/** INV-25:子任务继承父的 bucket/projectId(/contextId),链深 ≤ MAX_SUBTASK_DEPTH。 */
+/** INV-25:子任务继承父的 bucket/projectId,链深 ≤ MAX_SUBTASK_DEPTH。 */
 export function addSubtask(
   snap: GtdSnapshot,
   deps: FlowDeps,
@@ -383,13 +378,6 @@ export function addSubtask(
   const parentDepth = taskDepth(snap, parent.id);
   if (parentDepth >= MAX_SUBTASK_DEPTH) {
     return { error: `子任务最多嵌套 ${MAX_SUBTASK_DEPTH} 层(INV-25)` };
-  }
-  let contextId = parent.contextId;
-  if (input.contextId !== undefined) {
-    if (!snap.contexts.some((c) => c.id === input.contextId && !c.archived)) {
-      return { error: `context 不存在或已归档: ${input.contextId}` };
-    }
-    contextId = input.contextId;
   }
   if (input.deadline !== undefined && !isValidIsoDate(input.deadline)) {
     return { error: `无效日期 ${input.deadline},格式须为 YYYY-MM-DD` };
@@ -419,7 +407,6 @@ export function addSubtask(
   const task: Task = {
     id: deps.idGen.next(),
     title,
-    contextId,
     estimatedMinutes:
       em !== undefined && Number.isInteger(em) && em >= 1 ? em : TASK_DEFAULTS.estimatedMinutes,
     energy: input.energy ?? TASK_DEFAULTS.energy,
@@ -476,7 +463,6 @@ export function addSubtask(
  */
 export interface UpdateTaskPatch {
   title?: string;
-  contextId?: Id;
   estimatedMinutes?: number;
   energy?: Energy;
   priority?: number;
@@ -526,12 +512,6 @@ export function updateTask(
     const title = p.title.trim();
     if (!title) return { error: 'title 不能为空' };
     clean.title = title;
-  }
-  if (p.contextId !== undefined) {
-    if (!snap.contexts.some((c) => c.id === p.contextId && !c.archived)) {
-      return { error: `context 不存在或已归档: ${p.contextId}` };
-    }
-    clean.contextId = p.contextId;
   }
   if (p.estimatedMinutes !== undefined) {
     clean.estimatedMinutes =
@@ -710,11 +690,6 @@ export function restoreTask(
   const task = snap.tasks.find((t) => t.id === input.id);
   if (!task) return { error: `行动不存在: ${input.id}` };
   if (task.status !== 'deleted') return { error: `行动不在 Trash 中: ${input.id}` };
-  // DESIGN §5.3:context 已 archived → 恢复前需重新指定 context(经 updateTask),此处拒绝
-  const context = snap.contexts.find((c) => c.id === task.contextId);
-  if (!context || context.archived) {
-    return { error: `context 已归档,恢复前需先为行动重新指定 context: ${input.id}` };
-  }
   // INV-26.2:恢复不级联;父任务仍在 Trash 时脱离父,避免恢复出不可见的悬挂子任务。
   // 删除前已完成(completedAt 非空)的任务恢复为 done,不洗掉完成记录
   const patch: Partial<Omit<Task, 'id'>> =

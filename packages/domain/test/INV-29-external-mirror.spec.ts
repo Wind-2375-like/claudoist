@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { externalKey, isExternalTask, syncExternalTasks, updateTask } from '../src/index';
 import { applyToSnapshot } from '../src/index';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, snapshot, task } from './helpers';
+import { deps, snapshot, task } from './helpers';
 
 /** INV-29(D-25/M6c-3a):外部日历事件镜像为任务 —— 时间外部拥有,其余本地自治。 */
 const KEY = externalKey('google', 'me@x.com', 'cal1', 'ev1');
@@ -15,14 +15,13 @@ const ev = (over: Partial<Parameters<typeof syncExternalTasks>[2]['events'][numb
   durationMinutes: 60 as number | null,
   ...over,
 });
-const base = () => snapshot({ contexts: [ctx({ id: 'c1' })] });
+const base = () => snapshot({});
 const sync = (snap: ReturnType<typeof base>, events: ReturnType<typeof ev>[]) => {
   const r = syncExternalTasks(snap, deps(), {
     fromDate: '2026-08-10',
     toDate: '2026-08-16',
     events,
     fetchedCalendarIds: ['cal1'],
-    contextId: 'c1',
   });
   if (isUsecaseError(r)) throw new Error(r.error);
   return r;
@@ -47,7 +46,6 @@ describe('INV-29 外部镜像:同步为任务', () => {
 
   it('外部改时间 → 只更新时间字段;**不碰**本地已勾的完成状态', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({
           id: 'm1',
@@ -74,7 +72,6 @@ describe('INV-29 外部镜像:同步为任务', () => {
 
   it('外部删除 → 未完成镜像软删;已完成的保留作历史', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({
           id: 'a',
@@ -101,7 +98,6 @@ describe('INV-29 外部镜像:同步为任务', () => {
 
   it('拉取失败(本轮无成功日历)→ 一个都不退休(断网不该清空 Today)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({
           id: 'a',
@@ -116,7 +112,6 @@ describe('INV-29 外部镜像:同步为任务', () => {
       toDate: '2026-08-16',
       events: [],
       fetchedCalendarIds: [], // 全部失败
-      contextId: 'c1',
     });
     if (isUsecaseError(r)) throw new Error(r.error);
     expect(r.commands).toHaveLength(0);
@@ -124,7 +119,6 @@ describe('INV-29 外部镜像:同步为任务', () => {
 
   it('被退休的镜像再次出现 → **复活原任务**(保住标签/子任务,且不撞唯一索引)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({
           id: 'old',
@@ -147,7 +141,6 @@ describe('INV-29 外部镜像:同步为任务', () => {
 
   it('窗口外的镜像不被误退休', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({
           id: 'far',
@@ -164,7 +157,6 @@ describe('INV-29 外部镜像:同步为任务', () => {
 describe('INV-29 外部镜像:本地可改什么', () => {
   const mirror = () =>
     snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
         task({
           id: 'm1',

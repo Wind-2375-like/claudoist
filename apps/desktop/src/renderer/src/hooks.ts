@@ -78,10 +78,6 @@ export function useSearch(query: string) {
   });
 }
 
-export function useContexts() {
-  return useQuery({ queryKey: ['contexts'], queryFn: () => window.gtd.contextsList() });
-}
-
 export function useLabels() {
   return useQuery({ queryKey: ['labels'], queryFn: () => window.gtd.labelsList() });
 }

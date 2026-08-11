@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskVM } from '../../../shared/viewModels';
 import { TaskDetailModal } from '../TaskDetailModal';
-import {
-  useCalendarRange,
-  useContexts,
-  useGoogleCalendars,
-  useGoogleStatus,
-  useGoogleSync,
-} from '../hooks';
+import { useCalendarRange, useGoogleCalendars, useGoogleStatus, useGoogleSync } from '../hooks';
 import { completeWithFeedback, reopenTask, toast } from '../toast';
 
 /**
@@ -153,7 +147,6 @@ interface Composer {
 export function CalendarView(): React.JSX.Element {
   const [anchor, setAnchor] = useState(() => startOfWeek(todayIso()));
   const { data } = useCalendarRange(anchor, 7);
-  const contexts = useContexts();
   // 外部日历(D-25):事件已被镜像成任务,这里只负责"看这一周时拉一次"与取日历配色
   const googleStatus = useGoogleStatus();
   const connected = googleStatus.data?.connected === true;
@@ -236,14 +229,8 @@ export function CalendarView(): React.JSX.Element {
     durationMinutes: number | null,
     title: string,
   ): Promise<void> => {
-    const contextId = contexts.data?.[0]?.id;
-    if (contextId === undefined) {
-      toast('没有可用 context(先在任务卡里新建一个)');
-      return;
-    }
     const r = await window.gtd.taskCreate({
       title,
-      contextId,
       scheduledDate: date,
       ...(startTime !== null ? { startTime } : {}),
       ...(durationMinutes !== null ? { durationMinutes } : {}),

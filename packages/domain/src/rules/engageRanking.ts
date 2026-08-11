@@ -6,7 +6,7 @@ import { energyAllows } from './energy';
 export const ENGAGE_TOP_N = 7;
 
 /**
- * INV-20 的**全部**匹配项(不截断):指定 context 的 active Task,过滤
+ * INV-20 的**全部**匹配项(不截断):指定标签(D-30 前是 context)的 active Task,过滤
  * estimatedMinutes ≤ 可用分钟 ∧ energy ≤ 用户 energy(INV-02);priority 升序(1 = 最高,D-29)
  * 稳定排序(同优先级保持原序 = 创建序)。deadline 不参与排序。纯读。
  *
@@ -19,18 +19,24 @@ export const ENGAGE_TOP_N = 7;
  */
 export function engageMatches(
   snap: GtdSnapshot,
-  contextId: Id,
+  labelId: Id | null,
   availableMinutes: number,
   userEnergy: Energy,
   today: string,
 ): Task[] {
+  const tagged = new Set(
+    labelId === null
+      ? []
+      : snap.taskLabels.filter((tl) => tl.labelId === labelId).map((tl) => tl.taskId),
+  );
   const filtered = snap.tasks.filter(
     (t) =>
       t.status === 'active' &&
       // D-20:someday/reference 容器 = 孵化中,不参与择事
       t.bucket !== 'someday' &&
       t.bucket !== 'reference' &&
-      t.contextId === contextId &&
+      // D-30:情境已并入标签;labelId=null 表示不按标签过滤(全部候选)
+      (labelId === null || tagged.has(t.id)) &&
       t.scheduledDate !== today &&
       t.estimatedMinutes <= availableMinutes &&
       energyAllows(t.energy, userEnergy),
@@ -44,12 +50,12 @@ export function engageMatches(
 /** INV-20:择事候选 = {@link engageMatches} 的前 {@link ENGAGE_TOP_N} 条。 */
 export function engageCandidates(
   snap: GtdSnapshot,
-  contextId: Id,
+  labelId: Id | null,
   availableMinutes: number,
   userEnergy: Energy,
   today: string,
 ): Task[] {
-  return engageMatches(snap, contextId, availableMinutes, userEnergy, today).slice(0, ENGAGE_TOP_N);
+  return engageMatches(snap, labelId, availableMinutes, userEnergy, today).slice(0, ENGAGE_TOP_N);
 }
 
 /**

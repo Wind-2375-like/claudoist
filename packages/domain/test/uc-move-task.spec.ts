@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { applyToSnapshot, engageCandidates, isUsecaseError, moveTask } from '../src/index';
-import { ctx, deps, project, snapshot, task, TODAY } from './helpers';
+import { deps, project, snapshot, task, TODAY } from './helpers';
 
 /** D-20 容器移动:任务永远在可见容器里,理清 = 挪动。 */
 describe('D-20 moveTask:容器移动', () => {
   const base = snapshot({
-    contexts: [ctx({ id: 'c1', name: '@computer' })],
     projects: [project({ id: 'p1', outcome: '发布', deadline: '2026-09-01' })],
-    tasks: [task({ id: 't1', contextId: 'c1', bucket: 'inbox' })],
+    tasks: [task({ id: 't1', bucket: 'inbox' })],
   });
 
   it('挪入有 deadline 的项目:bucket/projectId 更新 + INV-10 静默继承', () => {
@@ -24,7 +23,7 @@ describe('D-20 moveTask:容器移动', () => {
   it('已有 deadline 的任务挪入项目 → 不覆盖', () => {
     const withDdl = snapshot({
       ...base,
-      tasks: [task({ id: 't1', contextId: 'c1', deadline: '2026-08-20' })],
+      tasks: [task({ id: 't1', deadline: '2026-08-20' })],
     });
     const r = moveTask(withDdl, deps(), { id: 't1', to: { bucket: 'project', projectId: 'p1' } });
     if (isUsecaseError(r)) throw new Error(r.error);
@@ -35,7 +34,7 @@ describe('D-20 moveTask:容器移动', () => {
   it('项目任务挪回 Inbox:projectId 清空;挪去 Someday 同理', () => {
     const inProject = snapshot({
       ...base,
-      tasks: [task({ id: 't1', contextId: 'c1', projectId: 'p1' })],
+      tasks: [task({ id: 't1', projectId: 'p1' })],
     });
     const r1 = moveTask(inProject, deps(), { id: 't1', to: { bucket: 'inbox' } });
     if (isUsecaseError(r1)) throw new Error(r1.error);
@@ -50,14 +49,13 @@ describe('D-20 moveTask:容器移动', () => {
 
   it('someday/reference 容器的任务不参与 engage(孵化中)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       tasks: [
-        task({ id: 'active', contextId: 'c1', bucket: 'inbox' }),
-        task({ id: 'incubating', contextId: 'c1', bucket: 'someday' }),
-        task({ id: 'ref', contextId: 'c1', bucket: 'reference' }),
+        task({ id: 'active', bucket: 'inbox' }),
+        task({ id: 'incubating', bucket: 'someday' }),
+        task({ id: 'ref', bucket: 'reference' }),
       ],
     });
-    expect(engageCandidates(snap, 'c1', 60, 'high', TODAY).map((t) => t.id)).toEqual(['active']);
+    expect(engageCandidates(snap, null, 60, 'high', TODAY).map((t) => t.id)).toEqual(['active']);
   });
 
   it('挪入不存在/已完成的项目 → 报错;非 active 任务不可挪', () => {

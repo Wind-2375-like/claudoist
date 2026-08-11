@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useContexts, useLabels, useProjects, useTaskDetail } from './hooks';
+import { useLabels, useProjects, useTaskDetail } from './hooks';
 import { TaskCard } from './TaskCard';
 import { TaskTree } from './TaskTree';
 import { completeTitle, completeWithFeedback, reopenTask, toast } from './toast';
@@ -8,7 +8,7 @@ import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
 /**
  * 任务详情弹窗(D-22 Todoist 式两栏,单击任务打开):
  * 左栏 = 内容(标题/完成圈/描述/子任务/评论);右栏 = 属性面板(位置/日期/截止/优先级/
- * 标签/提醒/context,逐项就地编辑,可 Move to)。子任务用 TaskRow(可右键、单击下钻)。
+ * 标签/提醒,逐项就地编辑,可 Move to)。子任务用 TaskRow(可右键、单击下钻)。
  */
 
 const pad = (n: number): string => String(n).padStart(2, '0');
@@ -32,7 +32,6 @@ export function TaskDetailModal({
   const currentId = stack[stack.length - 1]!.id;
   const { data, isLoading } = useTaskDetail(currentId);
   const projects = useProjects();
-  const contexts = useContexts();
   const labels = useLabels();
   const [addingSub, setAddingSub] = useState(false);
   const [comment, setComment] = useState('');
@@ -226,7 +225,6 @@ export function TaskDetailModal({
                       mode="add"
                       inline
                       parentTaskId={currentId}
-                      parentContextId={t.contextId}
                       onClose={() => setAddingSub(false)}
                     />
                   </div>
@@ -448,7 +446,7 @@ export function TaskDetailModal({
                       className={chip(t.labels.some((x) => x.id === l.id))}
                       onClick={() => void toggleLabel(l.id)}
                     >
-                      {l.name}
+                      @{l.name}
                     </button>
                   ))}
                   {(labels.data?.length ?? 0) === 0 && (
@@ -486,24 +484,6 @@ export function TaskDetailModal({
                     </button>
                   </div>
                   <span className="text-[11px] text-neutral-400">落库即存;响铃 M6 上线</span>
-                </div>,
-              )}
-              {attrRow(
-                'context',
-                '@context',
-                true,
-                <span>{t.contextName}</span>,
-                <div className="flex flex-wrap gap-1.5">
-                  {contexts.data?.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={chip(t.contextId === c.id)}
-                      onClick={() => void patch({ contextId: c.id })}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
                 </div>,
               )}
             </div>

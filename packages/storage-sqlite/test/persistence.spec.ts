@@ -17,15 +17,10 @@ describe('文件持久化', () => {
       ).toBe('wal');
       const commands: Command[] = [
         {
-          kind: 'createContext',
-          context: { id: 'c1', name: '@computer', sortOrder: 0, archived: false, createdAt: 't' },
-        },
-        {
           kind: 'createTask',
           task: {
             id: 't1',
             title: '持久化验证',
-            contextId: 'c1',
             estimatedMinutes: 15,
             energy: 'medium',
             priority: 3,

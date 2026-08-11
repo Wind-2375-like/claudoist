@@ -23,7 +23,6 @@ export function evalFilter(snap: GtdSnapshot, query: FilterQuery): Task[] {
   const text = query.textQuery?.trim().toLowerCase() ?? '';
   return snap.tasks.filter((t) => {
     if (t.status !== 'active') return false;
-    if (query.contextId !== undefined && t.contextId !== query.contextId) return false;
     if (query.labelIds !== undefined && query.labelIds.length > 0) {
       const all = query.labelIds.every((lid) =>
         snap.taskLabels.some((tl) => tl.taskId === t.id && tl.labelId === lid),

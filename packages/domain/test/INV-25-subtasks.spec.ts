@@ -4,7 +4,7 @@ import { taskDepth, descendantTaskIds } from '../src/rules/subtasks';
 import { applyToSnapshot } from '../src/index';
 import type { GtdSnapshot } from '../src/index';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, project, snapshot, task } from './helpers';
+import { deps, project, snapshot, task } from './helpers';
 
 /**
  * INV-25(D-21):子任务深度 ≤5,容器与根一致、随根移动;
@@ -12,11 +12,11 @@ import { ctx, deps, project, snapshot, task } from './helpers';
  */
 describe('INV-25 子任务:深度、继承、随动', () => {
   const chain = (n: number): GtdSnapshot => {
-    const tasks = [task({ id: 't1', contextId: 'c1' })];
+    const tasks = [task({ id: 't1' })];
     for (let i = 2; i <= n; i++) {
-      tasks.push(task({ id: `t${i}`, contextId: 'c1', parentTaskId: `t${i - 1}` }));
+      tasks.push(task({ id: `t${i}`, parentTaskId: `t${i - 1}` }));
     }
-    return snapshot({ contexts: [ctx({ id: 'c1' })], tasks });
+    return snapshot({ tasks });
   };
 
   it('taskDepth:根=1,链式计数;防悬挂', () => {
@@ -36,9 +36,8 @@ describe('INV-25 子任务:深度、继承、随动', () => {
 
   it('子任务继承父的 bucket/projectId/contextId', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' }), ctx({ id: 'c2' })],
       projects: [project({ id: 'p1', deadline: null })],
-      tasks: [task({ id: 't1', contextId: 'c2', projectId: 'p1' })],
+      tasks: [task({ id: 't1', projectId: 'p1' })],
     });
     const r = addSubtask(snap, deps(), { parentTaskId: 't1', title: '子' });
     if (isUsecaseError(r)) throw new Error(r.error);
@@ -47,17 +46,15 @@ describe('INV-25 子任务:深度、继承、随动', () => {
     expect(sub.parentTaskId).toBe('t1');
     expect(sub.bucket).toBe('project');
     expect(sub.projectId).toBe('p1');
-    expect(sub.contextId).toBe('c2');
   });
 
   it('移动根任务 = 整棵子树随动;挪入有 DDL 项目时无 DDL 成员静默继承(INV-10 move 版)', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
       projects: [project({ id: 'p1', deadline: '2026-09-01' })],
       tasks: [
-        task({ id: 't1', contextId: 'c1' }),
-        task({ id: 't2', contextId: 'c1', parentTaskId: 't1' }),
-        task({ id: 't3', contextId: 'c1', parentTaskId: 't2', deadline: '2026-08-20' }),
+        task({ id: 't1' }),
+        task({ id: 't2', parentTaskId: 't1' }),
+        task({ id: 't3', parentTaskId: 't2', deadline: '2026-08-20' }),
       ],
     });
     expect(descendantTaskIds(snap, 't1')).toEqual(['t2', 't3']);
@@ -89,8 +86,7 @@ describe('INV-25 子任务:深度、继承、随动', () => {
 
   it('父任务不存在 / 已删除 → 报错', () => {
     const snap = snapshot({
-      contexts: [ctx({ id: 'c1' })],
-      tasks: [task({ id: 'td', contextId: 'c1', status: 'deleted', deletedAt: 'T' })],
+      tasks: [task({ id: 'td', status: 'deleted', deletedAt: 'T' })],
     });
     expect('error' in addSubtask(snap, deps(), { parentTaskId: 'ghost', title: 'x' })).toBe(true);
     expect('error' in addSubtask(snap, deps(), { parentTaskId: 'td', title: 'x' })).toBe(true);
