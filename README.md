@@ -36,7 +36,7 @@ pnpm dist           # 构建并打包未签名 dmg(apps/desktop/release/)
 ```bash
 pnpm --silent cli help                                  # 全部命令
 pnpm --silent cli capture "一个想法" "另一个想法"          # 零判断捕捉进 Inbox
-pnpm --silent cli add 写周报 --date=today --deadline=tomorrow --priority=1
+pnpm --silent cli add 写周报 --date=today --deadline=tomorrow --priority=5
 pnpm --silent cli add "写 release notes" --parent=<任务>  # 建子任务(≤5 层,继承父的位置)
 pnpm --silent cli comment <任务> "记得配截图"             # 评论;show 显示子任务树+评论
 pnpm --silent cli list inbox --json                     # JSON 输出(含 id)

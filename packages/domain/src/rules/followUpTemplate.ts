@@ -20,7 +20,7 @@ export function buildFollowUpTask(
     title: `Follow up with ${w.delegatedTo} re: ${w.description}`,
     estimatedMinutes: 5,
     energy: 'low',
-    priority: 2, // 「高」(D-29 翻转后)
+    priority: 4, // 「高」(INV-01:5 = 最高)
     projectId: w.projectId,
     deadline: null,
     status: 'active',

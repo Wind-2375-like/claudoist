@@ -14,7 +14,7 @@ import type { UsecaseResult } from './types';
 /**
  * FilterQuery 解释器(纯读,作用于 active Task):
  * - energyMax:energyRank(task) ≤ energyRank(max)(INV-02 序;未知值按 medium)
- * - priorityMax:task.priority ≤ max(INV-01/D-29:1 = 最高,数值小 = 更高;不重编号)
+ * - priorityMin:task.priority ≥ min(INV-01:5 = 最高,数值大 = 更高;不重编号)
  * - dueOnOrBefore:有 deadline 且字典序 ≤(INV-03;无 deadline 不命中)
  * - textQuery:title 大小写不敏感包含
  * - labelIds:**全含**(每个给定 label 都已指派)
@@ -33,7 +33,7 @@ export function evalFilter(snap: GtdSnapshot, query: FilterQuery): Task[] {
       return false;
     }
     if (query.maxMinutes !== undefined && t.estimatedMinutes > query.maxMinutes) return false;
-    if (query.priorityMax !== undefined && t.priority > query.priorityMax) return false;
+    if (query.priorityMin !== undefined && t.priority < query.priorityMin) return false;
     if (query.dueOnOrBefore !== undefined) {
       if (t.deadline === null || t.deadline > query.dueOnOrBefore) return false;
     }
@@ -52,10 +52,10 @@ function validateFilterQuery(q: FilterQuery): string | null {
     return `无效 energyMax: ${q.energyMax}`;
   }
   if (
-    q.priorityMax !== undefined &&
-    (!Number.isInteger(q.priorityMax) || q.priorityMax < 1 || q.priorityMax > 5)
+    q.priorityMin !== undefined &&
+    (!Number.isInteger(q.priorityMin) || q.priorityMin < 1 || q.priorityMin > 5)
   ) {
-    return `无效 priorityMax: ${q.priorityMax}(须为 1–5 整数)`;
+    return `无效 priorityMin: ${q.priorityMin}(须为 1–5 整数)`;
   }
   if (q.maxMinutes !== undefined && (!Number.isInteger(q.maxMinutes) || q.maxMinutes < 1)) {
     return `无效 maxMinutes: ${q.maxMinutes}(须为 ≥1 整数)`;

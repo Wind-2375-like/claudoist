@@ -8,35 +8,36 @@ describe('INV-20 engage 过滤、排序、top-7、calendar-first', () => {
     const got = engageCandidates(snapshot({ tasks }), null, 60, 'high', TODAY);
     expect(got).toHaveLength(7);
     const priorities = got.map((t) => t.priority);
-    expect([...priorities].sort((a, b) => a - b)).toEqual(priorities); // 升序(1 = 最高)
-    // 稳定排序:同优先级内保持创建序(t0 在 t5 前、t1 在 t6 前)
+    expect([...priorities].sort((a, b) => b - a)).toEqual(priorities); // 降序(5 = 最高)
+    // 稳定排序:同优先级内保持创建序(t1 在 t6 前、t2 在 t7 前)
     const ids = got.map((t) => t.id);
-    expect(ids.indexOf('t0')).toBeLessThan(ids.indexOf('t5'));
     expect(ids.indexOf('t1')).toBeLessThan(ids.indexOf('t6'));
-    // 被裁掉的是最不重要的那条(D-29 后 5 = 最低)
-    expect(ids).not.toContain('t4');
+    expect(ids.indexOf('t2')).toBeLessThan(ids.indexOf('t7'));
+    // 同为最低(1)时先创建的 t0 保留,后创建的 t5 被裁
+    expect(ids).toContain('t0');
+    expect(ids).not.toContain('t5');
   });
 
   it('30 分钟可用时 45 分钟任务被过滤;deadline 不影响排序', () => {
     const snap = snapshot({
       tasks: [
-        task({ id: 'big', estimatedMinutes: 45, priority: 1 }),
+        task({ id: 'big', estimatedMinutes: 45, priority: 5 }),
         task({
           id: 'urgent-ddl',
           estimatedMinutes: 10,
-          priority: 4,
+          priority: 2,
           deadline: '2026-08-09',
         }),
         task({
           id: 'high-pri',
           estimatedMinutes: 10,
-          priority: 2,
+          priority: 4,
           deadline: null,
         }),
       ],
     });
     const got = engageCandidates(snap, null, 30, 'high', TODAY).map((t) => t.id);
-    expect(got).toEqual(['high-pri', 'urgent-ddl']); // priority 升序(1 最高);DDL 不参与
+    expect(got).toEqual(['high-pri', 'urgent-ddl']); // priority 降序(5 最高);DDL 不参与
   });
 
   it('energy 过滤方向 + 未带该标签 / 非 active 排除(D-30:按标签而非 context)', () => {
@@ -79,8 +80,8 @@ describe('INV-20 engage 过滤、排序、top-7、calendar-first', () => {
   it('INV-20.2 今天已排期的任务只出现在 calendar-first,不重复进候选', () => {
     const snap = snapshot({
       tasks: [
-        task({ id: 'committed', priority: 1, scheduledDate: TODAY }),
-        task({ id: 'yesterday', priority: 2, scheduledDate: '2026-08-07' }),
+        task({ id: 'committed', priority: 5, scheduledDate: TODAY }),
+        task({ id: 'yesterday', priority: 4, scheduledDate: '2026-08-07' }),
         task({ id: 'free', priority: 3, scheduledDate: null }),
       ],
     });

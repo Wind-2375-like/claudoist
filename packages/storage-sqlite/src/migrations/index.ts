@@ -340,4 +340,24 @@ ALTER TABLE tasks DROP COLUMN context_id;
 DROP TABLE contexts;
 `,
   },
+  {
+    version: 12,
+    name: 'priority-flip-revert',
+    // D-31:撤回 D-29(v10)的方向翻转,回到 1 = 最低、5 = 最高。
+    //
+    // 撤回的理由是比较的可读性:过滤器语言要支持 `p >= 4`(高及以上),而在 1 = 最高
+    // 之下"大于"到底指"更重要"还是"数值更大",两种读法结论相反;5 = 最高时读法唯一。
+    // 代价是与 Todoist 的 pN 相反 —— 这正是 INV-01 标 ⚠SP 的原因。
+    //
+    // v10 已在存量库上跑过,所以只能再翻一次而不是删掉 v10(迁移只允许追加)。
+    // 6 - p 是对合运算,连翻两次恰好回到原值;3 始终不动。
+    sql: `
+UPDATE tasks SET priority = 6 - priority;
+UPDATE filters
+   SET query_json = json_remove(
+         json_set(query_json, '$.priorityMin', 6 - json_extract(query_json, '$.priorityMax')),
+         '$.priorityMax')
+ WHERE json_extract(query_json, '$.priorityMax') IS NOT NULL;
+`,
+  },
 ];

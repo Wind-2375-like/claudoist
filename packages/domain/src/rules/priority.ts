@@ -1,9 +1,10 @@
 /**
- * INV-01 ⚠SP:**1 = 最高,5 = 最低**(2026-08-11 D-29 翻转,与 Todoist 的 p1–p4 同向);
- * 任何地方不重编号,展示用文字(D-14)。
+ * INV-01 ⚠SP:**1 = 最低,5 = 最高**;任何地方不重编号,展示用文字(D-14)。
  *
- * 翻转的理由是"一个应用里不允许出现两套方向相反的数字":过滤器语言要用 Todoist 的
- * `p1 = 最高`,若存储仍是 5 = 最高,则 `p1` 与 `--priority=1` 恰好相反,必然出事。
+ * 2026-08-11 曾按 D-29 翻转成 1 = 最高(为对齐 Todoist 的 pN),当天即按 D-31 撤回:
+ * **比较会变得别扭** —— `p >= 4` 在 1=最高 下到底指"比 p4 更重要"还是"数值不小于 4",
+ * 两种读法结论相反。保持 5 = 最高后,过滤器里的 `p>=4` = 高及以上,读法唯一。
+ * 代价是与 Todoist 的 `p1 = 最高` 相反(⚠SP 的由来),粘贴 Todoist 过滤器时须留意。
  */
 
 export const PRIORITY_MIN = 1;
@@ -11,15 +12,15 @@ export const PRIORITY_MAX = 5;
 export const PRIORITY_DEFAULT = 3;
 
 export const PRIORITY_LABELS: Record<number, string> = {
-  1: '最高',
-  2: '高',
+  5: '最高',
+  4: '高',
   3: '中',
-  4: '低',
-  5: '最低',
+  2: '低',
+  1: '最低',
 };
 
 /** 展示顺序(最高 → 最低):UI 的优先级选择器一律由此派生,不许各写一份。 */
-export const PRIORITY_CHOICES: { value: number; label: string }[] = [1, 2, 3, 4, 5].map((v) => ({
+export const PRIORITY_CHOICES: { value: number; label: string }[] = [5, 4, 3, 2, 1].map((v) => ({
   value: v,
   label: PRIORITY_LABELS[v]!,
 }));

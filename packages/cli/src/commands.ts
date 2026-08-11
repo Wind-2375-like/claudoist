@@ -988,7 +988,7 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
   add <标题> [--parent=父任务(建子任务,≤5 层)] [--desc=] [--project=]
              [--date=today|tomorrow|YYYY-MM-DD] [--deadline=]
              [--time=HH:MM(日历 block,D-23)] [--duration=分钟] [--tz=floating|IANA]
-             [--priority=1..5(1最高,5最低)] [--labels=a,b] [--remind=YYYY-MM-DDTHH:MM]
+             [--priority=1..5(1最低,5最高)] [--labels=a,b] [--remind=YYYY-MM-DDTHH:MM]
              [--minutes=] [--energy=low|medium|high]
   capture <想法> [<想法>...]        逐条捕捉进 Inbox(零判断,INV-16)
   list [inbox|someday|reference|project|completed|all]   completed 可加 --limit=N

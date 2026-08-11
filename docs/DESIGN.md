@@ -252,7 +252,7 @@ CREATE TABLE tasks (                                    -- 扁平表,取代 CLI 
   estimated_minutes INTEGER NOT NULL DEFAULT 15,
   energy TEXT NOT NULL DEFAULT 'medium' CHECK (energy IN ('low','medium','high')),
   priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
-                                                        -- 1=最高 5=最低(D-29)。任何界面
+                                                        -- 1=最低 5=最高(GTD 语义)。任何界面
                                                         -- 都不重编号:选择器显示文字
                                                         -- 最高/高/中/低/最低(见 INVARIANTS.md)
   project_id TEXT REFERENCES projects(id),
@@ -400,7 +400,7 @@ deadline 继承语义是 **copy-on-create/move**(INV-10/INV-12);CLI 没有任何
 | `list_labels` | — | 标签 + 活跃任务计数(D-30) |
 | `list_labels` / `list_filters` | — | labels / 保存的 filters |
 | `search` | `{ query, kinds? }` | 跨实体命中(tasks、projects、inbox、someday、reference、done、calendar、waiting) |
-| `get_engage_recommendations` | `{ labelName?, availableMinutes, energy }` | top-7 候选(min≤time ∧ energy≤user,priority **升序**,1=最高 D-29)+ 今日 calendar —— **只读;完成是独立写操作** |
+| `get_engage_recommendations` | `{ labelName?, availableMinutes, energy }` | top-7 候选(min≤time ∧ energy≤user,priority 降序,5=最高)+ 今日 calendar —— **只读;完成是独立写操作** |
 | `get_status_summary` | — | 总览:各区计数 + 摘要(孤儿工具已随 D-21 删除) |
 
 **写工具(权限门控;全部返回 `consequences` 后果字段):**
@@ -423,7 +423,7 @@ deadline 继承语义是 **copy-on-create/move**(INV-10/INV-12);CLI 没有任何
 | `complete_project` | `{ id }` | 标记完成(不改变其任务状态) | `activeTaskCount`(>0 时 agent 应先向用户确认) |
 | `create_waiting_for` | `{ description, delegatedTo?, projectId? }` | 新委派 | — |
 | `resolve_waiting_for` | `{ id }` | 标记等待项已解决(`resolvedAt=now`);**不触发任何追问**(INV-14 边界),domain usecase 不附带后果 | (handler 如需 `projectHasRemainingActivity` 以只读规则补算) |
-| `create_follow_up` | `{ waitingForId }` | 对**未解决**的等待项按 INV-23 模板创建催办任务(`Follow up with X re: Y`、有 `phone` 标签则带上、5 分钟、low、priority 2(高)、同项目);**不改变** `resolved` 状态(催办对象正是还没回音的委派,见 [./INVARIANTS.md](./INVARIANTS.md) INV-23) | `followUpCreated` |
+| `create_follow_up` | `{ waitingForId }` | 对**未解决**的等待项按 INV-23 模板创建催办任务(`Follow up with X re: Y`、有 `phone` 标签则带上、5 分钟、low、priority 4(高)、同项目);**不改变** `resolved` 状态(催办对象正是还没回音的委派,见 [./INVARIANTS.md](./INVARIANTS.md) INV-23) | `followUpCreated` |
 | `create_calendar_item` | `{ title, date, time?, projectId? }` | hard-landscape 条目 | — |
 | `complete_calendar_item` | `{ id }` | 完成 | 同 `complete_task` 的追问 payload |
 | ~~move_to_list~~ / ~~activate_someday~~ | — | 已并入 `move_task`(D-20/D-21 容器模型:归档/激活都是 bucket 移动) | — |
@@ -469,7 +469,7 @@ main 的 `canUseTool: async (toolName, input) => …` 阻塞在 promise 上:推 
 `options.systemPrompt` 使用自定义 prompt,两部分:
 
 1. **固化的易错不变量**(常量文本,与 [./INVARIANTS.md](./INVARIANTS.md) 同源维护):
-   - priority 语义 1=最高、5=最低(D-29),永不重编号;
+   - priority 语义 1=最低、5=最高,永不重编号;
    - engage 能量过滤方向:任务 energy ≤ 用户 energy(精力好的人可做轻松任务,反之不行);
    - calendar 条目与 waiting-for 都算项目的 active action(完成后果提示必须计入);
    - someday 激活必须回 inbox 重新 clarify,绝不直达 tasks;
@@ -544,7 +544,7 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
 
 业务规则细节(决策树、路由、级联、排序公式)一律以 [./INVARIANTS.md](./INVARIANTS.md) 为准,本节只描述 UI 结构与交互。
 
-- **Add task(全局 "+",⌘N;2026-08-08 M5 反馈定案为 Todoist 式单卡)**:一张卡片 —— Task name + Description 两行输入,下方属性 chip 行:**Date**(Today / Tomorrow / 自选 → `scheduledDate`)、**Deadline**、**Priority**(文字 最高/高/中/低/最低,存储 1–5,1=最高,不重编号)、**Labels**(多选)、**Reminders**(datetime,落 `reminders` 表;响铃调度 M6),底部位置选择器(**Inbox ▾** / 任意项目)+ Cancel / Add task。**语义**:位置=Inbox 且未 specify 任何属性 → 纯捕捉(`createInboxItem`,零摩擦);specify 了任意属性或选了项目 → 直接建 Task(相当于已理清)。attachment 并入 M10;location 不做(决策日志)。
+- **Add task(全局 "+",⌘N;2026-08-08 M5 反馈定案为 Todoist 式单卡)**:一张卡片 —— Task name + Description 两行输入,下方属性 chip 行:**Date**(Today / Tomorrow / 自选 → `scheduledDate`)、**Deadline**、**Priority**(文字 最高/高/中/低/最低,存储 1–5,1=最低,不重编号)、**Labels**(多选)、**Reminders**(datetime,落 `reminders` 表;响铃调度 M6),底部位置选择器(**Inbox ▾** / 任意项目)+ Cancel / Add task。**语义**:位置=Inbox 且未 specify 任何属性 → 纯捕捉(`createInboxItem`,零摩擦);specify 了任意属性或选了项目 → 直接建 Task(相当于已理清)。attachment 并入 M10;location 不做(决策日志)。
 - **Search(⌘K,M7a;INV-32)**:自绘命令面板(未引 `cmdk` —— 只需输入框 + 列表 + ↑↓/↵/Esc,一个依赖换不来什么),数据源 `gtd:search` → domain `searchAll`。侧栏 Search 项与 ⌘K 等价。
   - **覆盖**:任务(标题 + 描述,含子任务、someday/reference、Upstream 镜像、已完成归档)与项目。容器模型下这些都是带 `bucket` 的 Task,故同属一组,由 VM 按容器给出二级说明(`Inbox · @home`、`发布 1.0 · @computer`、`已完成 2026-08-11`)。
   - **不列**:软删除项(无恢复入口,点了无处可去,INV-32.3)、等待项(桌面无该视图;CLI `search` 会列)。

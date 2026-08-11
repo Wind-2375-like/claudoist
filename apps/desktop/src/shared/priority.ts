@@ -5,14 +5,14 @@
  * 放在 shared/ 而不是各组件里,是因为 D-29 翻转时发现 TaskCard 与 TaskDetailModal
  * **各抄了一份**:两份重复的方向常量,正是翻转最容易只改一处的地方。
  *
- * INV-01/D-29:**1 = 最高,5 = 最低**(与 Todoist 的 pN 同向);默认 3(中)。
+ * INV-01:**1 = 最低,5 = 最高**(D-29 曾翻转,当天按 D-31 撤回);默认 3(中)。
  */
 export const PRIORITY_CHOICES: { value: number; label: string }[] = [
-  { value: 1, label: '最高' },
-  { value: 2, label: '高' },
+  { value: 5, label: '最高' },
+  { value: 4, label: '高' },
   { value: 3, label: '中' },
-  { value: 4, label: '低' },
-  { value: 5, label: '最低' },
+  { value: 2, label: '低' },
+  { value: 1, label: '最低' },
 ];
 
 export const PRIORITY_DEFAULT = 3;

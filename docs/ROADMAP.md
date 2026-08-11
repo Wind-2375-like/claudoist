@@ -503,7 +503,7 @@
 - 认证引导(自用路线,DESIGN.md §6.1):首启检测本机 Claude Code 登录可用性;不可用时引导用户在终端完成 `claude` 登录后重试。备用路径:Settings 可录入 `ANTHROPIC_API_KEY` → `safeStorage` 加密存 `userData/secrets.bin`,经 `options.env` 注入(优先于主路径);`settings:apiKey.status` 只返回是否存在,绝不返回 key。
 - `CLAUDE_CONFIG_DIR` = `userData/claude`;`settingSources` 排除 `'user'`(`~/.claude/settings.json` 不得影响应用行为)。
 - 只读工具入 `allowedTools`:`mcp__gtd__list_inbox`、`list_tasks`、`get_task`、`list_projects`、`get_project`、`list_calendar`、`list_waiting_for`、`list_contexts`、`list_labels`、`list_filters`、`search`、`get_engage_recommendations`、`list_orphan_projects`、`get_status_summary`(`createSdkMcpServer({ name:'gtd' })`,handler 直连 main 的同一 `GtdStore`)。
-- System prompt 固化易错不变量(priority 1=最高 5=最低,D-29;energy 过滤方向 任务 ≤ 用户;calendar/waiting 计入项目 active action;someday 激活必回 inbox)+ 每次会话注入轻量状态快照(日期、contexts 及计数、inbox 数、孤儿项目数)。
+- System prompt 固化易错不变量(priority 1=最低 5=最高;energy 过滤方向 任务 ≤ 用户;calendar/waiting 计入项目 active action;someday 激活必回 inbox)+ 每次会话注入轻量状态快照(日期、contexts 及计数、inbox 数、孤儿项目数)。
 - 护栏:每次 `query()` 带 `maxTurns` + `maxBudgetUsd`(settings 可配);`agent:interrupt` 接 AbortController;应用退出清理子进程。
 - 流式渲染:`stream_event` 状态机(text_delta / tool_use chip + input_json_delta / tool_result 折叠附着)。
 
