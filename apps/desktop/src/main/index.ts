@@ -17,8 +17,8 @@ if (!app.isPackaged) {
 const spikeArg = process.argv.find((a) => a.startsWith('--spike-test='));
 const dumpArg = process.argv.find((a) => a.startsWith('--dump='));
 const screenshotArg = process.argv.find((a) => a.startsWith('--screenshot='));
-// 截图前先点一个选择器(拍弹窗/面板用,如 Focus、周回顾向导、⌘K)
-const screenshotClickArg = process.argv.find((a) => a.startsWith('--screenshot-click='));
+// 截图前依次点这些选择器(可重复传;拍需要先导航再展开的界面)
+const screenshotClickArgs = process.argv.filter((a) => a.startsWith('--screenshot-click='));
 // 点开之后往当前焦点输入框敲一段文字(命令面板/表单类界面)
 const screenshotTypeArg = process.argv.find((a) => a.startsWith('--screenshot-type='));
 
@@ -158,8 +158,8 @@ if (spikeArg) {
       win.webContents.once('did-finish-load', () => {
         setTimeout(() => {
           void (async () => {
-            if (screenshotClickArg) {
-              const sel = screenshotClickArg.slice('--screenshot-click='.length);
+            for (const arg of screenshotClickArgs) {
+              const sel = arg.slice('--screenshot-click='.length);
               const hit: boolean = await win.webContents.executeJavaScript(
                 `!!document.querySelector(${JSON.stringify(sel)})?.click() || !!document.querySelector(${JSON.stringify(sel)})`,
               );

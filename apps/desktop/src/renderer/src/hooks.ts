@@ -82,6 +82,21 @@ export function useLabels() {
   return useQuery({ queryKey: ['labels'], queryFn: () => window.gtd.labelsList() });
 }
 
+export function useFilters() {
+  return useQuery({ queryKey: ['filters'], queryFn: () => window.gtd.filtersList() });
+}
+
+/** 求值一条查询;空查询不请求。 */
+export function useFilterRun(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ['filterRun', q],
+    queryFn: () => window.gtd.filterRun(q),
+    enabled: q !== '',
+    placeholderData: (prev) => prev,
+  });
+}
+
 export function useBucket(kind: 'someday' | 'reference') {
   return useQuery({ queryKey: ['bucket', kind], queryFn: () => window.gtd.bucketList(kind) });
 }

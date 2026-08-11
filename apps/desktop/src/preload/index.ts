@@ -5,6 +5,8 @@ import type {
   GoogleStatusVM,
   AddSubtaskInputVM,
   BucketCountsVM,
+  FilterListItemVM,
+  FilterRunVM,
   LabelListItemVM,
   GtdChangedEvent,
   MoveTargetVM,
@@ -67,6 +69,21 @@ const gtdApi = {
   reminderDelete: (id: string): Promise<WriteResultVM> =>
     ipcRenderer.invoke('gtd:reminders.delete', { id }),
   labelsList: (): Promise<LabelListItemVM[]> => ipcRenderer.invoke('gtd:labels.list'),
+  filtersList: (): Promise<FilterListItemVM[]> => ipcRenderer.invoke('gtd:filters.list'),
+  filterRun: (query: string): Promise<FilterRunVM> =>
+    ipcRenderer.invoke('gtd:filters.run', { query }),
+  filterAdd: (name: string, query: string): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:filters.add', { name, query }),
+  filterUpdate: (id: string, patch: { name?: string; query?: string }): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:filters.update', { id, patch }),
+  filterDelete: (id: string): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:filters.delete', { id }),
+  labelAdd: (name: string): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:labels.add', { name }),
+  labelUpdate: (id: string, patch: { name?: string }): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:labels.update', { id, patch }),
+  labelDelete: (id: string): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:labels.delete', { id }),
   taskMove: (input: { id: string; to: MoveTargetVM }): Promise<WriteResultVM> =>
     ipcRenderer.invoke('gtd:tasks.move', input),
   taskReorder: (input: {

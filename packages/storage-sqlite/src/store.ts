@@ -120,14 +120,14 @@ const rowToFilter = (r: Row): SavedFilter => ({
   id: s(r['id']),
   name: s(r['name']),
   position: r['position'] as number,
-  query: JSON.parse(s(r['query_json'])) as SavedFilter['query'],
+  // D-32:该列自 v13 起存**查询原文**(列名沿用 query_json,改名要重建表,不值当)
+  query: s(r['query_json']),
 });
 
 /** 实体字段 → 列名/序列化(update patch 白名单即这些键)。 */
 type ColumnSpec = Record<string, { col: string; enc?: (v: unknown) => SQLInputValue }>;
 
 const encBool = (v: unknown): SQLInputValue => int(v as boolean);
-const encJson = (v: unknown): SQLInputValue => JSON.stringify(v);
 const id0 = (v: unknown): SQLInputValue => v as SQLInputValue;
 
 const COLS: Record<string, ColumnSpec> = {
@@ -188,7 +188,7 @@ const COLS: Record<string, ColumnSpec> = {
   filters: {
     name: { col: 'name' },
     position: { col: 'position' },
-    query: { col: 'query_json', enc: encJson },
+    query: { col: 'query_json' },
   },
   reminders: {
     taskId: { col: 'task_id' },
@@ -286,6 +286,8 @@ export class SqliteGtdStore implements GtdStore {
         return;
       case 'createLabel':
         return this.insert('labels', c.label as unknown as Record<string, unknown>);
+      case 'updateLabel':
+        return this.update('labels', c.id, c.patch as Record<string, unknown>);
       case 'deleteLabel':
         // 与参照实现一致:级联清除 task_labels
         this.db.prepare('DELETE FROM task_labels WHERE label_id = ?').run(c.id);

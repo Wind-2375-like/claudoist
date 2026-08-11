@@ -22,6 +22,7 @@ export * from './rules/calendarGrid';
 export * from './rules/dates';
 export * from './rules/externalMirror';
 export * from './rules/energy';
+export * from './rules/filterQuery';
 export * from './rules/priority';
 export * from './rules/projectHealth';
 export * from './rules/projectTree';

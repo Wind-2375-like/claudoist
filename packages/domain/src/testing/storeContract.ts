@@ -57,7 +57,7 @@ function batches(): Command[][] {
       { kind: 'createInboxItem', item: { id: 'i2', text: '想法B', createdAt: T0, position: 2 } },
       {
         kind: 'createFilter',
-        filter: { id: 'f1', name: 'low energy', position: 1, query: { energyMax: 'low' } },
+        filter: { id: 'f1', name: 'low energy', position: 1, query: 'energy: low' },
       },
     ],
     // 批2:项目(平面,D-21)+ 任务(含子任务)+ waiting + lists
@@ -209,7 +209,7 @@ function batches(): Command[][] {
       { kind: 'updateTask', id: 't1', patch: { status: 'done', completedAt: T0, priority: 4 } },
       { kind: 'updateProject', id: 'p2', patch: { status: 'complete', completedAt: T0 } },
       { kind: 'updateWaitingFor', id: 'w1', patch: { resolved: true, resolvedAt: T0 } },
-      { kind: 'updateFilter', id: 'f1', patch: { name: '改名', query: { maxMinutes: 15 } } },
+      { kind: 'updateFilter', id: 'f1', patch: { name: '改名', query: 'est: 15' } },
       { kind: 'deleteInboxItem', id: 'i2' },
       { kind: 'deleteListItem', id: 's1' },
       { kind: 'assignLabel', taskId: 't2', labelId: 'l1' }, // 重复指派 → 幂等

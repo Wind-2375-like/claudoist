@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Command, FilterQuery } from '@gtd/domain';
+import type { Command } from '@gtd/domain';
 import { openDb } from '../src/db';
 import { SqliteGtdStore } from '../src/store';
 
@@ -424,11 +424,14 @@ seedBucketTask('把博客迁到自建服务器', 'someday');
 seedBucketTask('GTD 五阶段:capture/clarify/organize/reflect/engage', 'reference');
 
 // 预置 filters(DESIGN §8)
-const filters: [string, FilterQuery][] = [
-  ['Low energy · <15 min', { energyMax: 'low', maxMinutes: 15 }],
-  ['Due this week', { dueOnOrBefore: day(7) }],
-  ['No project', { noProject: true }],
-  ['High priority next', { priorityMin: 4 }],
+// D-32/INV-33:存查询原文
+const filters: [string, string][] = [
+  ['Low energy · <15 min', 'energy: low & est: 15'],
+  ['Due this week', `deadline before: ${day(7)}`],
+  ['No project', 'no project'],
+  ['High priority next', 'p>=4'],
+  // Date/Deadline 分离后最有价值的一条:一周内到期却还没决定哪天做
+  ['该排期了', 'deadline before: +7 days & no date'],
 ];
 filters.forEach(([name, query], i) =>
   commands.push({ kind: 'createFilter', filter: { id: id(), name, position: i + 1, query } }),

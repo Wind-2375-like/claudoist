@@ -18,7 +18,9 @@ export function migrate(db: DatabaseSync): void {
         db.exec('COMMIT');
         continue;
       }
-      db.exec(m.sql);
+      if (m.sql !== '') db.exec(m.sql);
+      // 需要读值再算的迁移(如把结构化查询转写成查询原文)用 run;与 sql 同一事务
+      m.run?.(db);
       db.exec(`PRAGMA user_version = ${m.version}`);
       db.exec('COMMIT');
     } catch (err) {

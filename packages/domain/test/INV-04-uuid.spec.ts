@@ -29,7 +29,7 @@ describe('INV-04 所有 usecase 创建的实体 id 均来自 deps.idGen 且互�
     ids.push(ok(createFollowUp(snap, d, { waitingForId: 'w1' })).followUpCreated);
     ids.push(ok(moveToList(snap, d, { text: '以后学琴', kind: 'someday' })).listItemId);
     ids.push(ok(createLabel(snap, d, { name: 'urgent' })).labelId);
-    ids.push(ok(createFilter(snap, d, { name: '快事', query: { maxMinutes: 10 } })).filterId);
+    ids.push(ok(createFilter(snap, d, { name: '快事', query: 'est: 10' })).filterId);
 
     expect(ids).toHaveLength(9);
     // 全部来自注入的 idGen(seqIdGen 前缀),而非任何内置生成器

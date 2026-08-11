@@ -139,7 +139,7 @@ CLI 中三个裸字符串列表;桌面版统一为对象(§5 D-04)。
 
 1. Label 是**唯一**的自由多值标签维度(D-30 起 context 已并入),不参与本文档任何不变量的计算。界面与过滤器语法写作 `@名字`,存储不含 `@`。
 2. `@waiting_for` 是由 WaitingFor 表支撑的**虚拟视图**,不得扁平化为普通 label——否则丢失 delegatedTo / since-date / resolve / follow-up 流程。
-3. Filter 是保存的查询,其解释器对 energy / priority 的比较必须复用 INV-01 / INV-02 的语义。
+3. Filter 是保存的查询,**存查询原文**(D-32);语言与解释器见 INV-33,其中 energy / priority 的比较复用 INV-01 / INV-02 的语义。
 
 ---
 
@@ -439,6 +439,23 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 
 **为什么**:我们存的一直是 naive 本地时刻 —— 语义上就是浮动时间;但此前推送时钉上了本机时区,等于把浮动时刻偷偷变成绝对时刻,用户跨时区后应用与 Google 会对不上。把这件事显式化(默认仍是浮动,想钉死再选时区)既保持既有语义,又让跨时区可控。
 **验收**:默认新建的带时刻任务显示「浮动时间」;推到 Google 后在另一时区打开应用,墙上时间不变;选定时区的任务跨时区会换算;只改时区会触发一次重推;镜像任务的时区改不动。
+
+#### INV-33 过滤器查询语言(M7b,2026-08-11)
+
+**规则**:保存的 filter 存**查询原文**(D-32),由 `rules/filterQuery.ts` 解析求值,是 Filters 视图、CLI `filter`、agent 的**唯一**过滤口径。
+
+1. **token**:`@标签` · `#项目`(带空格加引号)· `pN` / `p>=N` · 计划日(`today`/`tomorrow`/`yesterday`/`overdue`/`no date`/`next N days`/`due:`/`date:` 族,含 `a..b` 闭区间)· 截止日(`deadline:` 族 / `deadline overdue` / `no deadline`)· `created:` / `completed:` · `energy:` / `est:`(比较符或冒号,冒号 = `≤` 的容量语义,与 INV-02 同向)· `bucket:` 与裸写 `inbox`/`someday`/`reference` · `status:`(含 `any`、逗号列举)与裸写 `done` · `search:` / `title:` / `desc:` · 标志位 `no labels`/`no project`/`no time`/`no description`/`subtask`/`mirrored`。
+2. **两个日期字段互不混用**(照搬 Todoist 的 Date/Deadline 分离):**裸关键字与 `due:`/`date:` 族一律指计划日**;截止日**只能**经 `deadline:` 族访问,没有任何裸关键字会落到它上面。因此"这周要做的"(`next 7 days`)与"这周之前必须做完的"(`deadline before: +7 days`)是两条不同的查询,GTD 检视最有价值的一条恰是二者的组合:`deadline before: +7 days & no date`。
+3. **优先级方向**:`p5` = 最高(INV-01 ⚠SP),与 Todoist 的 `p1` **相反**;正因为同向于存储,`p>=4`(高及以上)才只有一种读法。粘贴 Todoist 过滤器时优先级会反。
+4. **布尔**:`!` > `&` > `|`,括号分组;**不支持隐式 AND**(空格),否则 `no date` 会被拆成 `no & date`。
+5. **顶层逗号 = 多段并列**(视图指令,不是"或"):每段独立求值、独立呈现,括号内不许出现逗号。
+6. **隐式状态作用域**:整段没有 status token → 只看 `active`;有 status token 但没提 `deleted` → 始终排除软删。否则 `done | p5` 会把回收站里的东西一并捞出来(与 INV-32.3 同源)。
+7. **null 日期**:只有 `no date` / `no deadline` 为真,`on`/`before`/`after`/`between` 一律 false —— 故 `!no date` 与 `!(due before: x)` 不等价。
+8. **未知名字分两个时机**:保存时解析失败**拒绝保存**(错误带位置);已保存的查询引用到不存在的标签/项目时**不报错**,降级为空结果 + 提示("该条件恒不成立")—— 删一个标签不该把存好的过滤器变成错误页。
+9. **单一口径**:桌面、CLI、agent 都走 `runFilterQuery`,谁都不许自己再过滤一遍(同 INV-20.6 / INV-32.6)。`search:` 复用 INV-32 的匹配函数。
+
+**为什么**:结构化勾选框表达不了 `|`、`!`、括号,也表达不了"一周内到期却还没排期";存原文而非 AST 是因为 AST 是派生物,语法一演进就得写数据迁移。
+**验收**:`@a & !@b`、`(p5|p4) & today`、`deadline before: +7 days & no date` 结果正确;`todayy` 报错并指出位置且提示 `search: todayy`;`(today, tomorrow)` 报"括号内不能有逗号";`done` 只出已完成;`status: active,done` 不含软删;未知标签 → 空结果 + 提示而非报错。
 
 #### INV-32 搜索口径(M7a,2026-08-11)
 
@@ -791,6 +808,7 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-18 | 理清 = 强制逐题问答(§4.3 交互形态) | **理清双路径(2026-08-08 用户定案)**:① 手动 specify —— Inbox 条目展开为 Todoist 式卡片,直接补属性转为 Task,或转为 Project,或归档 Someday/Reference/Trash;② 交给 Claude 对话理清(M8/M9 经 MCP 工具)。分步问答状态机**保留为内部机制**(agent 驱动与 Weekly Review 内嵌用),UI 无独立入口 | 逐题问答对日常理清过重;§4.3 的**去向语义**(六种去向、deadline 继承、逐项一次事务 = 一次确认)全部保留,变的只是交互载体 |
 | D-19 | Action 无"计划哪天做"概念(日程只能是 CalendarItem) | Task 新增 `scheduledDate`(与 deadline 并存)。(后续 D-23/M6a:CalendarItem 并入 Task,时间即 `startTime`) | Todoist 式 today/tomorrow 快速安排是用户核心工作流;时刻与最迟完成日的语义区分保留(§2.5) |
 | D-30 | context 是必填单值实体,与 label 并存 | **context 并入 label(2026-08-11 用户定案,INV-24 退役)**:与 Todoist 一致只保留一种自由多值标签;label 名不含 `@`(`@` 是语法/显示前缀)。迁移 v11 把 context 变同名标签并补关联,**撞名直接合并**;tasks.context_id 与 contexts 表删除。engage 的"选情境"变成"选标签"(可不选 = 全部);捕捉不再有任何前置。语义损失:情境从必填降级为可选标签 | ✅ 已定 |
+| D-32 | filter 是结构化查询对象 `{contextId?, labelIds?, energyMax?, …}` | **改为 Todoist 式文本查询语言(2026-08-11 用户定案,INV-33)**:勾选框表达不了 `|`/`!`/括号,也表达不了"一周内到期却还没排期"。`SavedFilter.query` 存**查询原文**而非 AST —— AST 是派生物,语法一演进就要写一次数据迁移。迁移 v13 把存量结构体转写为等价文本;id 解析不出时**不丢条件**(丢了会让过滤器变宽),而是落成一个必然为空的名字并被"未知标签"提示抓到 | ✅ 已定 |
 | D-31 | (D-29)priority 1 = 最高 | **撤回 D-29,回到 1 = 最低、5 = 最高(2026-08-11 用户定案,同日)**:1 = 最高之下比较会变得别扭 —— `p >= 4` 到底指"比 p4 更重要"还是"数值不小于 4",两种读法结论相反;5 = 最高时读法唯一,过滤器语法因此可以支持 `p>=N` 比较。接受与 Todoist 的 pN 相反(INV-01 ⚠SP)。迁移 v12 把 v10 翻回来 | ✅ 已定 |
 | ~~D-29~~ | priority 1 = 最低、5 = 最高(与 Todoist 相反) | **翻转为 1 = 最高、5 = 最低(2026-08-11 用户定案,INV-01)**:过滤器文本语法采用 Todoist 的 `p1 = 最高`,若存储不翻,同一应用里 `p1` 与 `--priority=1` 方向相反,必然出错。存量数据由迁移 v10 执行 `6 - priority`;值域/默认值/不重编号三条不变;`FilterQuery.priorityMin` 改名取补为 `priorityMax` | ⛔ **当日被 D-31 撤回** |
 | D-28 | `engage` / `review` 是 CLI 的交互式命令(分步问答向导) | **流程类功能不做 UI,改由 agent skill 承载(2026-08-11 用户定案)**:择事与周回顾**本质是一串原子操作的编排**,固化成向导 UI 等于把"何时该怎么想"写死在按钮里。算法(INV-20、§4.11、§4.12)原样保留在 domain;载体改为 agent skill + 聊天输入框下方的建议按钮(DESIGN §6.9),中栏不再有 Focus 面板/回顾向导。M7 范围收缩为 Search + Filters & Labels;已实现的 Focus 面板据此撤除,CLI `engage` 保留 | ✅ 已定 |

@@ -15,6 +15,8 @@ import { UpstreamView } from './views/UpstreamView';
 import { ProjectView } from './views/ProjectView';
 import { MyProjectsView } from './views/MyProjectsView';
 import { BucketView, CompletedView } from './views/BucketView';
+import { FiltersLabelsView } from './views/FiltersLabelsView';
+import { FilterResultView } from './views/FilterResultView';
 
 /** 三栏壳(D-21):侧栏平面项目(计数徽章/折叠/新建/右键编辑)+ GTD 组计数。 */
 
@@ -28,9 +30,12 @@ type View =
         | 'someday'
         | 'reference'
         | 'completed'
+        | 'filters'
         | 'myprojects';
     }
-  | { kind: 'project'; id: string };
+  | { kind: 'project'; id: string }
+  /** 一条查询的结果页(点过滤器 / 点标签 / ⌘K 命中标签,M7b) */
+  | { kind: 'query'; query: string; title: string };
 
 interface AppInfo {
   version: string;
@@ -38,8 +43,6 @@ interface AppInfo {
   userData: string;
   packaged: boolean;
 }
-
-const DISABLED_MENU = [{ icon: '🏷️', label: 'Filters & Labels', hint: 'M7' }] as const;
 
 /** 可拖拽分栏:宽度持久化 localStorage;invert 用于右栏(向左拖变宽)。 */
 function usePaneResize(
@@ -230,10 +233,13 @@ export function App(): React.JSX.Element {
 
   /** 命中 → 切到该条目的容器视图;任务再顺手打开详情。 */
   const openHit = (hit: SearchHitVM): void => {
+    const t = hit.target;
     setView(
-      hit.target.view === 'project'
-        ? { kind: 'project', id: hit.target.projectId }
-        : { kind: hit.target.view },
+      t.view === 'project'
+        ? { kind: 'project', id: t.projectId }
+        : t.view === 'query'
+          ? { kind: 'query', query: t.query, title: t.title }
+          : { kind: t.view },
     );
     setSearchOpen(false);
     setSearchDetailId(hit.kind === 'task' ? hit.id : null);
@@ -243,7 +249,15 @@ export function App(): React.JSX.Element {
   const todayBadge = today.data ? today.data.tasks.length : undefined;
 
   const navItem = (
-    kind: 'inbox' | 'today' | 'calendar' | 'upstream' | 'someday' | 'reference' | 'completed',
+    kind:
+      | 'inbox'
+      | 'today'
+      | 'calendar'
+      | 'upstream'
+      | 'someday'
+      | 'reference'
+      | 'completed'
+      | 'filters',
     icon: string,
     label: string,
     badge?: number,
@@ -295,16 +309,7 @@ export function App(): React.JSX.Element {
             Search
             <kbd className="ml-auto text-[10px] text-neutral-400">⌘K</kbd>
           </button>
-          {DISABLED_MENU.map((item) => (
-            <div
-              key={item.label}
-              className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm text-neutral-400"
-              title={`${item.hint} 上线`}
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </div>
-          ))}
+          {navItem('filters', '🏷️', 'Filters & Labels')}
         </nav>
 
         {/* My Projects 组头:点文字 → 总览;+ 新建;箭头折叠 */}
@@ -396,6 +401,19 @@ export function App(): React.JSX.Element {
         {view.kind === 'someday' && <BucketView kind="someday" />}
         {view.kind === 'reference' && <BucketView kind="reference" />}
         {view.kind === 'completed' && <CompletedView />}
+        {view.kind === 'filters' && (
+          <FiltersLabelsView
+            onOpenFilter={(query, title) => setView({ kind: 'query', query, title })}
+            onOpenLabel={(name) =>
+              setView({
+                kind: 'query',
+                query: /[\s()&|!,:"]/.test(name) ? `@"${name}"` : `@${name}`,
+                title: `@${name}`,
+              })
+            }
+          />
+        )}
+        {view.kind === 'query' && <FilterResultView title={view.title} query={view.query} />}
       </main>
 
       {quickAddOpen && <TaskCard mode="add" onClose={() => setQuickAddOpen(false)} />}

@@ -470,11 +470,14 @@
   搜 Task(标题 + 描述),并定下排序/截断/软删不返回的口径。
   - 附带:`taskLine` 给 done 任务加 `✓已完成` 标记(搜索会混合状态,不标就分不出来);
     截图通道新增 `--screenshot-type=<text>`(命令面板得能打字才拍得到结果)。
-- **M7b — Filters & Labels 视图**:侧栏 Filters & Labels 项接上真实视图。
-  `FilterQuery` 是**结构化对象**(contextId / labelIds / energyMax / maxMinutes /
-  priorityMin / dueOnOrBefore / noProject / textQuery),不是 Todoist 的查询字符串,
-  UI 因此是一组受控控件而非表达式编辑器;domain 已有 `evalFilter` + filter CRUD +
-  label CRUD,补 IPC 与 UI。
+- **M7b — Filters & Labels(2026-08-11 完成)**:文本查询语言(INV-33)+ 两段式视图。
+  **范围变更**:原计划用结构化 `FilterQuery` + 受控控件,用户定案改为 Todoist 式**文本语法**
+  (D-32)—— 勾选框表达不了 `|`/`!`/括号,也表达不了"一周内到期却还没排期"。
+  - domain 新增 `rules/filterQuery.ts`:词法 + 递归下降解析器 + 求值器,错误带位置;
+    `SavedFilter.query` 改存**查询原文**(迁移 v13 转写存量,id 解析不出时不丢条件)。
+  - 连带模型重构:**D-30** context 并入 label(迁移 v11,撞名直接合并)、**D-29→D-31**
+    优先级方向翻转后当日撤回(迁移 v10 + v12 往返)。
+  - Filters & Labels 视图 + 查询结果页(多段)+ ⌘K 认标签/过滤器 + CLI `filter` / `filters`。
 
 **验收标准**
 
@@ -482,9 +485,11 @@
 - [x] 搜索覆盖当前容器模型:Inbox/Someday/Reference/项目任务(含子任务)、项目、已完成、
       Upstream 镜像;已完成灰显划线 + "已完成 <日期>",不与活跃项混淆
 - [x] `searchAll` 的旧模型分组(`snap.inbox`/`listItems`)清理干净,不再返回恒空分组(INV-32)
-- [ ] Filters & Labels 视图可新建/改名/删除 filter,点击 filter 显示命中的任务列表
-- [ ] 标签可新建/改名/删除;删除标签时其任务关联一并清理;点击标签显示带该标签的任务
-- [ ] filter 结果与 domain `evalFilter` 完全一致(UI 不得自行过滤,INV-20.6 同类纪律)
+- [x] Filters & Labels 视图可新建/删除 filter(含语法速查表),点击 filter 显示命中的任务列表
+- [x] 标签可新建/改名/删除;删除标签只解除关联、不动任务;点击标签显示带该标签的任务
+- [x] filter 结果与 domain `runFilterQuery` 完全一致(UI 不得自行过滤,INV-33.9)
+- [x] ⌘K 输入 `@home` 命中标签、输入过滤器名命中过滤器,回车进结果页
+- [x] 查询语法错误带位置与可操作提示;未知标签 → 空结果 + 提示而非报错
 - [x] CLI 补 `search` 命令,与 ⌘K 同口径(CLI 多列等待项:终端里点不动的问题不存在)
 - [ ] 三份文档同步更新;`pnpm test/typecheck/lint/check-coverage/smoke` 全绿
 

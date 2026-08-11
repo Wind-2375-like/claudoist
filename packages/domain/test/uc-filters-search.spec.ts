@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createFilter, deleteFilter, evalFilter, updateFilter } from '../src/usecases/filters';
+import { createFilter, deleteFilter, updateFilter } from '../src/usecases/filters';
 import { searchAll } from '../src/usecases/search';
 import { isUsecaseError } from '../src/usecases/types';
 import type { UsecaseResult } from '../src/usecases/types';
-import type { GtdSnapshot, Task } from '../src/index';
+import type { GtdSnapshot } from '../src/index';
 import { deps, project, snapshot, task, waitingFor } from './helpers';
 
 function ok<C>(r: UsecaseResult<C>): C {
@@ -11,112 +11,27 @@ function ok<C>(r: UsecaseResult<C>): C {
   return r.consequences;
 }
 
-const ids = (ts: Task[]): string[] => ts.map((t) => t.id);
-
-/** 过滤维度 fixture:a/b/c active,d done,e deleted。 */
-function filterSnap(): GtdSnapshot {
-  return snapshot({
-    tasks: [
-      task({
-        id: 'a',
-        title: 'Buy milk',
-        priority: 3,
-        energy: 'low',
-        estimatedMinutes: 15,
-        projectId: null,
-        deadline: '2026-08-10',
-      }),
-      task({
-        id: 'b',
-        title: 'write REPORT',
-        priority: 5,
-        energy: 'high',
-        estimatedMinutes: 90,
-        projectId: 'p1',
-        deadline: '2026-09-01',
-      }),
-      task({
-        id: 'c',
-        title: 'call mom',
-        priority: 4,
-        energy: 'urgent', // 未知值 → 按 medium 参与比较(INV-02)
-        estimatedMinutes: 5,
-        projectId: null,
-        deadline: null,
-      }),
-      task({ id: 'd', title: 'buy tickets', status: 'done' }),
-      task({ id: 'e', title: 'buy junk', status: 'deleted' }),
-    ],
-    taskLabels: [
-      { taskId: 'a', labelId: 'l1' },
-      { taskId: 'a', labelId: 'l2' },
-      { taskId: 'b', labelId: 'l1' },
-    ],
-  });
-}
-
-describe('uc-filters evalFilter:各维度 + INV-01/INV-02 语义', () => {
-  it('空查询 → 全部 active(done/deleted 排除)', () => {
-    expect(ids(evalFilter(filterSnap(), {}))).toEqual(['a', 'b', 'c']);
-  });
-
-  it('energyMax=medium:low 与未知值(按 medium)入选,high 排除(INV-02 序与方向)', () => {
-    expect(ids(evalFilter(filterSnap(), { energyMax: 'medium' }))).toEqual(['a', 'c']);
-    expect(ids(evalFilter(filterSnap(), { energyMax: 'high' }))).toEqual(['a', 'b', 'c']);
-    expect(ids(evalFilter(filterSnap(), { energyMax: 'low' }))).toEqual(['a']);
-  });
-
-  it('priorityMin=4:数值 ≥(INV-01:5=最高,不重编号)', () => {
-    expect(ids(evalFilter(filterSnap(), { priorityMin: 4 }))).toEqual(['b', 'c']);
-    expect(ids(evalFilter(filterSnap(), { priorityMin: 5 }))).toEqual(['b']);
-  });
-
-  it('dueOnOrBefore:字典序 ≤;无 deadline 不命中', () => {
-    expect(ids(evalFilter(filterSnap(), { dueOnOrBefore: '2026-08-15' }))).toEqual(['a']);
-    expect(ids(evalFilter(filterSnap(), { dueOnOrBefore: '2026-09-01' }))).toEqual(['a', 'b']);
-  });
-
-  it('textQuery:大小写不敏感包含', () => {
-    expect(ids(evalFilter(filterSnap(), { textQuery: 'BUY' }))).toEqual(['a']);
-    expect(ids(evalFilter(filterSnap(), { textQuery: 'report' }))).toEqual(['b']);
-  });
-
-  it('labelIds 全含语义', () => {
-    expect(ids(evalFilter(filterSnap(), { labelIds: ['l1'] }))).toEqual(['a', 'b']);
-    expect(ids(evalFilter(filterSnap(), { labelIds: ['l1', 'l2'] }))).toEqual(['a']);
-    expect(ids(evalFilter(filterSnap(), { labelIds: [] }))).toEqual(['a', 'b', 'c']);
-  });
-
-  it('maxMinutes / noProject / 组合', () => {
-    expect(ids(evalFilter(filterSnap(), { maxMinutes: 20 }))).toEqual(['a', 'c']);
-    expect(ids(evalFilter(filterSnap(), { noProject: true }))).toEqual(['a', 'c']);
-    expect(ids(evalFilter(filterSnap(), { noProject: true, priorityMin: 4 }))).toEqual(['c']);
-  });
-});
-
 describe('uc-filters CRUD', () => {
   it('createFilter:position 队尾递增;query 写入侧校验', () => {
     const snap = snapshot();
     const d = deps();
-    const r1 = createFilter(snap, d, { name: '快事', query: { maxMinutes: 10 } });
+    const r1 = createFilter(snap, d, { name: '快事', query: 'est: 10' });
     if ('error' in r1) throw new Error(r1.error);
     const cmd = r1.commands[0]!;
     if (cmd.kind !== 'createFilter') throw new Error('expected createFilter');
     expect(cmd.filter.position).toBe(0);
     // 非法值拒绝(INV-03 / INV-01 值域)
-    expect(
-      'error' in createFilter(snap, d, { name: 'x', query: { dueOnOrBefore: '2026-1-5' } }),
-    ).toBe(true);
-    expect('error' in createFilter(snap, d, { name: 'x', query: { energyMax: 'huge' } })).toBe(
+    expect('error' in createFilter(snap, d, { name: 'x', query: 'due before: 2026-1-5' })).toBe(
       true,
     );
-    expect('error' in createFilter(snap, d, { name: 'x', query: { priorityMin: 9 } })).toBe(true);
-    expect('error' in createFilter(snap, d, { name: ' ', query: {} })).toBe(true);
+    expect('error' in createFilter(snap, d, { name: 'x', query: 'energy: huge' })).toBe(true);
+    expect('error' in createFilter(snap, d, { name: 'x', query: 'p9' })).toBe(true);
+    expect('error' in createFilter(snap, d, { name: ' ', query: 'today' })).toBe(true);
   });
 
   it('updateFilter:不存在 → 错误;deleteFilter 幂等', () => {
     const snap = snapshot({
-      filters: [{ id: 'f1', name: '旧', position: 0, query: {} }],
+      filters: [{ id: 'f1', name: '旧', position: 0, query: 'today' }],
     });
     expect('error' in updateFilter(snap, deps(), { id: 'nope', patch: { name: '新' } })).toBe(true);
     const r = updateFilter(snap, deps(), { id: 'f1', patch: { name: '新' } });

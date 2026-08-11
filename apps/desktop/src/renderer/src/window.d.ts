@@ -4,6 +4,8 @@ import type {
   GoogleStatusVM,
   AddSubtaskInputVM,
   BucketCountsVM,
+  FilterListItemVM,
+  FilterRunVM,
   LabelListItemVM,
   GtdChangedEvent,
   MoveTargetVM,
@@ -48,6 +50,17 @@ declare global {
       reminderAdd: (taskId: string, remindAt: string) => Promise<WriteResultVM>;
       reminderDelete: (id: string) => Promise<WriteResultVM>;
       labelsList: () => Promise<LabelListItemVM[]>;
+      filtersList: () => Promise<FilterListItemVM[]>;
+      filterRun: (query: string) => Promise<FilterRunVM>;
+      filterAdd: (name: string, query: string) => Promise<WriteResultVM>;
+      filterUpdate: (
+        id: string,
+        patch: { name?: string; query?: string },
+      ) => Promise<WriteResultVM>;
+      filterDelete: (id: string) => Promise<WriteResultVM>;
+      labelAdd: (name: string) => Promise<WriteResultVM>;
+      labelUpdate: (id: string, patch: { name?: string }) => Promise<WriteResultVM>;
+      labelDelete: (id: string) => Promise<WriteResultVM>;
       taskMove: (input: { id: string; to: MoveTargetVM }) => Promise<WriteResultVM>;
       taskReorder: (input: {
         id: string;

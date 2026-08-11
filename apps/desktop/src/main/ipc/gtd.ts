@@ -9,7 +9,11 @@ import {
   captureToInbox,
   completeProject,
   completeTask,
+  createFilter,
+  createLabel,
   createProjectDirect,
+  deleteFilter,
+  deleteLabel,
   deleteReminder,
   deleteTask,
   descendantTaskIds,
@@ -21,18 +25,25 @@ import {
   projectStats,
   quickAddTask,
   reopenTask,
+  parseFilterQuery,
   reorderTask,
+  runFilterQuery,
   searchAll,
+  unknownNames,
   setTaskLabels,
   subtreeHeight,
   taskDepth,
   tasksWithInheritedDeadline,
+  updateFilter,
+  updateLabel,
   updateProject,
   updateTask,
   MAX_SUBTASK_DEPTH,
 } from '@gtd/domain';
 import type {
   BucketCountsVM,
+  FilterListItemVM,
+  FilterRunVM,
   LabelListItemVM,
   ProjectListItemVM,
   ProjectViewVM,
@@ -51,6 +62,10 @@ import type {
  * 个人规模数据下开销可忽略,换取零缓存一致性问题。
  */
 
+/** 名字里有语法字符时要加引号,否则拼出来的查询解析不了(INV-33)。 */
+const quoteName = (n: string): string =>
+  /[\s()&|!,:"]/.test(n) ? `"${n.replace(/"/g, '\\"')}"` : n;
+
 export interface GtdViews {
   inbox(): TaskTreeVM[];
   bucketList(kind: 'someday' | 'reference'): TaskTreeVM[];
@@ -68,6 +83,10 @@ export interface GtdViews {
   calendarRange(from: string, days: number): CalendarRangeVM;
   /** 标签(D-30:情境已并入)+ 活跃任务计数 */
   labels(): LabelListItemVM[];
+  /** 保存的过滤器 + 命中计数(INV-33) */
+  filters(): FilterListItemVM[];
+  /** 求值一条查询(可传 filter id 或直接传查询原文) */
+  filterRun(query: string): FilterRunVM;
 }
 
 export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
@@ -273,6 +292,9 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
     },
     search(query) {
       const snap = store.snapshot();
+      const q = query.trim().toLowerCase();
+      // 用户会照 Todoist 的习惯打 `@home` / `#项目` 来找标签和项目 —— 比对名字时把前缀去掉
+      const bare = q.replace(/^[@#]/, '');
       // 匹配与排序全在 domain(searchAll);这里只把命中映射成"点了能去哪"
       const r = searchAll(snap, { clock, idGen: { next: () => '' } }, { query });
       if (isUsecaseError(r)) return { hits: [], totalMatched: 0 };
@@ -313,6 +335,40 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
             target,
           };
         }),
+        // 标签与过滤器也进 ⌘K(Todoist 同款):命中即进该标签/过滤器的结果页
+        ...snap.labels
+          .filter((l) => bare !== '' && l.name.toLowerCase().includes(bare))
+          .map((l): SearchHitVM => ({
+            kind: 'label',
+            id: l.id,
+            title: `@${l.name}`,
+            subtitle: '标签',
+            done: false,
+            target: { view: 'query', query: `@${quoteName(l.name)}`, title: `@${l.name}` },
+          })),
+        ...snap.filters
+          .filter((f) => f.name.toLowerCase().includes(q) || f.query.toLowerCase().includes(q))
+          .map((f): SearchHitVM => ({
+            kind: 'filter',
+            id: f.id,
+            title: f.name,
+            subtitle: `过滤器 · ${f.query}`,
+            done: false,
+            target: { view: 'query', query: f.query, title: f.name },
+          })),
+        // `#名字` 前缀写法也要能命中项目(domain 的 searchAll 只按裸文本匹配)
+        ...(bare !== q
+          ? snap.projects
+              .filter((p) => bare !== '' && p.outcome.toLowerCase().includes(bare))
+              .map((p): SearchHitVM => ({
+                kind: 'project',
+                id: p.id,
+                title: p.outcome,
+                subtitle: p.status === 'complete' ? '项目 · 已完成' : '项目',
+                done: p.status === 'complete',
+                target: { view: 'project', projectId: p.id },
+              }))
+          : []),
         ...r.consequences.projects.map((p): SearchHitVM => ({
           kind: 'project',
           id: p.id,
@@ -323,6 +379,48 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
         })),
       ];
       return { hits, totalMatched: r.consequences.totalMatched };
+    },
+    filters() {
+      const snap = store.snapshot();
+      const today = clock.today();
+      return [...snap.filters]
+        .sort((a, b) => a.position - b.position)
+        .map((f) => {
+          const r = runFilterQuery(snap, f.query, { today });
+          return {
+            id: f.id,
+            name: f.name,
+            query: f.query,
+            matchCount: 'error' in r ? null : r.sections.reduce((n, s2) => n + s2.tasks.length, 0),
+            error: 'error' in r ? r.error.message : null,
+          };
+        });
+    },
+    filterRun(query) {
+      const snap = store.snapshot();
+      const today = clock.today();
+      const r = runFilterQuery(snap, query, { today });
+      if ('error' in r) {
+        return {
+          query,
+          sections: [],
+          error: r.error.message,
+          unknownLabels: [],
+          unknownProjects: [],
+        };
+      }
+      const parsed = parseFilterQuery(query);
+      const unknown = parsed.ok ? unknownNames(snap, parsed.ast) : { labels: [], projects: [] };
+      return {
+        query,
+        sections: r.sections.map((s2) => ({
+          source: s2.source,
+          tasks: s2.tasks.map((t) => taskVM(snap, t, today)),
+        })),
+        error: null,
+        unknownLabels: unknown.labels,
+        unknownProjects: unknown.projects,
+      };
     },
     today() {
       const snap = store.snapshot();
@@ -468,6 +566,28 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
     applyResult(deleteReminder(store.snapshot(), deps, input)),
   );
   ipcMain.handle('gtd:labels.list', () => views.labels());
+  ipcMain.handle('gtd:filters.list', () => views.filters());
+  ipcMain.handle('gtd:filters.run', (_e, p: { query: string }) => views.filterRun(p.query));
+  ipcMain.handle('gtd:filters.add', (_e, input: { name: string; query: string }) =>
+    applyResult(createFilter(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle(
+    'gtd:filters.update',
+    (_e, input: { id: string; patch: { name?: string; query?: string } }) =>
+      applyResult(updateFilter(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle('gtd:filters.delete', (_e, input: { id: string }) =>
+    applyResult(deleteFilter(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle('gtd:labels.add', (_e, input: { name: string }) =>
+    applyResult(createLabel(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle('gtd:labels.update', (_e, input: { id: string; patch: { name?: string } }) =>
+    applyResult(updateLabel(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle('gtd:labels.delete', (_e, input: { id: string }) =>
+    applyResult(deleteLabel(store.snapshot(), deps, input)),
+  );
 
   // ── 任务操作(D-20/D-21):move / update / complete / delete ──
   ipcMain.handle('gtd:tasks.move', (_e, input) =>

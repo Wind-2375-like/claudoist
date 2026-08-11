@@ -311,8 +311,8 @@ CREATE TABLE task_labels (
 
 CREATE TABLE filters (                                  -- 保存的查询;预置 engage 风格 preset
   id TEXT PRIMARY KEY, name TEXT NOT NULL, position INTEGER NOT NULL,
-  query_json TEXT NOT NULL                              -- {labels?, energyMax?, maxMinutes?,
-);                                                      --  priorityMin?, dueWithinDays?, noProject?...}
+  query_json TEXT NOT NULL                              -- D-32/v13 起存**查询原文**(INV-33),
+);                                                      --  而非结构化 JSON(列名沿用,改名要重建表)
 
 CREATE TABLE reminders (                                -- 提醒:挂在一个任务上(迁移 0006 重建,
   id TEXT PRIMARY KEY,                                  --   D-23/M6a:calendar_item_id 分支退役)
@@ -560,7 +560,13 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
   - **其他**:单击块 = 打开任务详情弹窗;右键 = 完成/撤销完成、移到全天、删除(= 软删任务,INV-22);重叠块并排分栏;**完成的块仍在日历上**(灰显划线,D-23 用户定案)。
   - 吸附/区间/分段口径全部来自 domain `rules/calendarGrid.ts`(INV-28),CLI `calendar` 命令共用,两处不得各写一套。
   - deadline 的双轨可视化(due chip)与拖拽改 deadline 顺延至后续里程碑;当前 deadline 仍在行内 🎯 徽标显示。
-- **Filters & Labels**:Labels 区 = 自由 labels + contexts(contexts 置顶、徽章样式、删除受 domain 规则约束)+ 虚拟 **@waiting_for** 视图(由 waiting_for 表支撑;详情面板保留 delegated_to、起始日期、Resolve、Create-follow-up——绝不摊平成普通 label)。Filters 区 = 保存的 `filters` 行,由 domain 的 `filterQuery` 解释器求值;预置:"Low energy · <15 min"、"Due this week"、"No project"、"High priority next"。Filter 编辑器 = query_json 字段表单。
+- **Filters & Labels(M7b,INV-33)**:两段式,对齐 Todoist 的同名页面。
+  - **My Filters**:保存的 `filters` 行,每行显示名称、**查询原文**与命中数;语法错误直接标红在行上(而不是等点进去才炸)。新建 = 名称 + 查询两个输入框,下方可展开**语法速查表** —— 一个没人记得住写法的查询语言等于没有。点行 → 查询结果页。
+  - **Labels**:标签 + 活跃任务计数,可新建 / 改名 / 删除(删除只解除关联,不动任务);点行 → 该标签的结果页(`@名字`)。D-30 后情境即标签,故原"contexts 置顶"一说作废。
+  - **查询结果页**:顶层逗号分段 → 每段一个列表,段标题即该段查询原文。引用到不存在的标签/项目时给黄色提示条而非报错(INV-33.8)。
+  - **⌘K 也认标签与过滤器**:输入 `@home` / 过滤器名即出对应条目,回车进结果页(Todoist 同款)。
+  - 虚拟 **@waiting_for** 视图仍未实现(waiting_for 表当前无 UI 入口),保留为后续里程碑;绝不摊平成普通 label。
+  - 预置过滤器:"Low energy · <15 min"、"Due this week"、"No project"、"High priority next"、"该排期了"(`deadline before: +7 days & no date`)。
 - **My Projects(D-21 平面化,Todoist 对齐)**:侧栏分组头 "My Projects" 带 **+**(新建项目对话框:名称 + 可选 deadline)与**折叠箭头**(toggle 列表);点击分组头文字 → **总览视图**:每个项目一行,名称 + **进度条与百分比**(progress = done/(done+active),active+done=0 时显示 0%)。分组下每个项目一行:# 名称 + **未完成任务数徽章**;右键 → 编辑(改名 / deadline,改 deadline 按 §5.4 征询传播)/ 标记完成;点击 → **单项目视图**:头部(名称、deadline chip),任务列表(根任务成行,带子任务的行显示子任务计数;与 Inbox 同 TaskRow),底部内联 **"+ Add task"**(默认落本项目)。无孤儿徽章、无健康标记、无 Break-down 向导(D-21 退役)。
 - **GTD 组(侧栏下方,D-20 精简;Upstream 不入栏,见下)**:仅三项——**Someday/Maybe** 与 **Reference**(各 = 对应 bucket 的任务列表,同 TaskRow 组件,**侧栏带未完成计数徽章**,可 Move 回任意容器;不参与 Today/engage)、**Completed**(done 任务按完成时间倒序,无徽章;随量增长的归档策略——按月分组 + 懒加载——排入后续里程碑)。**Trash 视图与 Weekly Review 侧栏项移除**:删除 = 右键软删(数据层可恢复)。
 - **Reminders**:任务与 calendar 条目详情、快速添加对话框均可设提醒;main 调度器到点弹系统通知,点击通知聚焦对应条目。

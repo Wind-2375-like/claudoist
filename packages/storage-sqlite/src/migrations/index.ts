@@ -1,3 +1,5 @@
+import type { DatabaseSync } from 'node:sqlite';
+
 /**
  * 迁移(源码,提交入库):按序号排列的内嵌 SQL(docs/DESIGN.md §2.2)。
  * schema 权威 = docs/DESIGN.md §5.1,此处逐字转写为 SQLite 方言。
@@ -7,6 +9,11 @@ export interface Migration {
   version: number;
   name: string;
   sql: string;
+  /**
+   * 纯 SQL 表达不了的数据转写(需要读出值、在 JS 里算完再写回)。
+   * 与 sql 处于同一事务;sql 先执行。
+   */
+  run?: (db: DatabaseSync) => void;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -359,5 +366,60 @@ UPDATE filters
          '$.priorityMax')
  WHERE json_extract(query_json, '$.priorityMax') IS NOT NULL;
 `,
+  },
+  {
+    version: 13,
+    name: 'filter-query-text',
+    // D-32:SavedFilter.query 从结构化对象改为**查询原文**(INV-33 的文本语法)。
+    // 存 AST/结构体的代价是语法每演进一次就要写一次数据迁移;存原文则升级即重解析。
+    // 转写需要读值再拼串,纯 SQL 表达不了,故走 run 钩子(与 sql 同一事务)。
+    sql: '',
+    run: (db) => {
+      const rows = db.prepare('SELECT id, query_json FROM filters').all() as {
+        id: string;
+        query_json: string;
+      }[];
+      const labelName = db.prepare('SELECT name FROM labels WHERE id = ?');
+      const upd = db.prepare('UPDATE filters SET query_json = ? WHERE id = ?');
+      const quote = (n: string): string =>
+        /[\s()&|!,:"]/.test(n) ? `"${n.replace(/"/g, '\\"')}"` : n;
+      for (const r of rows) {
+        let q: Record<string, unknown>;
+        try {
+          q = JSON.parse(r.query_json) as Record<string, unknown>;
+        } catch {
+          continue; // 已是文本(重复执行/手工改过):不动
+        }
+        if (typeof q !== 'object' || q === null) continue;
+
+        const parts: string[] = [];
+        // id → 名字。**解析不出时不能把条件丢掉** —— 丢掉会让过滤器变宽(显示出比原本
+        // 更多的任务),方向错得危险;落成一个不存在的名字则结果为空,并被"未知标签"提示抓到。
+        const nameOf = (id: unknown): string => {
+          const row =
+            typeof id === 'string'
+              ? (labelName.get(id) as { name?: string } | undefined)
+              : undefined;
+          return row?.name ?? `未知标签-${String(id).slice(0, 8)}`;
+        };
+        // v11 把 context 变成同名 label 时复用了 context id(撞名时除外),故多数能解析出来
+        if (typeof q['contextId'] === 'string') parts.push(`@${quote(nameOf(q['contextId']))}`);
+        if (Array.isArray(q['labelIds'])) {
+          for (const id of q['labelIds']) parts.push(`@${quote(nameOf(id))}`);
+        }
+        if (typeof q['energyMax'] === 'string') parts.push(`energy: ${String(q['energyMax'])}`);
+        if (typeof q['maxMinutes'] === 'number') parts.push(`est: ${String(q['maxMinutes'])}`);
+        if (typeof q['priorityMin'] === 'number') parts.push(`p>=${String(q['priorityMin'])}`);
+        if (typeof q['dueOnOrBefore'] === 'string') {
+          parts.push(`deadline before: ${String(q['dueOnOrBefore'])}`);
+        }
+        if (q['noProject'] === true) parts.push('no project');
+        if (typeof q['textQuery'] === 'string' && q['textQuery'].trim() !== '') {
+          parts.push(`search: ${quote(q['textQuery'])}`);
+        }
+        // 空查询在新语法里非法;退化成等价的"所有活跃任务"
+        upd.run(parts.length > 0 ? parts.join(' & ') : 'status: active', r.id);
+      }
+    },
   },
 ];

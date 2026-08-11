@@ -34,8 +34,12 @@ import {
   quickAddTask,
   reopenTask,
   reorderTask,
+  createFilter,
+  parseFilterQuery,
+  runFilterQuery,
   searchAll,
   SEARCH_DEFAULT_LIMIT,
+  unknownNames,
   tasksWithInheritedDeadline,
   todaysTimedTasks,
   updateProject,
@@ -262,7 +266,8 @@ function taskLine(j: TaskJson): string {
   }
   if (j.deadline !== null) bits.push(`⏰${j.deadline}${j.overdue ? '(过期)' : ''}`);
   if (j.priority !== 3) bits.push(`优先级:${j.priorityLabel}`); // 非默认才展示(D-14 文字)
-  if (j.labels.length > 0) bits.push(j.labels.map((l) => `#${l}`).join(' '));
+  // 标签在界面与过滤器语法里都写作 @名字(D-30 起情境即标签)
+  if (j.labels.length > 0) bits.push(j.labels.map((l) => `@${l}`).join(' '));
   return bits.join('  ');
 }
 
@@ -638,6 +643,72 @@ const search: Handler = (store, deps, args) => {
   };
 };
 
+/**
+ * 跑一条查询(INV-33 文本语法);--save=<名字> 顺带存成过滤器。
+ * 与桌面 Filters 视图同一个 runFilterQuery,不另写一套过滤。
+ */
+const filter: Handler = (store, deps, args) => {
+  const q = args.positionals.join(' ').trim();
+  if (!q) throw new CliError('用法:filter <查询> [--save=名字]   (语法见 help)');
+  const snap = store.snapshot();
+  const today = deps.clock.today();
+  const r = runFilterQuery(snap, q, { today });
+  if ('error' in r) {
+    // 指出出错位置:原文 + caret
+    const caret =
+      ' '.repeat(r.error.span.start) +
+      '^'.repeat(Math.max(1, r.error.span.end - r.error.span.start));
+    throw new CliError(`查询语法错误:${r.error.message}\n  ${q}\n  ${caret}`);
+  }
+  const save = opt(args, 'save');
+  if (save !== undefined) {
+    applyUsecase(store, createFilter(snap, deps, { name: save, query: q }));
+  }
+  const parsed = parseFilterQuery(q);
+  const unknown = parsed.ok ? unknownNames(snap, parsed.ast) : { labels: [], projects: [] };
+  const sections = r.sections.map((sec) => ({
+    source: sec.source,
+    tasks: sec.tasks.map((t) => taskJson(snap, t, today)),
+  }));
+  const lines = [`查询「${q}」`];
+  for (const sec of sections) {
+    lines.push(taskSection(sections.length > 1 ? sec.source : '匹配', sec.tasks));
+  }
+  const miss = [...unknown.labels.map((n) => `@${n}`), ...unknown.projects.map((n) => `#${n}`)];
+  if (miss.length > 0) lines.push(`注意:${miss.join('、')} 不存在,这些条件恒不成立。`);
+  if (save !== undefined) lines.push(`已存为过滤器「${save}」。`);
+  return { data: { query: q, sections, unknown }, text: lines.join('\n\n') };
+};
+
+const filters: Handler = (store, deps, _args) => {
+  const snap = store.snapshot();
+  const today = deps.clock.today();
+  const rows = [...snap.filters]
+    .sort((a, b) => a.position - b.position)
+    .map((f) => {
+      const r = runFilterQuery(snap, f.query, { today });
+      return {
+        id: f.id,
+        name: f.name,
+        query: f.query,
+        matchCount: 'error' in r ? null : r.sections.reduce((n, s2) => n + s2.tasks.length, 0),
+        error: 'error' in r ? r.error.message : null,
+      };
+    });
+  return {
+    data: rows,
+    text:
+      rows.length === 0
+        ? '(无过滤器;filter <查询> --save=<名字> 可存一条)'
+        : rows
+            .map(
+              (f) =>
+                `- ${f.id.slice(0, 8)}  ${f.name}  ${f.error !== null ? `⚠ ${f.error}` : `(${String(f.matchCount)})`}\n    ${f.query}`,
+            )
+            .join('\n'),
+  };
+};
+
 const projects: Handler = (store, _deps, _args) => {
   const snap = store.snapshot();
   const rows = snap.projects
@@ -969,7 +1040,7 @@ const labels: Handler = (store, _deps, _args) => {
     text:
       rows.length === 0
         ? '(无 label)'
-        : rows.map((l) => `- #${l.name}  ${l.id.slice(0, 8)}`).join('\n'),
+        : rows.map((l) => `- @${l.name}  ${l.id.slice(0, 8)}`).join('\n'),
   };
 };
 
@@ -977,7 +1048,7 @@ const labelAdd: Handler = (store, deps, args) => {
   const name = args.positionals.join(' ').trim();
   if (!name) throw new CliError('用法: label-add <名称>');
   const c = applyUsecase(store, createLabel(store.snapshot(), deps, { name }));
-  return { data: c, text: `已创建 label: #${name}` };
+  return { data: c, text: `已创建 label: @${name}` };
 };
 
 export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与 App 同一 DB,写入后 App 自动刷新)
@@ -996,6 +1067,21 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
   calendar [--from=today|tomorrow|YYYY-MM-DD] [--days=1..31]  日历周视图(全天段 + 定时段,INV-28)
   engage [--label=] [--minutes=60] [--energy=low|medium|high]  择事:calendar-first + top-7(INV-20)
   search <关键词> [--limit=50]                      跨实体搜索(任务/项目/等待项,与 ⌘K 同口径)
+  filter <查询> [--save=名字]                       跑一条过滤器查询(INV-33 语法,与桌面 Filters 同口径)
+  filters                                          列出保存的过滤器 + 命中数
+
+过滤器查询语法(filter 命令与桌面 Filters 视图共用):
+  @标签  #项目          带该标签 / 属于该项目(名字带空格加引号:@"deep work")
+  p5  p>=4             优先级(⚠ 本仓 p5 = 最高,与 Todoist 相反)
+  today tomorrow overdue no date   **计划日**(裸关键字一律指计划日)
+  deadline: today / deadline before: +7 days / no deadline   **截止日**
+  next 7 days          未来 N 天(含今天)
+  energy: low  est: 30 精力 ≤ / 预估分钟 ≤
+  inbox someday reference bucket: project           容器
+  done  status: active,done  status: any            状态(默认只看活跃;没提 deleted 就永不含软删)
+  search: 词  title: 词  desc: 词                    文本搜索
+  no labels / no project / no time / subtask / mirrored
+  & | ! ( )            与/或/非/分组       a, b     顶层逗号 = 并列两段
   show <任务>                       任务详情(含子任务树 / 评论 / 提醒)
   comment <任务> <内容>             加评论
   move <任务> <inbox|someday|reference|项目引用>   根任务子树随动;子任务先脱离父
@@ -1021,6 +1107,8 @@ const HANDLERS: Record<string, Handler> = {
   calendar,
   engage,
   search,
+  filter,
+  filters,
   show,
   comment,
   move,
@@ -1043,6 +1131,8 @@ const COMMAND_OPTS: Record<string, string[]> = {
   calendar: ['from', 'days'],
   engage: ['label', 'minutes', 'energy'],
   search: ['limit'],
+  filter: ['save'],
+  filters: [],
   add: [
     'parent',
     'desc',

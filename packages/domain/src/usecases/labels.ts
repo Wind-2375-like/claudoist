@@ -24,7 +24,8 @@ export function createLabel(
   deps: FlowDeps,
   input: CreateLabelInput,
 ): UsecaseResult<CreateLabelConsequences> {
-  const name = input.name.trim();
+  // 界面与过滤器语法里写作 @名字,但存储不含 '@'(D-30)
+  const name = input.name.trim().replace(/^@+/, '');
   if (!name) return { error: '名称不能为空' };
   const existing = snap.labels.find((l) => l.name === name);
   if (existing) {
@@ -34,6 +35,42 @@ export function createLabel(
   return {
     commands: [{ kind: 'createLabel', label }],
     consequences: { labelId: label.id, created: true },
+  };
+}
+
+// ----------------------------------------------------------------- updateLabel
+
+export interface UpdateLabelInput {
+  id: Id;
+  patch: { name?: string; color?: string | null };
+}
+
+export interface UpdateLabelConsequences {
+  labelId: Id;
+}
+
+/** 改名/改色。重名(与**其它**标签)拒绝 —— 名字是过滤器语法里的引用键。 */
+export function updateLabel(
+  snap: GtdSnapshot,
+  _deps: FlowDeps,
+  input: UpdateLabelInput,
+): UsecaseResult<UpdateLabelConsequences> {
+  const label = snap.labels.find((l) => l.id === input.id);
+  if (!label) return { error: `标签不存在: ${input.id}` };
+  const clean: Partial<Omit<Label, 'id'>> = {};
+  if (input.patch.name !== undefined) {
+    const name = input.patch.name.trim().replace(/^@+/, '');
+    if (!name) return { error: '名称不能为空' };
+    if (snap.labels.some((l) => l.id !== label.id && l.name === name)) {
+      return { error: `已有同名标签: @${name}` };
+    }
+    clean.name = name;
+  }
+  if (input.patch.color !== undefined) clean.color = input.patch.color;
+  return {
+    commands:
+      Object.keys(clean).length > 0 ? [{ kind: 'updateLabel', id: label.id, patch: clean }] : [],
+    consequences: { labelId: label.id },
   };
 }
 

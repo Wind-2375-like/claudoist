@@ -174,12 +174,14 @@ export interface GoogleCalendarVM {
 
 /** ⌘K 搜索结果跳转目标 —— 与 App 的 View 联合一一对应。 */
 export type SearchTargetVM =
-  | { view: 'inbox' | 'someday' | 'reference' | 'upstream' | 'completed' }
-  | { view: 'project'; projectId: string };
+  | { view: 'inbox' | 'someday' | 'reference' | 'upstream' | 'completed' | 'filters' }
+  | { view: 'project'; projectId: string }
+  /** 标签/过滤器命中 → 进查询结果页(与 Todoist 的 ⌘K 一致) */
+  | { view: 'query'; query: string; title: string };
 
 export interface SearchHitVM {
-  kind: 'task' | 'project';
-  /** task 的 id(kind='task' 时可直接开详情弹窗)或 project 的 id */
+  kind: 'task' | 'project' | 'label' | 'filter';
+  /** task 的 id(kind='task' 时可直接开详情弹窗)、project/label/filter 的 id */
   id: string;
   title: string;
   /** 二级行:容器/项目 · 标签 · 状态 */
@@ -193,6 +195,28 @@ export interface SearchVM {
   hits: SearchHitVM[];
   /** 截断前的命中总数(含未在面板呈现的 waiting-for) */
   totalMatched: number;
+}
+
+/** 保存的过滤器(Filters & Labels 视图)。 */
+export interface FilterListItemVM {
+  id: string;
+  name: string;
+  /** 查询原文(D-32/INV-33) */
+  query: string;
+  /** 命中的活跃任务数;查询语法错误时为 null */
+  matchCount: number | null;
+  /** 语法错误信息(有则视图上直接标红) */
+  error: string | null;
+}
+
+/** 过滤器求值结果:顶层逗号分段,每段一列任务。 */
+export interface FilterRunVM {
+  query: string;
+  sections: { source: string; tasks: TaskVM[] }[];
+  error: string | null;
+  /** 查询里引用了但当前不存在的标签/项目名(结果恒空,视图给提示) */
+  unknownLabels: string[];
+  unknownProjects: string[];
 }
 
 /** 侧栏徽章计数(someday/reference)。 */

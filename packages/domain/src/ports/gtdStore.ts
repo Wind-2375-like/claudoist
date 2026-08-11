@@ -39,6 +39,7 @@ export type Command =
   | { kind: 'createListItem'; item: ListItem }
   | { kind: 'deleteListItem'; id: Id }
   | { kind: 'createLabel'; label: Label }
+  | { kind: 'updateLabel'; id: Id; patch: Partial<Omit<Label, 'id'>> }
   | { kind: 'deleteLabel'; id: Id }
   | { kind: 'assignLabel'; taskId: Id; labelId: Id }
   | { kind: 'unassignLabel'; taskId: Id; labelId: Id }
@@ -110,6 +111,9 @@ export function applyToSnapshot(snap: GtdSnapshot, commands: Command[]): GtdSnap
         break;
       case 'createLabel':
         next.labels = [...next.labels, c.label];
+        break;
+      case 'updateLabel':
+        next.labels = patchById(next.labels, c.id, c.patch);
         break;
       case 'deleteLabel':
         next.labels = next.labels.filter((l) => l.id !== c.id);
