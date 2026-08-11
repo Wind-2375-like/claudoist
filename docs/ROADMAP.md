@@ -501,28 +501,61 @@
 
 ### M8 — Agent 只读版
 
-**目标**:右栏 agent 面板上线(只读):SDK 会话管理、API key onboarding、流式聊天 + 工具 chip、只读 GTD 工具、成本护栏、中断;**GTD 流程 skill 的只读部分**(D-28)。
+**目标**:右栏 agent 面板上线(只读):SDK 会话管理、**认证引导(主:本机订阅登录;备:API key)**、流式聊天 + 工具 chip、只读 GTD 工具、成本护栏、中断;**GTD 流程 skill 的只读部分**(D-28)。
 
 **范围要点**
 - `sessionManager.ts`:每会话一个长驻 streaming-input `query()`(`prompt` 为 `AsyncIterable<SDKUserMessage>`),`includePartialMessages: true`,`SDKMessage` 序列化后经 `agent:stream` 推给 renderer。
 - 认证引导(自用路线,DESIGN.md §6.1):首启检测本机 Claude Code 登录可用性;不可用时引导用户在终端完成 `claude` 登录后重试。备用路径:Settings 可录入 `ANTHROPIC_API_KEY` → `safeStorage` 加密存 `userData/secrets.bin`,经 `options.env` 注入(优先于主路径);`settings:apiKey.status` 只返回是否存在,绝不返回 key。
-- `CLAUDE_CONFIG_DIR` = `userData/claude`;`settingSources` 排除 `'user'`(`~/.claude/settings.json` 不得影响应用行为)。
-- 只读工具入 `allowedTools`:`mcp__gtd__list_inbox`、`list_tasks`、`get_task`、`list_projects`、`get_project`、`list_calendar`、`list_waiting_for`、`list_contexts`、`list_labels`、`list_filters`、`search`、`get_engage_recommendations`、`list_orphan_projects`、`get_status_summary`(`createSdkMcpServer({ name:'gtd' })`,handler 直连 main 的同一 `GtdStore`)。
-- System prompt 固化易错不变量(priority 1=最低 5=最高;energy 过滤方向 任务 ≤ 用户;calendar/waiting 计入项目 active action;someday 激活必回 inbox)+ 每次会话注入轻量状态快照(日期、contexts 及计数、inbox 数、孤儿项目数)。
-- 护栏:每次 `query()` 带 `maxTurns` + `maxBudgetUsd`(settings 可配);`agent:interrupt` 接 AbortController;应用退出清理子进程。
+- **`CLAUDE_CONFIG_DIR` 不设置**(M1 实证定案,DESIGN §6.1/§6.2:重定向到空目录会使订阅凭据不可见,子进程报 Not logged in)。会话隔离靠 `cwd = userData`;`CLAUDOIST_CONFIG_DIR_MODE=app` 旋钮保留给将来的 BYO-key 形态。`settingSources` 排除 `'user'`(`~/.claude/settings.json` 不得影响应用行为)—— 注意该选项**省略即全加载**,M8 是第一次必须显式传它。
+- **工具面收窄靠 `tools`,不是 `allowedTools`**(勘察实证:`allowedTools` 只是"免确认自动放行"名单,`tools: []` 才关掉全部内置工具)。M8 设 `tools: []` + `mcpServers`,**内置 Bash/Write/Edit 一律不开** —— 否则 agent 能经 `pnpm cli complete` 写数据,"只读版无写路径"就是假的。只读工具经 `createSdkMcpServer({ name:'gtd' })` 注入,handler 直连 main 的同一 `GtdStore`:
+  - `list_inbox` / `list_bucket`(someday/reference)/ `list_today` / `list_calendar` / `list_projects` / `get_project` / `get_task_detail`(子任务树 + 评论)/ `list_labels` / `list_filters` / `list_waiting_for` / `search` / `get_engage_recommendations` / `get_status_summary`
+  - **`run_filter`(新增,INV-33.9 要求)**:按查询原文求值。相应地 `list_*` 一律收窄为"按容器/项目/父任务列举",**条件查询一律走 `run_filter`** —— 否则等于开了第二套过滤口径。
+  - **退役不再实现**:`list_contexts`(D-30 情境并入标签)、`list_orphan_projects`(D-21 孤儿机制退役)。
+  - `list_inbox` 返回 `bucket='inbox'` 的 **Task**(D-20),不是 `inbox_items`;`list_calendar` 返回带 `startTime/duration/timeZone/mirrored` 的 Task(D-23/INV-29/INV-31)。
+- System prompt 固化易错不变量(**权威在 DESIGN §6.6**,此处不复述以免再次漂移)+ 每次会话注入轻量状态快照(日期、**标签**及活跃计数、inbox 数、各项目未完成计数、今日计划数)。**新增机器检查**:prompt 常量内嵌 INV 编号,check 脚本进 CI(机制同 `check-coverage`)—— 本次勘察在 §6.6 发现 5 处与 INVARIANTS 的漂移,靠人读是拦不住的。
+- 护栏:`maxTurns` + `maxBudgetUsd`(SDK 确有该选项;settings 键名统一为 `maxBudgetUsd`,语义 = **每会话**)。**中断分两级**:`agent:interrupt` 走 `query()` 返回对象的 **`interrupt()`**(仅 streaming-input 可用)= 只终止当前 turn、会话可继续;**AbortController 只用于销毁会话与应用退出** —— 在长活会话模型下 abort 会终止整个 `query()`,与"会话可继续"直接冲突。应用退出清理子进程。
 - 流式渲染:`stream_event` 状态机(text_delta / tool_use chip + input_json_delta / tool_result 折叠附着)。
 
 **验收标准**
-- [ ] 问"本周有什么要到期?",经**可见的** `mcp__gtd__list_tasks` 工具 chip 得到正确回答
-- [ ] 已登录本机 Claude Code 的环境零配置直接可聊;未登录环境给出清晰引导
-- [ ] 面板 footer 显示本会话 token 累计(成本金额为辅,订阅计费下可为 0)
-- [ ] 中断按钮立即终止当前 turn,会话可继续
-- [ ] 只读版无任何写路径:写工具未注册,agent 无法改动数据
-- [ ] 若使用备用 API key 路径:key 只存在于 `secrets.bin`(加密),日志与 IPC 中不出现明文
 
-**用户反馈**
+*认证*
+- [ ] 已登录本机 Claude Code 的环境:右栏首次发消息**零配置**成功(不注入 API key、不设 `CLAUDE_CONFIG_DIR`)
+- [ ] 未登录环境:面板给可操作引导(终端 `claude` 登录后点重试),**无需重启**即可恢复
+- [ ] 在 `~/.claude/settings.json` 放一条会改变行为的设置,应用行为不受影响(`settingSources` 排除 `'user'` 生效)
+- [ ] 备用 API key 只存在 safeStorage 加密文件;日志、IPC payload、`agent_audit` 里 grep 不到明文
 
-(待填写)
+*会话*
+- [ ] 单会话多轮:第 3 轮能正确引用第 1 轮内容(长活 streaming-input `query()` 生效,不是每次新建)
+- [ ] 重启应用后续上上次会话(`resume`);会话列表/fork/删除留 M10
+- [ ] `conversations` 行在 query 起飞前插入,`sdk_session_id` 拿到后回填(迁移 v14 已使其可空)
+
+*只读工具*
+- [ ] 问「这周之前必须做完什么?」→ 经**可见的工具 chip** 得到正确答案,且走 `run_filter`(`deadline before: +7 days`)
+- [ ] 问「这周要做什么?」返回**计划日**口径,与上一条**结果不同**(INV-33.2 两个日期字段不混用)
+- [ ] Someday/Reference 里的任务能被 `search` 找到;软删任务搜不到,且 agent 不因此断言"不存在"
+- [ ] `get_engage_recommendations` 与 `pnpm --silent cli engage --json` 同参数下逐条一致(INV-20.6 对拍)
+- [ ] **无任何写路径**:`tools: []`(内置 Bash/Write/Edit 全关)+ 写工具未注册;要求 agent 改数据时它**明说没有写权限**,不假装完成(INV-15)
+- [ ] 工具清单不含已退役工具;`list_inbox` 返回 `bucket='inbox'` 的 Task 而非 `inbox_items`
+
+*prompt 与护栏*
+- [ ] 会话起始快照含:日期、标签及活跃计数、inbox 数、各项目未完成数、今日计划数;**不含** contexts、不含孤儿数
+- [ ] 易错项抽查全对:priority 5 最高(且能主动提示与 Todoist 相反)、energy 方向、waiting-for 计入项目余活动、someday 激活 = **移到任意容器**、完成父任务**会**连带完成 active 子树
+- [ ] prompt 常量与 INVARIANTS 的同步有机器检查(内嵌 INV 编号 + check 脚本进 CI)
+- [ ] 中断**只终止当前 turn**(`q.interrupt()`),同一会话可继续;AbortController 仅用于销毁会话与退出
+- [ ] `maxTurns` / `maxBudgetUsd` 触顶给出可理解提示而非静默截断;退出后 `claude` 子进程无残留
+
+*流式*
+- [ ] 文本逐字出现;`tool_use` 立即出 chip 并实时渲染累积入参;`tool_result` 折叠附着到对应 chip
+- [ ] 一轮内多次工具调用各自成 chip、顺序与实际一致;中断后已渲染内容保留
+
+*skill 与建议按钮(D-28 只读部分)*
+- [ ] **skill 加载机制冒烟**:dev 与**打包版**均确认 skill 被子进程实际加载(不重定向 CONFIG_DIR、`settingSources` 排除 `'user'` 的前提下)
+- [ ] composer 下方出现建议按钮;点击 = 发预置提示,可随时改口/跳步(不是状态机);流式中禁用
+- [ ] 「帮我挑一件事做」走 engage 只读半程:先列今天计划(时刻序、不受标签过滤),再问标签/分钟/精力,给 top-7 + "另有 N 条",**在"做完了吗"处停下**并说明写操作留 M9
+- [ ] skill 不自行重写过滤:输出与 `get_engage_recommendations` 逐条一致;transcript 里无"自己 list 再筛"的痕迹
+
+*文档*
+- [ ] 三份文档同步;`pnpm test/typecheck/lint/check-coverage/smoke` 全绿
 
 ---
 

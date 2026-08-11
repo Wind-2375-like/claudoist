@@ -325,7 +325,9 @@ CREATE INDEX idx_reminders_due ON reminders(dispatched, remind_at);
 
 CREATE TABLE conversations (                            -- SDK 管理的 transcript 之上的索引
   id TEXT PRIMARY KEY,
-  sdk_session_id TEXT NOT NULL,                         -- 来自 ResultMessage.session_id;fork 时更新
+  sdk_session_id TEXT,                                  -- 可空(迁移 v14):会话行须先于 query() 插入
+                                                        --   (流式期间 audit 与 stream 都要挂 conversation_id),
+                                                        --   session_id 要等 system/init 才知道;fork 时更新
   title TEXT NOT NULL,                                  -- 首条用户消息截断;可改名
   model TEXT NOT NULL, created_at TEXT NOT NULL, last_message_at TEXT NOT NULL,
   total_cost_usd REAL NOT NULL DEFAULT 0,               -- 累加 ResultMessage.total_cost_usd
@@ -469,12 +471,14 @@ main 的 `canUseTool: async (toolName, input) => …` 阻塞在 promise 上:推 
 `options.systemPrompt` 使用自定义 prompt,两部分:
 
 1. **固化的易错不变量**(常量文本,与 [./INVARIANTS.md](./INVARIANTS.md) 同源维护):
-   - priority 语义 1=最低、5=最高,永不重编号;
+   - priority 语义 1=最低、5=最高,永不重编号;⚠ 2026-08-11 曾按 D-29 翻转又当日被 D-31 撤回,**当前且永远是 5=最高**;过滤器语法 `p5` 也是最高,**与 Todoist 的 p1=最高相反** —— 用户说「p1」时先确认他指哪一头;
    - engage 能量过滤方向:任务 energy ≤ 用户 energy(精力好的人可做轻松任务,反之不行);
-   - calendar 条目与 waiting-for 都算项目的 active action(完成后果提示必须计入);
-   - someday 激活必须回 inbox 重新 clarify,绝不直达 tasks;
-   - 一切级联(项目完成、deadline 传播、完成后的下一步)必须先向用户提问、拿到确认后再单独调用写工具——收到 `consequences` 字段即视为"该提问了";子任务永不随父完成(INV-26)。
-2. **每次会话注入的轻量状态快照**(会话起始时由 main 组装):今天日期、标签列表及活跃计数(D-30)、inbox 条数、各项目未完成计数。让 agent 开口即有正确的日期与全局形势,不必先打一轮读工具。
+   - 带时间的任务本就是 Task(D-23 日历统一,不再有独立日历实体);**waiting-for** 仍单独计入项目的 active action(完成后果提示必须计入,INV-05);
+   - someday/reference 是孵化容器,不进 Today 与 engage;**激活 = 用户显式移到任意其他容器**(Inbox 或直接进项目均可,移动本身就是理清,INV-21/D-20)—— **不是**「必须回 inbox 重走 clarify」;系统永不自动把它们移出;
+   - 一切**跨实体**级联(项目完成、deadline 传播、完成后的下一步)必须先向用户提问、拿到确认后再单独调用写工具——收到 `consequences` 字段即视为"该提问了";
+   - 但**同一任务子树内**的移动/软删/完成是单次动作的完整语义,**不需额外征询**(INV-15 例外):移动带子任务的任务 = 子树随动;软删 = active 子树级联软删;**完成父任务 = 连同其整棵 active 子树一并完成**(D-22/INV-26.1,返回 `completedSubtaskCount`)。方向仅向下 —— 完成子任务绝不改变父任务状态;
+   - 只读阶段(M8)遇到"帮我做完/改掉"必须**明说自己没有写权限**,不得含糊带过或声称已完成。
+2. **每次会话注入的轻量状态快照**(会话起始时由 main 组装):今天日期、标签列表及活跃计数(D-30)、inbox 条数、各项目未完成计数、今天的计划任务数(D-19 Today 口径)。让 agent 开口即有正确的日期与全局形势,不必先打一轮读工具。
 
 ### 6.7 CLI 操作通道(2026-08-09 用户定案)
 
@@ -514,9 +518,33 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
 - **因此中栏没有 Focus 面板、没有回顾向导、侧栏没有 Weekly Review 项**;中栏只承载"看和
   改数据"的视图(Inbox / Today / Calendar / 项目 / Search / Filters & Labels)。
 
-> 载体归属:skill 定义与建议按钮属 **M8–M10**(agent 里程碑);M7 只做 Search 与
-> Filters & Labels。此前 M7a 已实现的桌面 Focus 面板据本决策**撤除**(domain 规则与 CLI
-> `engage` 保留)。
+**落地机制(2026-08-11 勘察实证)**:SDK 有 `options.skills?: string[] | 'all'`
+(`sdk.d.ts:2010`),skill 因此有真实载体,不必自己发明发现机制。三条约束:
+
+- **不走 `~/.claude` 发现**:`CLAUDE_CONFIG_DIR` 按 M1 定案不重定向(§6.1),若让 skill
+  经用户 config 目录发现,应用的 skill 会污染用户自己的 Claude Code 环境,反之亦然。
+- **打包**:skill 文件若打进 asar,子进程读不到(§9.3 的 `asarUnpack` 同理)。**M8 必须先做
+  一次加载冒烟**(dev + 打包版各一次),与 M1 的 CONFIG_DIR 冒烟同性质 —— 机制没验证前
+  不写 skill 内容。
+- **skill 在应用内一律走 MCP 只读工具,不走 CLI**:走 CLI 需要开内置 `Bash`,而 Bash 能跑
+  `pnpm cli complete` 这类写命令,与 M8「只读版无写路径」直接冲突。**`@gtd/cli` 出口只供
+  用户自己的终端与外部 Claude Code 会话**(§6.7)。另注:`review` / `weekly-review`
+  **没有** CLI 命令,"同名命令"只对 `engage` 成立。
+
+**skill 与单一口径**:skill 的典型失败模式是"自己 `list_tasks` 再筛一遍"。INV-20.6 /
+INV-32.6 / INV-33.9 点名 **agent skill 也在约束内** —— 择事必须走
+`get_engage_recommendations`、条件查询必须走 `run_filter`,不得自行重写过滤。
+
+**按能力切分到里程碑**(原先四个 skill 全堆在 M10,M8 的"只读部分"没有落点):
+
+| 里程碑 | skill 交付 |
+|---|---|
+| **M8(只读)** | 加载机制冒烟;`engage` 的**推荐半程**(到"top-7 + 今天的计划"为止,INV-20.5 明确推荐是只读、完成是独立写操作);建议按钮的**壳**(按钮在、点击发预置提示;需要写权限的按钮明确降级说明) |
+| **M9(写)** | `clarify`、`decompose`、`engage` 的完成动作、`weekly-review` 的 Step 1–5 —— 全部依赖写工具与征询纪律,随写工具一起验收 |
+| **M10** | skill 全集打磨 + coaching evals(回归测试) |
+
+> 载体归属:M7 只做 Search 与 Filters & Labels。此前 M7a 已实现的桌面 Focus 面板据本决策
+> **撤除**(domain 规则与 CLI `engage` 保留)。
 
 ## 7. Agent 面板功能 → SDK API 映射
 

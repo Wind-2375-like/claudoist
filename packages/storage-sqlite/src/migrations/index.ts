@@ -422,4 +422,34 @@ UPDATE filters
       }
     },
   },
+  {
+    version: 14,
+    name: 'conversation-session-id-nullable',
+    // M8:会话行要在 query() 起飞**之前**插入(流式期间 agent_audit 与 agent:stream 都要
+    // 挂 conversation_id),而 sdk_session_id 要等第一条 system/init 或 result 才知道。
+    // 原 NOT NULL 使这个顺序不可能成立 —— SQLite 不能直接改列约束,只能重建表。
+    // 外键 agent_audit.conversation_id → conversations(id) 在重建期间靠 foreign_keys=OFF
+    // (openDb 在 migrate 之后才打开)保持有效。
+    sql: `
+CREATE TABLE conversations_v14 (
+  id TEXT PRIMARY KEY,
+  sdk_session_id TEXT,
+  title TEXT NOT NULL,
+  model TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_message_at TEXT NOT NULL,
+  total_cost_usd REAL NOT NULL DEFAULT 0,
+  total_input_tokens INTEGER NOT NULL DEFAULT 0,
+  total_output_tokens INTEGER NOT NULL DEFAULT 0,
+  forked_from TEXT,
+  archived INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO conversations_v14
+  SELECT id, sdk_session_id, title, model, created_at, last_message_at,
+         total_cost_usd, total_input_tokens, total_output_tokens, forked_from, archived
+    FROM conversations;
+DROP TABLE conversations;
+ALTER TABLE conversations_v14 RENAME TO conversations;
+`,
+  },
 ];

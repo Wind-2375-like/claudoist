@@ -752,7 +752,7 @@ Step 6/6 通览日历(只读):
      早期行为清单记为"总是执行", 与源码不符, 以本条为准。桌面版常驻徽章使该差别不再敏感。)
 ```
 
-agent 对应:`get_engage_recommendations { contextName, availableMinutes, energy }` 是**只读**工具,返回 top-7 与今天的日历项;完成动作必须另行调用写工具(INV-20.5)。
+agent 对应:`get_engage_recommendations { labelName?, availableMinutes, energy }` 是**只读**工具(D-30:情境已并入标签,不给 labelName = 不按标签过滤),返回 top-7 与今天的日历项;完成动作必须另行调用写工具(INV-20.5)。
 
 ### 4.13 Context 管理
 
