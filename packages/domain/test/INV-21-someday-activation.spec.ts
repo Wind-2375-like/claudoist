@@ -3,7 +3,7 @@ import { moveTask } from '../src/usecases/tasks';
 import { engageCandidates } from '../src/rules/engageRanking';
 import { applyToSnapshot } from '../src/index';
 import { isUsecaseError } from '../src/usecases/types';
-import { ctx, deps, project, snapshot, task } from './helpers';
+import { ctx, deps, project, snapshot, task, TODAY } from './helpers';
 
 /**
  * INV-21 ⚠SP(D-20/D-21 修订):someday/reference = 孵化容器 ——
@@ -22,7 +22,7 @@ describe('INV-21 Someday 孵化语义(bucket 容器)', () => {
   });
 
   it('someday/reference 不进 engage 候选;inbox 进', () => {
-    const got = engageCandidates(base, 'c1', 60, 'high');
+    const got = engageCandidates(base, 'c1', 60, 'high', TODAY);
     expect(got.map((t) => t.id)).toEqual(['t3']);
   });
 
@@ -32,7 +32,7 @@ describe('INV-21 Someday 孵化语义(bucket 容器)', () => {
     const after = applyToSnapshot(base, r.commands);
     expect(after.tasks.find((t) => t.id === 't1')!.bucket).toBe('inbox');
     expect(
-      engageCandidates(after, 'c1', 60, 'high')
+      engageCandidates(after, 'c1', 60, 'high', TODAY)
         .map((t) => t.id)
         .sort(),
     ).toEqual(['t1', 't3']);

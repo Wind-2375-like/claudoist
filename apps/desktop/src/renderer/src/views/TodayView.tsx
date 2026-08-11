@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { TaskCard } from '../TaskCard';
 import { TaskDetailModal } from '../TaskDetailModal';
 import { TaskRow } from '../TaskRow';
+import { FocusPanel } from '../FocusPanel';
 import { useGoogleStatus, useGoogleSync, useToday } from '../hooks';
 import { toast } from '../toast';
 
@@ -24,6 +25,7 @@ export function TodayView(): React.JSX.Element {
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overPostpone, setOverPostpone] = useState(false);
   // D-25:Google 事件已镜像成任务,直接出现在下面的任务列表里;这里只保证"看 Today 时同步一次"
@@ -51,7 +53,18 @@ export function TodayView(): React.JSX.Element {
   };
   return (
     <div className="px-8 py-6">
-      <h1 className="mb-1 text-2xl font-bold">Today</h1>
+      <div className="mb-1 flex items-center gap-3">
+        <h1 className="text-2xl font-bold">Today</h1>
+        <button
+          type="button"
+          data-testid="focus-open"
+          className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-50"
+          onClick={() => setFocusOpen(true)}
+          title="按情境 / 可用时间 / 精力挑一件事做(INV-20)"
+        >
+          ▶ Focus
+        </button>
+      </div>
       <p className="mb-5 text-xs text-neutral-400">{data.today}</p>
 
       {data.tasks.length === 0 && !adding && (
@@ -130,6 +143,7 @@ export function TodayView(): React.JSX.Element {
         )}
       </div>
       {detailId && <TaskDetailModal taskId={detailId} onClose={() => setDetailId(null)} />}
+      {focusOpen && <FocusPanel onClose={() => setFocusOpen(false)} />}
     </div>
   );
 }

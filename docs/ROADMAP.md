@@ -45,8 +45,8 @@
 | M3 | 存储层 | `@gtd/storage-sqlite` 实现 GtdStore(node:sqlite)+ 迁移 + contract 测试 + `pnpm seed` | ✅ |
 | M4 | 只读壳 | main 开库 + IPC 读通道 + 侧栏与 Inbox/My Projects/Today 只读视图 | ✅ |
 | M5 | 捕捉与理清(经 R/R2/R3 三次用户反馈重塑) | 捕捉、Todoist 式单卡快速添加、容器模型(D-20)、平面项目 + 任务子树/评论/详情弹窗(D-21)、CLI 通道(M5C) | 🔄 |
-| M6 | 其余视图 | Upcoming 周网格、Filters & Labels、⌘K 搜索、Reminders 响铃、评论附件 | ⬜ |
-| M7 | 执行辅助 | Focus 面板(engageRanking 纯规则,无向导状态机)、Completed 归档策略 | ⬜ |
+| M6 | 日历 | 日历统一(D-23,CalendarItem 消解为定时任务)、本地周网格、Google 日历同步(D-25/D-26)、时区(D-27) | ✅ |
+| M7 | GTD 流程 | Focus/Engage 面板(engageRanking 纯规则,无向导状态机)、Weekly Review 向导、Search(⌘K)+ Filters & Labels | 🔄 |
 | M8 | Agent 只读版 | SDK 接入 + API key onboarding + 流式聊天 + 只读工具 + 成本护栏 | ⬜ |
 | M9 | Agent 写入 + 权限 | 写工具 + canUseTool 审批 + 权限模式 + agent_audit + 实时刷新 | ⬜ |
 | M10 | Agent 面板补全 | 会话管理/fork、图片粘贴、附件、模型与 effort 切换、用量账本、coaching evals | ⬜ |
@@ -366,6 +366,8 @@
   - **拖拽复测修定(2026-08-10)**:①上下移动不对称(向下几像素即触发、向上要挪一整行)—— 定位参考点从**光标**改为**被拖块上沿**(冻结几何是"抽走该块后"的坐标,拿光标比中线必然偏);横向缩进时不再动辄被判成向下移动。②落在"父与其子之间"时只能选子级 —— 下界放开到 0,选更浅层级时把后面那棵更深的子树**收养**到落点任务下(`a / └b / c` → 把 c 放到 a、b 之间选顶层 → `a / c / └b`);真正非法的"首行就缩进"仍由上界挡住。
   - **M6c 对抗评审修定(2026-08-10,24 项确认 / 12 HIGH)**:①全天任务推送后被自己判成"已删除"并软删 —— 读取侧把全天事件展开成 `id:日期`,与 `pushedEventId` 对不上;改用**原始事件 id** 对账。②把 block 拖出同步窗口 = 任务被删(Today 窗口只有一天)—— 删除改为**逐个 `events.get` 实证**,拖走的按新位置改期。③离线/单次 API 失败被当成"日历空了",窗口内镜像被批量软删、恢复后重建成空白任务 —— 改为**失败闭合**(只退休本轮成功拉取的日历),并让再次出现的镜像**复活原任务**。④专用 `Claudoist` 日历自己也在镜像源里 → 每个已推任务多一个孪生只读任务;已排除。⑤回拉无条件以 Google 为准 → 一次推送失败就把用户改期永久覆盖;改为**本地更脏则本轮本地优先**。⑥`google:sync` 可重入(Today 与 Calendar 各一个轮询)→ 串行化。⑦本地每次写都触发整轮同步 → 加 `staleTime`。⑧跨午夜时长被钳到 23:59 后回拉改小 → end 滚到次日。⑨`shouldPush` 不看 bucket(someday 里带日期的任务会被推上去)、推送默认时长与应用内回退不一致、专用日历 id 失效无恢复、同步失败对用户不可见、完成块右键仍可"移到全天"、resize 落库与预览差最多 4 分钟 —— 一并修。
 
+> **M6 已验收(2026-08-10 用户确认)**:日历统一(M6a)、周网格(M6b)、Google 连接/多账号/镜像为任务/专用日历双向同步(M6c)、时区(M6d)全部通过。写入 Google 默认关闭,需在设置页显式开启。
+
 **M6d — 时区(2026-08-10 用户定案,D-27/INV-31)**
 
 - `Task.timeZone`:`null` = **浮动时间**(默认,= 既有 naive 语义 = Todoist 的 Floating time),否则 IANA 时区名。迁移 v9(存量全部视为浮动,无需回填)。
@@ -442,21 +444,38 @@
 
 ### M7 — GTD 流程
 
-**目标**:三大流程落地:Focus/engage、Weekly Review 6 步向导、完成级联 sheet、常驻孤儿徽章。
+**目标**:Focus/engage 面板、Weekly Review 向导、Search 与 Filters & Labels 视图。
 
-**范围要点**
-- Focus/engage(Today 头部入口):calendar-first(当日有未处理 calendar item 先给它们)→ 选 context(带计数)→ 可用分钟 → 当前 energy → top-7 排序列表(min ≤ time ∧ energy ≤ user,priority 降序,展示 ~min / energy / P / DDL / 面包屑)→ "Do it" → 完成后追问对话框(定义下一步 / 建子项目 / 完成项目? / 跳过)→ 孤儿检查。
-- Weekly Review 6 步向导(`gtd:flow.start {kind:'review'}`):1 处理 inbox(内嵌 clarify)· 2 逐 context 任务相关性清扫("不相关"= 软删除)· 3 项目树完整性清扫(无 next action 警告)· 4 waiting-for 清扫(follow-up 模板:`Follow up with X re: Y`,@phone 或首个 context,5 min,low,P4,同项目)· 5 someday 分诊(激活必回 inbox)· 6 calendar 通读;带进度条、可中断续跑。
-- 级联 sheet:非模态,"X 的所有子项目已完成 —— 也完成 X 吗?";级联仅向上、必须征询、绝不自动。
-- 常驻孤儿徽章:侧栏 `gtd:orphans.count`,每次 `gtd:changed` 重算,点击开 Fix-orphans sheet。
-- 父项目 deadline **编辑**时一次性提示:"同步更新 N 个继承的子项 deadline?"(继承语义 = copy-on-create;编辑传播必须显式确认)。
+> **范围修订(2026-08-10,M6 验收后)**:本节原文写于 D-21/D-22/D-23 之前,以下条目已随决策**退役**,不再实现:
+> - ~~常驻孤儿徽章 / Fix-orphans sheet~~ → D-21 项目平面化,孤儿机制整体退役(INV-06/07/09)。
+> - ~~"所有子项目已完成 → 也完成父项目?"级联 sheet~~ → D-21 无子项目;D-22 起完成沿**子任务向下**级联且不征询。项目层面的"已无余下活动"仍按 INV-14 以**完成后果**呈现(已于 M5R 实现为提示条)。
+> - ~~Weekly Review 第 3 步"项目树完整性清扫"~~ → 改为平面项目的"无 next action 警告";~~第 6 步"calendar 通读"~~ → D-23 日历已统一,改为在 Calendar 视图内自行通读,不单列步骤。
+> - 父项目 deadline 编辑的继承同步提示 **已在 M5R 实现**(ProjectModal 先读 `projectInheritCount` 再一次性征询)。
+>
+> Search 与 Filters & Labels 由 M6 顺延至此(侧栏占位当前标注 M7)。
+
+**子步**
+
+- **M7a — Focus/Engage 面板**(2026-08-10 完成):Today 头部 "▶ Focus" → calendar-first(今天已排期任务按时刻序先给)→ 选 context(带计数,默认第一个)→ 可用分钟 → 当前 energy → top-7 候选(domain `engageCandidates`:`estimatedMinutes ≤ 可用分钟` ∧ `energy ≤ 用户 energy`,priority 降序稳定,最多 7 条)→ 行内完成 → 完成后果提示(INV-14)。CLI `engage` 同口径。
+  - [x] 8 条同 context 候选只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤
+  - [x] 今天有已排期任务时先呈现它们(全天在前、再按 startTime)
+  - [x] someday/reference 容器的任务不进候选
+  - [x] 完成走 TaskRow 同一路径,故自动继承 INV-14 完成后果提示与 D-22 向下级联
+  - [x] CLI `engage --context= --minutes= --energy=` 与面板同序同内容(含 "另有 N 条未列出")
+- **M7a 实施中修定**:
+  - **INV-20.2 新增**:今天已排期的任务原本在"已排期"与"候选"两段**重复出现**;改为 `engageMatches` 排除 `scheduledDate === today`(已承诺的事轮不到"挑")。过期计划仍可挑。
+  - **过滤口径下沉**:`views.engage` 曾把候选过滤条件抄一遍算 `matched`(→ "另有 N 条"与列表可能各说各话);新增 domain `engageMatches`(不截断),`engageCandidates` = 其前 N 条,两个 surface 共用。CLI 同步补上 `matched`/`topN` 与 "另有 N 条未列出"。
+  - **面板默认选中第一个 context**:否则 calendar-first 这段"已承诺的事"要等用户先点一下情境才出现,与其语义相悖;默认值与 CLI 不带 `--context` 一致。
+  - **新验证通道 `--screenshot-click=<selector>`**:原 `--screenshot` 只能拍默认视图,弹窗/面板拍不到。现可先点一个选择器再截图(Focus 面板挂 `data-testid="focus-open"`;M7b 向导、M7c ⌘K 同法)。
+- **M7b — Weekly Review 向导**(5 步,可中断续跑,进度存 `settings`):1 处理 Inbox · 2 逐 context 相关性清扫("不相关"= 软删除,Trash 可恢复)· 3 项目健康(无 active next action 的项目告警)· 4 waiting-for 清扫(INV-23 follow-up 模板)· 5 someday 分诊(激活 = moveTask 回 Inbox/项目,INV-21)。
+- **M7c — Search(⌘K)+ Filters & Labels 视图**:domain 已有 `searchAll` 与 `evalFilter` + 预置 filters,补 UI 与 IPC。
 
 **验收标准**
-- [ ] 对 [./INVARIANTS.md](./INVARIANTS.md) 的 engage、weekly review、after-completion、级联、孤儿修复流程规格逐条走查通过
-- [ ] calendar-first 规则生效;推荐排序与 domain `engageRanking` 一致
+
+- [ ] 对 [./INVARIANTS.md](./INVARIANTS.md) 的 engage(INV-20)、weekly review、after-completion(INV-14/15)、someday 激活(INV-21)、follow-up(INV-23)逐条走查通过
+- [ ] calendar-first 生效;推荐排序与 domain `engageRanking` 一致
 - [ ] Review 第 2 步"不相关"执行软删除(status='deleted',Trash 可恢复)
-- [ ] 级联从不自动发生,每一级都单独征询
-- [ ] 父项目 deadline 编辑弹出继承子项同步提示,选择结果正确落库
+- [ ] 完成级联从不自动跨实体发生(项目完成始终另行征询)
 - [ ] Weekly Review 中断后可恢复进度
 
 **用户反馈**

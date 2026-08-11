@@ -17,6 +17,8 @@ if (!app.isPackaged) {
 const spikeArg = process.argv.find((a) => a.startsWith('--spike-test='));
 const dumpArg = process.argv.find((a) => a.startsWith('--dump='));
 const screenshotArg = process.argv.find((a) => a.startsWith('--screenshot='));
+// 截图前先点一个选择器(拍弹窗/面板用,如 Focus、周回顾向导、⌘K)
+const screenshotClickArg = process.argv.find((a) => a.startsWith('--screenshot-click='));
 
 function createWindow(): BrowserWindow {
   const widthArg = process.argv.find((a) => a.startsWith('--win-width='));
@@ -141,11 +143,20 @@ if (spikeArg) {
       const path = screenshotArg.slice('--screenshot='.length);
       win.webContents.once('did-finish-load', () => {
         setTimeout(() => {
-          void win.webContents.capturePage().then((img) => {
+          void (async () => {
+            if (screenshotClickArg) {
+              const sel = screenshotClickArg.slice('--screenshot-click='.length);
+              const hit: boolean = await win.webContents.executeJavaScript(
+                `!!document.querySelector(${JSON.stringify(sel)})?.click() || !!document.querySelector(${JSON.stringify(sel)})`,
+              );
+              if (!hit) process.stdout.write(`[SCREENSHOT] 选择器无匹配:${sel}\n`);
+              await new Promise((r) => setTimeout(r, 600));
+            }
+            const img = await win.webContents.capturePage();
             writeFileSync(path, img.toPNG());
             process.stdout.write(`[SCREENSHOT] ${path}\n`);
             app.exit(0);
-          });
+          })();
         }, 1800);
       });
     }

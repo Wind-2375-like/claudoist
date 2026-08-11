@@ -539,7 +539,13 @@ SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
 - **TaskRow(全视图统一行组件)**:完成勾选圈(**complete↔reopen 可切换**:active 圈点击完成、done 圈点击撤销,D-22 误点即可复原)、标题、属性 chip(计划日 / 截止 / 优先级文字 / **label 名**(彩点+名称,不是数量)/ @context);**点击行主体(非勾选框)→ 任务详情弹窗**;右键菜单(完成 / 编辑 / 删除=软删);完成控件 **hover 提示**:带未完成子任务时提示"将连同 N 个子任务一起完成(误点可再点一下撤销)"(D-22 向下级联)。日历项(Today 硬边界)复用同一行式渲染(完成圈 + 标题 + 时间 chip),不再是独立卡片块。
 - **任务详情弹窗(D-22 Todoist 式两栏,单击任务打开;与右键"编辑"的 TaskCard 不同)**:**左栏 = 内容** —— 完成圈 + 标题、描述、**子任务区**(直接子任务用 TaskRow 渲染,可右键完成/删除、单击下钻;"+ Add sub-task" 打开与添加任务相同的 TaskCard,默认继承父的位置/context,≤5 层)、**评论区**(时间序 + 输入框;附件 M10);**右栏 = 属性面板** —— Project/位置(可编辑,**Move to** Inbox/Someday/Reference/项目)、Date、Deadline、Priority、Labels、Reminders、@context,逐项点击就地编辑(经 `tasks.update`/`tasks.move`/label·reminder 通道)。下钻子任务时顶部显示返回按钮(标签 = 真实上一层标题,非父链)。
 - **Inbox(容器模型,INVARIANTS D-20,2026-08-09 定案)**:`bucket='inbox'` 的**任务列表**(仅根任务成行,子任务在详情内)——task 生在 Inbox,不挪不消失。右键"编辑"展开 TaskCard;**Move to** 选择器(Inbox / 项目 / Someday / Reference)执行容器移动;底部内联 "+ Add task"。理清 = 编辑属性 + Move(或勾完成);想让 Claude 理清就直接在右栏对话——**无专用按钮**。
-- **Today(D-21/D-23 日历统一:单一列表,全行式)**:**统一任务列表** = `scheduledDate ≤ 今天` ∪(`deadline ≤ 今天` 且未计划)的 active 任务(someday/reference 不入;过期高亮)。计划段排序:计划日升序 → **全天在前 → startTime 升序**(原 hard-landscape §2.5 排序语义并入,**无独立日程段** —— 带时间任务即日历 block,行上显示 🕐 时间·时长 chip)。TaskRow 渲染与 Inbox 完全一致;底部内联 **"+ Add task"**(默认 `scheduledDate=今天`);拖到底部虚线区 = 推迟到明天。Focus/engage 引导面板延后至 M7。
+- **Today(D-21/D-23 日历统一:单一列表,全行式)**:**统一任务列表** = `scheduledDate ≤ 今天` ∪(`deadline ≤ 今天` 且未计划)的 active 任务(someday/reference 不入;过期高亮)。计划段排序:计划日升序 → **全天在前 → startTime 升序**(原 hard-landscape §2.5 排序语义并入,**无独立日程段** —— 带时间任务即日历 block,行上显示 🕐 时间·时长 chip)。TaskRow 渲染与 Inbox 完全一致;底部内联 **"+ Add task"**(默认 `scheduledDate=今天`);拖到底部虚线区 = 推迟到明天。标题旁 **"▶ Focus"** 打开择事面板(下条)。
+- **Focus / Engage 面板(M7a,INV-20;Today 头部 "▶ Focus" 打开的模态)**:GTD 四标准择事模型的直接映射,自上而下四段 ——
+  - **今天已排期(先处理)**:`todaysTimedTasks` 按时刻序;**不随下面的情境/时间/精力过滤**(已承诺的硬性日程与情境无关)。
+  - **1 情境**:context chip 带 active 计数;打开时默认选中第一个(= CLI `engage` 不带 `--context` 的口径),首屏即出结果,不需要先点一下。
+  - **2 可用时间**(15/30/60/120,默认 60)· **3 精力**(低/中/高,默认中)。
+  - **4 挑一件做**:`engageMatches` 前 7 条,行下方 "另有 N 条未列出";行即 TaskRow(可直接完成、单击进详情)。
+  - 过滤/排序/计数**全部**来自 domain `rules/engageRanking.ts`,`views.engage` 与 CLI `engage` 共用,两处不得各写一套(INV-20.6)。
 - **Calendar(M6b,D-23/INV-28;取代原 "Upcoming" 规划)**:周网格 —— 7 列 + 左侧时刻槽 + 顶部**全天段**;上下滚动 24 小时,首屏定位 07:00,今天列显示当前时刻红线。日历 = 任务按 `scheduledDate + startTime` 的投影(**无独立实体、无独立写路径**):
   - **建块**:空白处单击某刻度 → 默认 30 分钟块;按住拖选 → 该区间;全天段单击 → 全天任务。均弹轻量 composer(标题 + 回车创建),走 `quickAddTask`。
   - **改块**:拖动块 = 改 `scheduledDate`(跨列)/`startTime`;拖底边 = 改 `durationMinutes`;拖到全天段 = 清时刻。均走 `updateTask`。

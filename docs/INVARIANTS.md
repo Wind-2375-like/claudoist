@@ -304,13 +304,15 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 #### INV-20 Engage 过滤、排序与 calendar-first ⚠SP(过滤方向)
 
 **规则**:
-1. **Calendar-first(D-23/M6a 版)**:进入 engage 先列出**今天计划**(`scheduledDate === today`)的全部 active 任务,按 §2.5 时刻序(全天在前、startTime 升序,`todaysTimedTasks`);有则优先提议处理。
+1. **Calendar-first(D-23/M6a 版)**:进入 engage 先列出**今天计划**(`scheduledDate === today`)的全部 active 任务,按 §2.5 时刻序(全天在前、startTime 升序,`todaysTimedTasks`);有则优先提议处理。该段是**当天硬性日程,与所选 context 无关**,故不随 context/分钟/精力过滤(桌面面板与 CLI `engage --context` 同此口径)。
 2. 任务推荐:选定 context 后,候选 = 该 context 的 active Task,依次过滤 `estimatedMinutes <= 可用分钟`(默认 60)与 `energy <= 用户 energy`(INV-02)。
-3. 排序:**priority 降序**,稳定排序(同优先级保持创建序);**最多展示 7 条**。
+   **INV-20.2**:第 1 条已列出的(`scheduledDate === today`)**不再进候选** —— 已承诺的事轮不到"挑",两处都列只会让同一条任务在一个面板里出现两次。过期计划(`scheduledDate < today`)不属该段,仍可挑。
+3. 排序:**priority 降序**,稳定排序(同优先级保持创建序);**最多展示 7 条**(`ENGAGE_TOP_N`)。
 4. **deadline 不参与排序**,仅随行显示(CLI 的已知留白,如需改变先改本文档)。
 5. 推荐是只读计算;完成任务是独立的写操作(agent 工具 `get_engage_recommendations` 为只读,完成走 `complete_task`)。
+6. **单一过滤口径**:全部匹配项由 `engageMatches` 给出,候选 = 其前 7 条,"另有 N 条未列出"= `matches.length - 7`。桌面 `views.engage` 与 CLI `engage` 都不得自行重写这套过滤条件(曾因两处各写一遍而使计数与列表口径不一致)。
 **为什么**:GTD 的四标准择事模型(情境→时间→精力→优先级),顺序即算法。
-**验收**:8 条同 context 候选 → 只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤;今天有计划任务(含带时间)时推荐面板先按时刻序呈现它们。
+**验收**:8 条同 context 候选 → 只显示 7 条且为 priority 前 7;30 分钟可用时 45 分钟任务被过滤;今天有计划任务(含带时间)时推荐面板先按时刻序呈现它们,且这些任务不在候选段重复出现;桌面面板与 `pnpm cli engage` 同参数下候选与"另有 N 条"完全一致。
 
 #### INV-21 Someday 孵化语义(D-20/D-21 修订)⚠SP
 

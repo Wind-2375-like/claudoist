@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyToSnapshot, engageCandidates, isUsecaseError, moveTask } from '../src/index';
-import { ctx, deps, project, snapshot, task } from './helpers';
+import { ctx, deps, project, snapshot, task, TODAY } from './helpers';
 
 /** D-20 容器移动:任务永远在可见容器里,理清 = 挪动。 */
 describe('D-20 moveTask:容器移动', () => {
@@ -57,7 +57,7 @@ describe('D-20 moveTask:容器移动', () => {
         task({ id: 'ref', contextId: 'c1', bucket: 'reference' }),
       ],
     });
-    expect(engageCandidates(snap, 'c1', 60, 'high').map((t) => t.id)).toEqual(['active']);
+    expect(engageCandidates(snap, 'c1', 60, 'high', TODAY).map((t) => t.id)).toEqual(['active']);
   });
 
   it('挪入不存在/已完成的项目 → 报错;非 active 任务不可挪', () => {

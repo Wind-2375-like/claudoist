@@ -12,7 +12,10 @@ import type {
 } from '../src/index';
 import { emptySnapshot } from '../src/index';
 
-export function fakeClock(now = '2026-08-08T12:00:00', today = '2026-08-08'): Clock {
+/** 测试基准"今天"(与 fakeClock 默认同日) */
+export const TODAY = '2026-08-08';
+
+export function fakeClock(now = '2026-08-08T12:00:00', today = TODAY): Clock {
   return { now: () => now, today: () => today };
 }
 

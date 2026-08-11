@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { engageCandidates, normalizePriority, priorityLabel } from '../src/index';
-import { ctx, snapshot, task } from './helpers';
+import { ctx, snapshot, task, TODAY } from './helpers';
 
 describe('INV-01 priority:1=最低 5=最高,不重编号', () => {
   it('engage 排序中 P5 排在 P1 之前', () => {
@@ -12,7 +12,7 @@ describe('INV-01 priority:1=最低 5=最高,不重编号', () => {
         task({ id: 'high', contextId: 'c1', priority: 5 }),
       ],
     });
-    const got = engageCandidates(snap, 'c1', 60, 'high').map((t) => t.id);
+    const got = engageCandidates(snap, 'c1', 60, 'high', TODAY).map((t) => t.id);
     expect(got).toEqual(['high', 'low']);
   });
 

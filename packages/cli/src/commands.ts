@@ -10,6 +10,7 @@ import type {
   UsecaseResult,
 } from '@gtd/domain';
 import {
+  ENGAGE_TOP_N,
   addComment,
   addContext,
   addDaysIso,
@@ -23,6 +24,7 @@ import {
   createLabel,
   createProjectDirect,
   deleteTask,
+  engageMatches,
   isTaskListRoot,
   isUsecaseError,
   isValidIsoDate,
@@ -34,6 +36,7 @@ import {
   reopenTask,
   reorderTask,
   tasksWithInheritedDeadline,
+  todaysTimedTasks,
   updateProject,
   updateTask,
 } from '@gtd/domain';
@@ -528,6 +531,48 @@ const calendar: Handler = (store, deps, args) => {
   };
 };
 
+/**
+ * Focus/Engage(INV-20;与桌面 FocusPanel **同一套 domain 规则**,改动需同步)。
+ * calendar-first:今天已排期任务先列;随后是该 context 下 时间/精力 匹配的 top-7。
+ */
+const engage: Handler = (store, deps, args) => {
+  const snap = store.snapshot();
+  const today = deps.clock.today();
+  const contextRef = opt(args, 'context');
+  const minutesRaw = opt(args, 'minutes') ?? '60';
+  const minutes = Number(minutesRaw);
+  if (!Number.isInteger(minutes) || minutes < 1) {
+    throw new CliError(`--minutes 需为正整数,得到 "${minutesRaw}"`);
+  }
+  const energy = parseEnergy(opt(args, 'energy') ?? 'medium');
+  const contextId = resolveContextId(snap, contextRef);
+  const contextName = snap.contexts.find((c) => c.id === contextId)?.name ?? '?';
+
+  // INV-20.1:日历优先段 = 当天硬性日程,与 --context 无关,故不随之过滤
+  const first = todaysTimedTasks(snap, today).map((t) => taskJson(snap, t, today));
+  const matches = engageMatches(snap, contextId, minutes, energy, today);
+  const cands = matches.slice(0, ENGAGE_TOP_N).map((t) => taskJson(snap, t, today));
+  const hidden = matches.length - cands.length;
+  const text = [
+    `Focus ${contextName} · ≤${minutes} 分钟 · 精力 ${energy}`,
+    taskSection('今天已排期(先处理)', first),
+    taskSection(`候选(优先级前 ${ENGAGE_TOP_N})`, cands),
+    ...(hidden > 0 ? [`另有 ${hidden} 条符合条件的任务未列出。`] : []),
+  ].join('\n\n');
+  return {
+    data: {
+      context: contextName,
+      minutes,
+      energy,
+      calendarFirst: first,
+      candidates: cands,
+      topN: ENGAGE_TOP_N,
+      matched: matches.length,
+    },
+    text,
+  };
+};
+
 const projects: Handler = (store, _deps, _args) => {
   const snap = store.snapshot();
   const rows = snap.projects
@@ -913,6 +958,7 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
   list [inbox|someday|reference|project|completed|all]   completed 可加 --limit=N
   today                             统一待办(计划 ≤ 今天 ∪ 截止 ≤ 今天;带时间任务按时刻排)
   calendar [--from=today|tomorrow|YYYY-MM-DD] [--days=1..31]  日历周视图(全天段 + 定时段,INV-28)
+  engage [--context=] [--minutes=60] [--energy=low|medium|high]  择事:calendar-first + top-7(INV-20)
   show <任务>                       任务详情(含子任务树 / 评论 / 提醒)
   comment <任务> <内容>             加评论
   move <任务> <inbox|someday|reference|项目引用>   根任务子树随动;子任务先脱离父
@@ -936,6 +982,7 @@ const HANDLERS: Record<string, Handler> = {
   list,
   today,
   calendar,
+  engage,
   show,
   comment,
   move,
@@ -958,6 +1005,7 @@ const HANDLERS: Record<string, Handler> = {
 const GLOBAL_OPTS = ['json', 'db', 'dev', 'prod', 'help'];
 const COMMAND_OPTS: Record<string, string[]> = {
   calendar: ['from', 'days'],
+  engage: ['context', 'minutes', 'energy'],
   add: [
     'parent',
     'desc',

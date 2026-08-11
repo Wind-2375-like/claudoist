@@ -1,5 +1,6 @@
 import type {
   CalendarRangeVM,
+  EngageVM,
   GoogleCalendarVM,
   GoogleStatusVM,
   AddSubtaskInputVM,
@@ -36,6 +37,11 @@ declare global {
       taskDetail: (id: string) => Promise<TaskDetailVM | null>;
       today: () => Promise<TodayVM>;
       upstreamList: () => Promise<TaskTreeVM[]>;
+      engage: (
+        contextId: string,
+        minutes: number,
+        energy: 'low' | 'medium' | 'high',
+      ) => Promise<EngageVM>;
       calendarRange: (from: string, days: number) => Promise<CalendarRangeVM>;
       contextsList: () => Promise<ContextVM[]>;
       onChanged: (cb: (ev: GtdChangedEvent) => void) => () => void;
