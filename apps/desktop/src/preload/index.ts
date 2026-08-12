@@ -1,5 +1,10 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
+  AuditRowVM,
+  ConversationVM,
+  ModelInfoVM,
+  PermissionRequestVM,
+  ToolManualEntryVM,
   CalendarRangeVM,
   GoogleCalendarVM,
   GoogleStatusVM,
@@ -143,25 +148,80 @@ const agentApi = {
     ipcRenderer.invoke('agent:skills.delete', { name }),
   resetSkill: (name: string): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:skills.reset', { name }),
-  toolManual: (): Promise<
-    {
-      qualified: string;
-      name: string;
-      description: string;
-      params: { name: string; type: string; required: boolean; description: string }[];
-    }[]
-  > => ipcRenderer.invoke('agent:tools.manual'),
-  models: (): Promise<{ value: string; displayName: string }[]> =>
-    ipcRenderer.invoke('agent:models'),
+  toolManual: (): Promise<ToolManualEntryVM[]> => ipcRenderer.invoke('agent:tools.manual'),
+  models: (): Promise<ModelInfoVM[]> => ipcRenderer.invoke('agent:models'),
   setModel: (model: string): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:model.set', { model }),
-  startSession: (resume: boolean): Promise<unknown> =>
-    ipcRenderer.invoke('agent:session.start', { resume }),
+  setEffort: (effort: string): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:effort.set', { effort }),
+  setThinking: (mode: 'off' | 'hidden' | 'shown'): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:thinking.set', { mode }),
+  startSession: (opts: {
+    resume?: boolean;
+    conversationId?: string;
+    fork?: boolean;
+  }): Promise<{ started: boolean; conversationId: string }> =>
+    ipcRenderer.invoke('agent:session.start', opts),
   newSession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.new'),
   destroySession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.destroy'),
-  send: (text: string, images: { data: string; mediaType: string }[]): Promise<unknown> =>
-    ipcRenderer.invoke('agent:send', { text, images }),
+  send: (
+    text: string,
+    images: { data: string; mediaType: string }[],
+    attachments: string[] = [],
+  ): Promise<unknown> => ipcRenderer.invoke('agent:send', { text, images, attachments }),
   interrupt: (): Promise<unknown> => ipcRenderer.invoke('agent:interrupt'),
+  // ── 权限(M9)──
+  permissionModes: (): Promise<{
+    modes: { id: string; label: string; hint: string }[];
+    current: string;
+    alwaysAllow: string[];
+  }> => ipcRenderer.invoke('agent:permission.modes'),
+  setPermissionMode: (mode: string): Promise<{ error?: string; needsRestart?: boolean }> =>
+    ipcRenderer.invoke('agent:permission.setMode', { mode }),
+  respondPermission: (
+    id: string,
+    r: { behavior: 'allow'; always?: boolean } | { behavior: 'deny'; message?: string },
+  ): Promise<unknown> => ipcRenderer.invoke('agent:permission.respond', { id, ...r }),
+  clearAlwaysAllow: (): Promise<unknown> => ipcRenderer.invoke('agent:permission.clearAlwaysAllow'),
+  onPermissionRequest: (cb: (req: PermissionRequestVM) => void): (() => void) => {
+    const listener = (_e: unknown, req: PermissionRequestVM): void => cb(req);
+    ipcRenderer.on('agent:permission.request', listener);
+    return () => {
+      ipcRenderer.removeListener('agent:permission.request', listener);
+    };
+  },
+  auditList: (conversationId?: string | null): Promise<AuditRowVM[]> =>
+    ipcRenderer.invoke('agent:audit.list', { conversationId }),
+  // ── 会话与用量(M10)──
+  conversations: (): Promise<ConversationVM[]> => ipcRenderer.invoke('agent:conversations.list'),
+  transcript: (
+    id: string,
+  ): Promise<{ items: { role: 'user' | 'assistant'; text: string; tools: string[] }[] }> =>
+    ipcRenderer.invoke('agent:conversations.transcript', { id }),
+  deleteConversation: (id: string): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:conversations.delete', { id }),
+  usageTotals: (): Promise<{
+    conversations: number;
+    costUsd: number;
+    inputTokens: number;
+    outputTokens: number;
+  }> => ipcRenderer.invoke('agent:usage.totals'),
+  // ── 附件(M10)──
+  addAttachments: (paths: string[]): Promise<{ files: { path: string; name: string }[] }> =>
+    ipcRenderer.invoke('agent:attachments.add', { paths }),
+  /**
+   * 拖拽文件的真实路径。sandbox 渲染层里 `File.path` 早已是空串(Electron 32 移除),
+   * 唯一的取法是在 preload 调 `webUtils.getPathForFile` —— contextBridge 对 File 对象
+   * 有特殊处理,可以这样跨界传。
+   */
+  pathForFile: (file: File): string => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return '';
+    }
+  },
+  pickAttachments: (): Promise<{ paths: string[] }> => ipcRenderer.invoke('agent:attachments.pick'),
   onStream: (cb: (msg: unknown) => void): (() => void) => {
     const listener = (_e: unknown, msg: unknown): void => cb(msg);
     ipcRenderer.on('agent:stream', listener);

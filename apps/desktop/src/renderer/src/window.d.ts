@@ -1,4 +1,9 @@
 import type {
+  AuditRowVM,
+  ConversationVM,
+  ModelInfoVM,
+  PermissionRequestVM,
+  ToolManualEntryVM,
   CalendarRangeVM,
   GoogleCalendarVM,
   GoogleStatusVM,
@@ -107,21 +112,51 @@ declare global {
       writeSkill: (name: string, body: string) => Promise<{ error?: string }>;
       deleteSkill: (name: string) => Promise<{ error?: string }>;
       resetSkill: (name: string) => Promise<{ error?: string }>;
-      toolManual: () => Promise<
-        {
-          qualified: string;
-          name: string;
-          description: string;
-          params: { name: string; type: string; required: boolean; description: string }[];
-        }[]
-      >;
-      models: () => Promise<{ value: string; displayName: string }[]>;
+      toolManual: () => Promise<ToolManualEntryVM[]>;
+      models: () => Promise<ModelInfoVM[]>;
       setModel: (model: string) => Promise<{ error?: string }>;
-      startSession: (resume: boolean) => Promise<unknown>;
+      setEffort: (effort: string) => Promise<{ error?: string }>;
+      setThinking: (mode: 'off' | 'hidden' | 'shown') => Promise<{ error?: string }>;
+      startSession: (opts: {
+        resume?: boolean;
+        conversationId?: string;
+        fork?: boolean;
+      }) => Promise<{ started: boolean; conversationId: string }>;
       newSession: () => Promise<unknown>;
       destroySession: () => Promise<unknown>;
-      send: (text: string, images: { data: string; mediaType: string }[]) => Promise<unknown>;
+      send: (
+        text: string,
+        images: { data: string; mediaType: string }[],
+        attachments?: string[],
+      ) => Promise<unknown>;
       interrupt: () => Promise<unknown>;
+      permissionModes: () => Promise<{
+        modes: { id: string; label: string; hint: string }[];
+        current: string;
+        alwaysAllow: string[];
+      }>;
+      setPermissionMode: (mode: string) => Promise<{ error?: string; needsRestart?: boolean }>;
+      respondPermission: (
+        id: string,
+        r: { behavior: 'allow'; always?: boolean } | { behavior: 'deny'; message?: string },
+      ) => Promise<unknown>;
+      clearAlwaysAllow: () => Promise<unknown>;
+      onPermissionRequest: (cb: (req: PermissionRequestVM) => void) => () => void;
+      auditList: (conversationId?: string | null) => Promise<AuditRowVM[]>;
+      conversations: () => Promise<ConversationVM[]>;
+      transcript: (
+        id: string,
+      ) => Promise<{ items: { role: 'user' | 'assistant'; text: string; tools: string[] }[] }>;
+      deleteConversation: (id: string) => Promise<{ error?: string }>;
+      usageTotals: () => Promise<{
+        conversations: number;
+        costUsd: number;
+        inputTokens: number;
+        outputTokens: number;
+      }>;
+      addAttachments: (paths: string[]) => Promise<{ files: { path: string; name: string }[] }>;
+      pickAttachments: () => Promise<{ paths: string[] }>;
+      pathForFile: (file: File) => string;
       onStream: (cb: (msg: unknown) => void) => () => void;
     };
   }

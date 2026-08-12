@@ -383,88 +383,144 @@ deadline 继承语义是 **copy-on-create/move**(INV-10/INV-12);CLI 没有任何
 - **resume/fork**:打开历史会话 → `getSessionMessages(sdk_session_id)` 渲染史前消息,再以 `resume: sdk_session_id` 起新 query;fork → `resume + forkSession: true`,记录 `forked_from`。首启用 `listSessions()` 对账修复索引。
 - **每次 `query()` 的护栏**:settings 的 `maxTurns` 与 `maxBudgetUsd`;`AbortController` 接 `agent:interrupt` 与应用退出;`settingSources` 排除 `'user'`(`~/.claude/settings.json` 不得覆盖应用行为);PATH 修复(fix-path 模式,供 agent 自身 Bash 工具使用);env 中防御性剔除宿主泄漏的 `ELECTRON_RUN_AS_NODE`(§9.3,M1 实证)。
 
-### 6.3 MCP 工具面
+### 6.3 MCP 工具面(M9 实现定稿)
 
-全部用 SDK 的 `tool(name, description, zodSchema, handler)` 定义,`createSdkMcpServer({ name: 'gtd', tools })` 打包,经 `options.mcpServers.gtd` 传入。完整工具名 `mcp__gtd__<name>`。handler 在 main 进程直连同一 `GtdStore`;每次写触发 `gtd:changed`(actor='agent')。每个 handler 校验输入,返回 `structuredContent` + 人类可读 `content` block。工具总数按设计控制在 ~30 以内(工具 schema 逐 turn 消耗上下文;SDK 默认 tool-search 延迟加载兜底)。
+`packages/agent-tools/src/toolCatalog.ts` 里一张 `SPECS` 表,**同时**用来:注册工具、
+判定权限类别(§6.4)、渲染用户可见的「工具参考」手册(§6.13)。三者若各写一份,迟早对不上
+—— 而权限那份对不上是安全问题:少标一个 destructive,`delete_task` 就在自动模式下直通了。
 
-**读工具(始终自动放行):**
+工具名 `mcp__gtd__<name>`,handler 在 main 直连同一 `GtdStore`;写工具走
+`packages/agent-tools/src/writeTools.ts` → domain usecase → `store.apply(commands, 'agent')`,
+与 UI/CLI 是同一条写路径。共 33 个(14 读 + 19 写),留在"逐 turn 上下文可接受"的量级内。
+
+**只读工具(14)**
 
 | 工具 | 参数 | 返回 |
 |---|---|---|
-| `list_inbox` | — | inbox 条目(id、text、created) |
-| `list_tasks` | `{ status?, projectId?, labels?, energyMax?, maxMinutes?, dueBefore?, query?, limit? }` | 匹配任务 + 项目面包屑 |
-| `get_task` | `{ id }` | 完整任务 |
-| `list_projects` | `{ includeComplete?: boolean }` | 平面项目列表(D-21):deadline + activeCount/doneCount/progress |
-| `get_project` | `{ id }` | 项目 + 活跃任务(根任务与子任务树)/calendar/waiting + `hasActiveNextAction`(calendar 与 waiting 计入,见 INVARIANTS.md) |
-| `get_task_detail` | `{ id }` | 任务 + 子任务树(≤5 层)+ 评论(D-21) |
-| `list_calendar` | `{ fromDate?, toDate?, includeDone? }` | 按日期/时间排序的 calendar 条目 |
-| `list_waiting_for` | `{ includeResolved? }` | 委派项(受托人 + 起始日期) |
-| `list_labels` | — | 标签 + 活跃任务计数(D-30) |
-| `list_labels` / `list_filters` | — | labels / 保存的 filters |
-| `search` | `{ query, kinds? }` | 跨实体命中(tasks、projects、inbox、someday、reference、done、calendar、waiting) |
-| `get_engage_recommendations` | `{ labelName?, availableMinutes, energy }` | top-7 候选(min≤time ∧ energy≤user,priority 降序,5=最高)+ 今日 calendar —— **只读;完成是独立写操作** |
-| `get_status_summary` | — | 总览:各区计数 + 摘要(孤儿工具已随 D-21 删除) |
+| `get_now` | — | 此刻/今天/星期/时区/UTC 偏移/地区(§6.12) |
+| `list_inbox` | — | Inbox 根任务(排除外部镜像) |
+| `list_bucket` | `{ kind: someday\|reference }` | 孵化容器里的任务 |
+| `list_today` | — | Today 三段口径(INV-20/D-19) |
+| `list_calendar` | `{ fromDate, days }` | 区间内全天/定时任务 |
+| `list_projects` | — | 活跃项目 + 进度 + `hasActiveNextAction` |
+| `get_project` | `{ projectId }` | 项目 + 根任务 |
+| `get_task_detail` | `{ taskId }` | 子任务树 + 评论 + 活跃后代数(**完成/删除前必调**) |
+| `list_labels` | — | 标签 + 活跃计数(D-30) |
+| `list_filters` | — | 保存的过滤器(名 + 查询原文) |
+| `list_waiting_for` | — | 未解决的等待项 |
+| `search` | `{ query, limit? }` | 跨实体命中(INV-32;不含软删) |
+| `run_filter` | `{ query }` | **唯一的条件查询入口**(INV-33) |
+| `get_engage_recommendations` | `{ labelName?, availableMinutes, energy }` | calendarFirst + top-7 候选(INV-20) |
 
-**写工具(权限门控;全部返回 `consequences` 后果字段):**
+所有任务投影都带 `when`/`due` 两个**相对此刻**的字段(§6.12)。
 
-后果返回约定(评审嫁接项):写工具的 `structuredContent` 一律含 `consequences` 对象,字段命名固定(`parentCompletionCandidate`、`inheritedDeadline`、`projectHasRemainingActivity`、`completedSubtaskCount`、`deletedSubtaskCount`、`followUpCreated`…)。agent 拿到后果后**必须像 CLI 一样征询用户再做下一步写调用**——级联永远是"提问 → 确认 → 单独一次工具调用",绝不自动连锁完成(system prompt 固化,§6.6)。
+**写工具(19)** —— 全部返回 `{ ok, changed, ...consequences }`
 
-| 工具 | 参数 | 效果 | 关键 consequences 字段 |
-|---|---|---|---|
-| `capture` | `{ texts: string[] }` | 追加到 inbox(零摩擦;"提醒我…"的默认动作) | `createdIds` |
-| `move_task` | `{ id, to: {bucket} \| {bucket:'project', projectId} }` | 容器移动(D-20/D-21):根任务子树随动;子任务先脱离父;挪入有 deadline 项目静默继承(INV-10 move 版) | `inheritedDeadline`、`detachedFromParent` |
-| `add_subtask` | `{ parentTaskId, title, … }` | 建子任务(≤5 层;继承父的容器/项目,INV-25) | `inheritedDeadline` |
-| `add_comment` | `{ taskId, body }` | 任务评论(D-21) | — |
-| `create_task` | 任务字段(D-30 后无 context) | 插入活跃任务;所属项目有 deadline 时**无条件**覆盖为项目 deadline 副本(INV-10 静默继承,显式传入值亦被覆盖;M2 按 INVARIANTS 定案) | `inheritedDeadline` |
-| `update_task` | `{ id, patch }` | 编辑字段,含 label 迁移 | — |
-| `complete_task` | `{ id }` | 标记完成;**向下级联完成整棵 active 子树**(D-22/INV-26.1;仅向下,勾子任务不勾父) | `projectHasRemainingActivity`、`parentCompletionCandidate`、`completedSubtaskCount` |
-| `reopen_task` | `{ id }` | 撤销完成(done→active,仅当前任务;父缺失/已删则脱离父) | — |
-| `delete_task` ⚠ | `{ id }` | 软删(status='deleted');active 子树级联软删,done 后代保留(INV-26.2) | `deletedSubtaskCount` |
-| `create_project` | `{ outcome, deadline? }` | 插入平面项目(D-21) | — |
-| `update_project` | `{ id, patch, propagateDeadline? }` | 编辑;deadline 改动须先经征询,单次调用带 `propagateDeadline: true` 才连带更新"旧值相同"的行动(§5.4 单次调用模型) | `propagatedTaskCount` |
-| `complete_project` | `{ id }` | 标记完成(不改变其任务状态) | `activeTaskCount`(>0 时 agent 应先向用户确认) |
-| `create_waiting_for` | `{ description, delegatedTo?, projectId? }` | 新委派 | — |
-| `resolve_waiting_for` | `{ id }` | 标记等待项已解决(`resolvedAt=now`);**不触发任何追问**(INV-14 边界),domain usecase 不附带后果 | (handler 如需 `projectHasRemainingActivity` 以只读规则补算) |
-| `create_follow_up` | `{ waitingForId }` | 对**未解决**的等待项按 INV-23 模板创建催办任务(`Follow up with X re: Y`、有 `phone` 标签则带上、5 分钟、low、priority 4(高)、同项目);**不改变** `resolved` 状态(催办对象正是还没回音的委派,见 [./INVARIANTS.md](./INVARIANTS.md) INV-23) | `followUpCreated` |
-| `create_calendar_item` | `{ title, date, time?, projectId? }` | hard-landscape 条目 | — |
-| `complete_calendar_item` | `{ id }` | 完成 | 同 `complete_task` 的追问 payload |
-| ~~move_to_list~~ / ~~activate_someday~~ | — | 已并入 `move_task`(D-20/D-21 容器模型:归档/激活都是 bucket 移动) | — |
-| `manage_labels` | `{ create?, assign?: {taskId, labelNames}, remove? }` | label CRUD/指派 | — |
+`changed: false` 是合法返回(空 patch、同名标签):usecase 成功但一条命令都没发,
+**等于什么都没改**。工具层如实回报,否则 agent 会对用户说"已改好"。
 
-⚠ = **destructive class**(§6.4)。
+| 工具 | 效果 | 关键 consequences |
+|---|---|---|
+| `capture` | 逐条丢进 Inbox(INV-16 零判断) | `createdIds` |
+| `create_task` | 建任务;挂进有 deadline 的项目会**静默继承**(INV-10) | `taskId`、`inheritedDeadline` |
+| `add_subtask` | 建子任务(≤5 层,继承父的容器,INV-25) | `taskId`、`depth`、`inheritedDeadline` |
+| `create_project` | 建项目(outcome 写成结果) | `projectId` |
+| `update_task` | 改属性;日期传 null = 清除;镜像任务拒改标题与时间(INV-29) | `taskId` |
+| `move_task` | 换容器;子任务会**脱离父任务**(INV-25.4) | `inheritedDeadline`、`detachedFromParent` |
+| `set_task_labels` | 覆盖式设标签集合 | `taskId` |
+| `update_project` | 改名/改 deadline;**默认不传播** | `tasksWithInheritedDeadline`、`propagated` |
+| `complete_task` | 完成;**向下级联整棵活跃子树**(INV-26.1) | `completedSubtaskCount`、`parentCompletionCandidate`、`projectBreadcrumb` |
+| `reopen_task` | 撤销完成(**不级联**) | `taskId` |
+| `complete_project` ⚠ | 完成项目;**不动它下面的行动** | `activeTaskCount` |
+| `delete_task` ⚠ | 软删;级联软删活跃子树(INV-26.2) | `deletedSubtaskCount` |
+| `restore_task` | 从回收站恢复(**不级联**) | `taskId` |
+| `create_waiting_for` | 记一条委派 | `waitingForId` |
+| `resolve_waiting_for` | 标记已回音;**不建后续任务**(INV-23/INV-14 边界) | (无) |
+| `create_follow_up` | 给未解决的等待项建催办行动(INV-23) | `followUpCreated` |
+| `add_comment` | 追加评论(D-21) | `commentId` |
+| `create_label` | 建标签(同名幂等) | `labelId`、`created` |
+| `create_filter` | 保存过滤器(语法错拒绝) | `filterId` |
 
-### 6.4 权限矩阵
+⚠ = 静态 destructive(§6.4);`complete_task` 是**动态** destructive。
 
-五种 UI 模式 × 工具类别。**全部映射在单一模块 `apps/desktop/src/main/agent/policy.ts` 中定义,每种模式有独立集成测试**。工具类别:读工具、普通写工具、destructive 写工具(当前成员:`delete_task`、`remove_context`;判据:不可逆或高影响面)、SDK 内置工具(`Read` 限附件目录,经 `additionalDirectories`;其余内置默认不给)。
+**两条工具层纪律**(`writeTools.ts` 顶注):
 
-| UI 模式 | SDK 选项 | 读工具 | 普通写工具 | destructive 写工具 | 内置 Read(附件目录) | 其他内置工具 |
-|---|---|---|---|---|---|---|
-| **Manual** | `permissionMode:'default'`;`allowedTools` = 读工具 + 附件 Read | 自动 | `canUseTool` 弹窗 | `canUseTool` 弹窗 | 自动 | 弹窗 |
-| **Edit automatically** | `permissionMode:'acceptEdits'`;`allowedTools` += 普通写工具 | 自动 | 自动 | **弹窗(强制)** | 自动 | 文件编辑类自动(acceptEdits 语义),其余弹窗 |
-| **Plan** | `permissionMode:'plan'` | 自动 | SDK 拒绝 | SDK 拒绝 | 自动 | 拒绝写类 |
-| **Auto** | `permissionMode:'default'`;`allowedTools` += 普通写工具 | 自动 | 自动 | **弹窗(强制)** | 自动 | 弹窗 |
-| **Bypass** | `permissionMode:'bypassPermissions'` + `allowDangerouslySkipPermissions: true` | 自动 | 自动 | 自动 | 自动 | 自动 |
+- **agent 面前不出现 uuid**:项目/标签按名字传,在工具层解析。**解析不到就报错并列出现有
+  选项,绝不顺手新建** —— 否则一个错别字会静默造出 `@erands`,用户按 `@errands` 过滤时
+  永远看不到那条任务。
+- **越界值挡在 zod schema**,而不是靠 domain 兜底:domain 对若干字段是**静默回退**
+  (`estimatedMinutes` 非法 → 15、`priority` 越界 → 3、quickAdd 的 `energy` 完全不校验)。
+  靠兜底的话 agent 填错了也不知道,于是把"我设成了 p9"说给用户听。
+
+### 6.4 权限矩阵(M9 实现定稿)
+
+五种模式 × 四类工具。判定表只此一处:`packages/agent-tools/src/permissionPolicy.ts`
+(放在 agent-tools 而非 desktop,是为了**不依赖 Electron**,五格 × 四列能被单元测试逐格断言:
+`packages/agent-tools/test/permission-policy.spec.ts`)。
+
+**工具类别**(`CLASS_BY_TOOL`,与工具定义同源):
+
+| 类别 | 成员 |
+|---|---|
+| `read` | 14 个只读工具 + 内置 `Skill`/`Read`(未知工具按只读处理) |
+| `create` | capture、create_task、add_subtask、create_project、create_waiting_for、create_follow_up、create_label、create_filter |
+| `edit` | update_task、move_task、set_task_labels、update_project、add_comment、reopen_task、restore_task、resolve_waiting_for、complete_task\* |
+| `destructive` | delete_task、complete_project、**complete_task(目标有活跃子任务时)** |
+
+\* `complete_task` 是**动态**分类:平时只是改状态(还能 reopen),但目标有活跃子任务时会
+**级联完成整棵子树**(INV-26.1),而级联数量只在返回值里 —— 事后才知道。所以 `classify()`
+按当前快照判断,有活跃后代就升级为 destructive,并把"会连带完成 N 个子任务"作为
+`escalation` 一路带到审批弹窗上。
+
+| UI 模式 | SDK `permissionMode` | read | create | edit | destructive |
+|---|---|---|---|---|---|
+| **只读**(plan) | `'plan'` | allow | **deny** | **deny** | **deny** |
+| **逐条确认**(manual,默认) | `'default'` | allow | ask | ask | ask |
+| **自动改已有**(acceptEdits) | `'default'` | allow | ask | allow | ask |
+| **自动**(auto) | `'default'` | allow | allow | allow | ask |
+| **全部放行**(bypass) | `'default'` | allow | allow | allow | allow |
 
 规则:
 
-- **destructive class 在 Manual / Edit automatically / Auto 三种模式下必须弹窗**,无论 allowlist 如何配置(policy.ts 保证 destructive 工具名永不进入 `allowedTools`)。
-- **"Always allow \<tool\>"**:审批弹窗对普通写工具提供 "Always allow" 选项,经 `agent:permission.respond` 的 `alwaysAllow` 持久化进 `settings.alwaysAllowedTools`,即时并入会话 `allowedTools`(经 `updatedPermissions`)并作用于后续会话。destructive 工具的弹窗默认不提供该选项(仅可在 Settings 高级区显式加入并附警告)。
-- **Bypass 仅限 dev**:藏在带警示的二次确认之后,打包构建默认禁用。
-- 模式中途切换:`q.setPermissionMode(mode)`;涉及 `allowedTools` 变更的切换(如 → Auto)需 end-and-resume 重启会话(§7)。
+- **放行一律经 `canUseTool`,不用 `allowedTools`,也不用 `bypassPermissions`**(D-33)。
+  那两条路径会让调用绕过 `canUseTool`,于是不进 `agent_audit` —— 审计缺了自动放行的一半
+  就等于没有审计。"全部放行"因此实现为 `canUseTool` 一律返回 allow,连
+  `allowDangerouslySkipPermissions` 都不需要。
+- **只读模式下写工具根本不注册**(`createGtdServer` 只在拿到 `write` deps 时才挂写工具)。
+  纵深防御:即使判定表写错了,工具也不存在。冒烟对此有断言(`writeToolsAbsentInPlan`)。
+- **"始终允许 \<tool\>"** 持久化在 `settings['agent.alwaysAllow']`,把 ask 变成 allow,
+  **对 destructive 同样生效** —— 那是用户对具体工具的显式选择,比默认的谨慎更有权威。
+  但它**捅不穿只读模式**:选了只读就是只读。
+- **Bypass 打包版禁用**(`isModeAvailable(mode, app.isPackaged)`);设置里残留旧值也会被
+  降级回默认,而不是照单执行。
+- 模式切换即时生效(判定每次调用现读 settings);但**只读 ↔ 可写会改变工具面本身**,
+  需要新建会话才完全生效,UI 会提示。
 
 ### 6.5 审批弹窗(canUseTool 桥)
 
-main 的 `canUseTool: async (toolName, input) => …` 阻塞在 promise 上:推 `agent:permission.request { requestId, toolName, input }` 给 renderer;`agent:permission.respond` 回传 `{ behavior, updatedInput?, alwaysAllow? }` resolve 该 promise。每次决定(含自动放行路径)写入 `agent_audit`(§6.8)。
+`apps/desktop/src/main/agent/permissions.ts`:判定 → 需要时问渲染层 → 结果落审计。
+推 `agent:permission.request { id, tool, input, toolClass, escalation?, reason, mode }`,
+渲染层经 `agent:permission.respond` 回 `{ behavior, always? }` resolve 那个 promise。
 
-**弹窗 UI 规格**(2026-08-08 应用户要求补充;M9 步前预告时展示视觉稿供确认):
+**失败一律关闭(fail-closed)**。三种"问不到人"都判 deny:没有窗口、会话被中断
+(`options.signal` abort)、渲染层 10 分钟不答。理由很直接:SDK 明说 permission prompt
+**没有超时**,一个悬而未决的审批会让 agent 永久挂起;而"默认放行"会把一次窗口崩溃变成
+一次静默的数据修改。宁可让 agent 收到"被拒绝"再重来。
 
-- **形态**:agent 面板内的模态卡片(不遮全屏,遮罩仅覆盖右栏;中栏保持可见,便于对照数据)。
-- **标题行**:工具的人性化动词短语(renderer 维护 `toolName → 显示名` 映射,如 `mcp__gtd__delete_task` → "删除任务"),右侧当前权限模式徽章。
-- **正文**:人类可读摘要,由 renderer 侧的每工具 formatter 从 `toolName + input` 生成(必要时经读 IPC 取实体名),如:删除任务『买牛奶』(@errands · P最高 · 项目:周末采购);其下"显示原始参数"可展开区(等宽字体渲染 input JSON)。
-- **普通写工具变体**:按钮 **Allow**(主,回车)· **Always allow**(次,附注"以后 `<显示名>` 不再询问",持久化进 `settings.alwaysAllowedTools`)· **Deny**(Esc)。
-- **destructive 变体**(⚠ 工具):红色强调边框 + 警示图标;按钮 **确认删除**(红)· **取消**;**无 Always allow**;回车不触发确认(必须显式点击),Esc = 取消。
-- **等待态**:弹窗存续期间,聊天流中该工具的 ToolUseChip 显示 "等待你批准…";不设超时,阻塞至用户决定或用户中断整个 turn(`agent:interrupt` 视为 Deny)。
-- **队列**:同一 turn 的多个待批请求按到达顺序排队,一次只呈现一个。
+**弹窗 UI**(`renderer/src/PermissionPrompt.tsx`):
+
+- 面板内模态卡片(遮罩只覆盖右栏,中栏保持可见,便于对照数据)。
+- 标题 = 人性化动词短语(`TOOL_LABEL` 映射,如 `delete_task` → "Claude 想删除任务")+ 类别徽章。
+- destructive:红色边框 + `escalation` 单独一行醒目显示(**是数据算出来的**"会连带完成 3 个
+  子任务",不是泛泛的"此操作有风险")。
+- 入参逐字段列出(用户要能看出它到底要改哪一条,而不是只看见工具名)。
+- 三个按钮:**拒绝**(Esc)· **允许这一次** · **始终允许 \<tool\>**。
+- **回车什么都不做,允许只能点击;Esc = 拒绝**(初版规格里"回车 = Allow"被推翻两次)。
+  弹窗可能在用户正打字时冒出来,回车放行删除不可接受;但"回车 = 拒绝"同样不行 —— 实测
+  踩到:用户敲的那个回车本意是发消息,却静默否掉了一次审批,他还以为 agent 自己放弃了。
+  误触的代价应当是"什么都没发生"。
+- **队列**:一轮里可能连来两个审批,按到达顺序排队,一次只呈现一个(后来的不挤掉前一个)。
+- 会话销毁 / 本轮中断 → 所有挂起审批立即打回 deny,不吊着。
 
 ### 6.6 System prompt 策略
 
@@ -491,12 +547,20 @@ main 的 `canUseTool: async (toolName, input) => …` 阻塞在 promise 上:推 
 
 ### 6.8 agent_audit 审计
 
-SDK 无内置审计。`apps/desktop/src/main/agent/audit.ts` 在两处落账:
+SDK 无内置审计。落账分两步,都在 `apps/desktop/src/main/agent/`:
 
-- **权限决定时**:`canUseTool` resolve 后写 `decision`(`allowed-user` / `denied`);走 `allowedTools` 自动放行的调用在 PostToolUse 时补 `allowed-auto`。
-- **执行后**:handler 完成时把人类可读摘要写入 `result_summary`。
+- **审批时**(`permissions.ts`)写一行:`tool_name`、`input_json`、`decision`
+  (`allowed-auto` / `allowed-user` / `denied`)、`conversation_id`、时间。因为放行全部经
+  `canUseTool`(§6.4),**自动放行的调用同样有行** —— 这正是不用 `allowedTools` 的原因。
+- **结果回来时**(`bookkeeping.ts`)回填 `result_summary`:审批发生在执行**之前**,结果只能
+  等 `tool_result` 回灌时按 `toolUseID → 审计行 id` 的映射补上。
 
-每行含 `conversation_id`、`tool_name`、`input_json`、时间戳。用途:问题溯源、行为回放,以及**将来 undo 的基础**(知道 agent 改了什么才谈得上撤销)。
+IPC handler 与无头冒烟走**同一段**桥接代码(`bookkeeping.ts`)。M8 的冒烟自建过一套简化
+canUseTool,那验的是"我写的假桥能跑" —— 权限这种一处漏就全盘失效的东西,冒烟必须打在
+生产路径上。
+
+用途:问题溯源、行为回放,以及**将来 undo 的基础**(知道 agent 改了什么才谈得上撤销)。
+UI 在 Agent 设置的「权限与审计」页,可切"本会话 / 全部会话"。
 
 ---
 

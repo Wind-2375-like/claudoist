@@ -26,6 +26,14 @@ const screenshotArg = process.argv.find((a) => a.startsWith('--screenshot='));
 const screenshotClickArgs = process.argv.filter((a) => a.startsWith('--screenshot-click='));
 // 点开之后往当前焦点输入框敲一段文字(命令面板/表单类界面)
 const screenshotTypeArg = process.argv.find((a) => a.startsWith('--screenshot-type='));
+// 敲完字按回车提交(agent composer / 各种表单)
+const screenshotSubmit = process.argv.includes('--screenshot-submit');
+// 拍摄前额外等待,用于等异步界面(agent 一次往返十几秒)
+const screenshotDelayArg = process.argv.find((a) => a.startsWith('--screenshot-delay='));
+// 等待之后再点(用来点异步才出现的东西,比如审批弹窗上的按钮)
+const screenshotThenClickArgs = process.argv.filter((a) =>
+  a.startsWith('--screenshot-then-click='),
+);
 
 function createWindow(): BrowserWindow {
   const widthArg = process.argv.find((a) => a.startsWith('--win-width='));
@@ -159,9 +167,15 @@ if (agentSmokeArg) {
           void (async () => {
             for (const arg of screenshotClickArgs) {
               const sel = arg.slice('--screenshot-click='.length);
-              const hit: boolean = await win.webContents.executeJavaScript(
-                `!!document.querySelector(${JSON.stringify(sel)})?.click() || !!document.querySelector(${JSON.stringify(sel)})`,
-              );
+              // 先 focus 再 click:`click()` 不会让 textarea 成为 activeElement,
+              // 而后面的 --screenshot-type 正是往 activeElement 里敲字
+              const hit: boolean = await win.webContents.executeJavaScript(`(() => {
+                const el = document.querySelector(${JSON.stringify(sel)});
+                if (!el) return false;
+                el.focus?.();
+                el.click();
+                return true;
+              })()`);
               if (!hit) process.stdout.write(`[SCREENSHOT] 选择器无匹配:${sel}\n`);
               await new Promise((r) => setTimeout(r, 600));
             }
@@ -178,6 +192,32 @@ if (agentSmokeArg) {
                 return true;
               })()`);
               await new Promise((r) => setTimeout(r, 900));
+            }
+            // 敲回车提交(agent composer 就是靠 Enter 发送);React 的 onKeyDown 收原生事件
+            if (screenshotSubmit) {
+              await win.webContents.executeJavaScript(`(() => {
+                const el = document.activeElement;
+                if (!el) return false;
+                el.dispatchEvent(new KeyboardEvent('keydown',
+                  { key: 'Enter', bubbles: true, cancelable: true }));
+                return true;
+              })()`);
+            }
+            // agent 往返要十几秒 —— 要拍审批弹窗之类的异步界面就得等
+            if (screenshotDelayArg) {
+              const ms = Number(screenshotDelayArg.slice('--screenshot-delay='.length));
+              await new Promise((r) => setTimeout(r, Number.isFinite(ms) ? ms : 0));
+            }
+            for (const arg of screenshotThenClickArgs) {
+              const sel = arg.slice('--screenshot-then-click='.length);
+              const hit: boolean = await win.webContents.executeJavaScript(`(() => {
+                const el = document.querySelector(${JSON.stringify(sel)});
+                if (!el) return false;
+                el.click();
+                return true;
+              })()`);
+              if (!hit) process.stdout.write(`[SCREENSHOT] 延后点击无匹配:${sel}\n`);
+              await new Promise((r) => setTimeout(r, 3000));
             }
             const img = await win.webContents.capturePage();
             writeFileSync(path, img.toPNG());

@@ -6,3 +6,10 @@ export { migrate, schemaVersion } from './migrate';
 export { MIGRATIONS } from './migrations/index';
 export { SqliteGtdStore } from './store';
 export { createSettingsStore, type SettingsStore } from './settings';
+export {
+  createAgentStore,
+  type AgentStore,
+  type AuditDecision,
+  type AuditRow,
+  type ConversationRow,
+} from './agentStore';

@@ -10,5 +10,5 @@ export type Timestamp = string;
 
 export type Energy = 'low' | 'medium' | 'high';
 
-/** INV-01:1 = 最高,5 = 最低(D-29)。任何界面/序列化都不重编号。 */
+/** INV-01:**1 = 最低,5 = 最高**(D-29 曾翻转,当日按 D-31 撤回)。任何界面/序列化都不重编号。 */
 export type Priority = 1 | 2 | 3 | 4 | 5;

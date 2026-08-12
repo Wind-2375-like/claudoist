@@ -262,3 +262,65 @@ export interface AddSubtaskInputVM {
 }
 
 export type WriteResultVM<C = Record<string, unknown>> = { error: string } | { consequences: C };
+
+// ------------------------------------------------------------------ Agent(M9/M10)
+
+/** 审批请求(主 → 渲染层)。渲染层必须回一次 `agent:permission.respond`,否则工具吊着。 */
+export interface PermissionRequestVM {
+  id: string;
+  /** 对应聊天流里的工具 chip(让它显示"等待你批准…") */
+  toolUseId: string;
+  /** 短名,如 complete_task */
+  tool: string;
+  qualifiedTool: string;
+  input: Record<string, unknown>;
+  /** read | create | edit | destructive */
+  toolClass: string;
+  /** 因当前数据升级为破坏性的原因,如"会连带完成 3 个子任务" */
+  escalation?: string;
+  reason: string;
+  mode: string;
+}
+
+export interface AuditRowVM {
+  id: string;
+  conversationId: string;
+  toolName: string;
+  inputJson: string;
+  decision: 'allowed-auto' | 'allowed-user' | 'denied';
+  resultSummary: string | null;
+  createdAt: string;
+}
+
+export interface ConversationVM {
+  id: string;
+  sdkSessionId: string | null;
+  title: string;
+  model: string;
+  createdAt: string;
+  lastMessageAt: string;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  forkedFrom: string | null;
+  active: boolean;
+}
+
+/** SDK ModelInfo 的子集 —— effort/thinking 支持情况决定 UI 里哪些选项可点。 */
+export interface ModelInfoVM {
+  value: string;
+  displayName: string;
+  description?: string;
+  supportsEffort?: boolean;
+  supportedEffortLevels?: string[];
+  supportsAdaptiveThinking?: boolean;
+}
+
+export interface ToolManualEntryVM {
+  qualified: string;
+  name: string;
+  description: string;
+  kind: 'read' | 'write';
+  destructive: boolean;
+  params: { name: string; type: string; required: boolean; description: string }[];
+}

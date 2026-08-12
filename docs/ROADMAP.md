@@ -48,8 +48,8 @@
 | M6 | 日历 | 日历统一(D-23,CalendarItem 消解为定时任务)、本地周网格、Google 日历同步(D-25/D-26)、时区(D-27) | ✅ |
 | M7 | Search + Filters | ⌘K 全局搜索、Filters & Labels 视图(流程类功能改由 agent skill 承载,D-28) | 🔄 |
 | M8 | Agent 只读版 | SDK 会话 + 认证引导 + 流式聊天与工具 chip + 13 个只读工具 + 护栏 + engage skill | 🔄 |
-| M9 | Agent 写入 + 权限 | 写工具 + canUseTool 审批 + 权限模式 + agent_audit + 实时刷新 | ⬜ |
-| M10 | Agent 面板补全 | 会话管理/fork、图片粘贴、附件、模型与 effort 切换、用量账本、coaching evals | ⬜ |
+| M9 | Agent 写入 + 权限 | 写工具 + canUseTool 审批 + 权限模式 + agent_audit + 实时刷新 | 🔄 待验收 |
+| M10 | Agent 面板补全 | 会话管理/fork、图片粘贴、附件、模型与 effort 切换、用量账本、coaching evals | 🔄 待验收 |
 | M11 | 打包加固与打磨 | 无 Node 机器全流程复验、notarization、主题、错误上报面 | ⬜ |
 
 ---
@@ -587,14 +587,25 @@
 - **`agent_audit`**:每次 agent 工具调用落一行(工具名、输入、权限决定 allowed-auto / allowed-user / denied、结果摘要、conversation_id、时间)。
 - 写路径复用与 UI 完全相同的 domain usecase;每次变更发 `gtd:changed`(带 actor);agent 引起的变更在中间栏行高亮 + toast("Claude: 更新了 3 个任务")。
 
-**验收标准**
-- [ ] Manual 模式下说"把买牛奶加到 errands":弹审批 → 批准后任务**即时**出现在中间栏并高亮 + toast
-- [ ] Plan 模式拒绝一切写工具
-- [ ] Auto 模式下普通写工具直通,但 `delete_task` 仍弹审批(destructive class)
-- [ ] "Always allow <tool>" 生效并跨会话持久化
-- [ ] `agent_audit` 完整记录上述每次调用(含 denied 的)
-- [ ] `complete_task` / `complete_project` 的级联始终经 agent 征询用户,绝无自动连锁
-- [ ] 五种权限模式各有一条集成测试,断言其 SDK 选项组合与实际行为
+**验收标准**(技术侧已自动化验证的打 [x];交互项留用户试用)
+- [ ] 逐条确认模式下说"把买牛奶加到 errands":弹审批 → 批准后任务**即时**出现在中间栏 + toast
+- [x] 只读模式拒绝一切写工具 —— 而且**写工具根本不注册**(无头冒烟 `writeToolsAbsentInPlan`:plan 下 14 个工具,可写下 33 个)
+- [x] 自动模式下普通写工具直通,`delete_task` / `complete_project` / 级联完成仍弹审批(policy spec 逐格断言)
+- [ ] "始终允许 \<tool\>" 生效并跨会话持久化(落 `settings['agent.alwaysAllow']`,单测覆盖判定;UI 留试用)
+- [x] `agent_audit` 完整记录每次调用含 denied(冒烟 `auditOk`:放行的调用必须有 `result_summary`,否则说明 toolUseID→审计行的关联断了)
+- [x] `complete_task` / `complete_project` 的级联经征询 —— 实测:manual 模式删除请求先调 `get_task_detail` 再调 `delete_task`,被 fail-closed 拒绝后如实回报"没删成"且不换工具重试
+- [x] 五种权限模式各有断言(`packages/agent-tools/test/permission-policy.spec.ts`,5 模式 × 4 类别 + SDK 选项组合 + 始终允许 + 动态破坏性)
+
+**实现记录(2026-08-11)**
+
+- **写工具 19 个**(`packages/agent-tools/src/writeTools.ts`):domain usecase 的薄包装,一次 usecase = 一次 `store.apply`(INV-17)。三条纪律有单测:①一个事务不拆;②`changed: false` 如实回报(空 patch/同名标签是合法的"什么都没改");③consequences 原样透出。名字解析层保证 **agent 面前不出现 uuid**,且**解析不到就报错并列出选项,绝不顺手新建**。
+- **工具定义单一真相**(`toolCatalog.ts` 的 `SPECS`):注册工具 + 权限分级 + 用户手册同源。少标一个 destructive 就等于在自动模式下放开删除,三份各写迟早对不上。
+- **权限策略**(`packages/agent-tools/src/permissionPolicy.ts`,不依赖 Electron 故可单测):5 模式 × 4 类别判定表;`complete_task` **动态**升级为破坏性(有活跃子任务时),`escalation` 文案由数据算出("会连带完成 3 个子任务")一路带到弹窗。
+- **D-33 架构改动**:放行**一律经 `canUseTool`**,不用 `allowedTools`/`bypassPermissions` —— 那两条会绕过 canUseTool,于是自动放行的调用不进审计,而排查时恰恰最需要看那一半。附带好处:不需要 `allowDangerouslySkipPermissions`。
+- **fail-closed**:没有窗口 / 会话中断 / 10 分钟不答 → 一律 deny。SDK 明说 permission prompt 没有超时,悬而未决会让 agent 永久挂起;"默认放行"会把一次窗口崩溃变成一次静默的数据修改。
+- **审批弹窗**:**回车什么都不做,允许只能点击,Esc = 拒绝**。初版规格"回车 = Allow"被推翻两次:先改成"回车 = 拒绝",随即在无头复现里踩到 —— 用户敲的那个回车本意是发消息,却静默否掉了一次审批,他还以为 agent 自己放弃了。误触的代价应当是"什么都没发生"。队列化,一次只呈现一个;会话销毁/中断时挂起的审批一律打回。
+- **审计**:审批时落行 + `tool_result` 回来时按 `toolUseID` 回填摘要;IPC 与冒烟共用 `bookkeeping.ts` 的**同一座桥**(M8 冒烟曾自建简化版,那验的是假桥)。
+- **skill 写半程**:五个内置 skill 补 `WRITING` 段(一句话确认一次写入、动手前先复述、有子任务先 `get_task_detail`、后果字段一律转告、`changed:false` 如实说、被拒绝就停),各步骤的"去界面上做"改成实际调用哪个写工具。
 
 **用户反馈**
 
@@ -618,12 +629,21 @@
 **验收标准**
 - [ ] 退出应用重启后 resume 会话,上下文完整(agent 记得此前对话)
 - [ ] fork 产生分叉:两条会话各自独立演进
-- [ ] 粘贴截图被模型正确描述
+- [ ] 粘贴截图被模型正确描述(M1 已实证通道,此处验面板集成)
 - [ ] 拖入文件被复制到附件目录且 agent 可读;原路径不被直接授权
-- [ ] 模型切换后历史保留;流式中切换控件被禁用
-- [ ] thinking 三态行为与计费警告符合设计
-- [ ] 用量账本数字与 `ResultMessage` 累计一致
+- [ ] 模型切换后历史保留
+- [ ] thinking 三态行为与计费警告符合设计;**当前模型不支持的 effort 档位是禁用而不是点了没反应**
+- [ ] 用量账本数字与 `ResultMessage` 累计一致(本会话 + 全部历史两栏)
 - [ ] coaching eval 脚本可运行且断言通过
+
+**实现记录(2026-08-11)**
+
+- **会话索引**(`packages/storage-sqlite/src/agentStore.ts` + `main/agent/conversations.ts`):`conversations` 表是 **jsonl transcript 的索引**,正文仍由 SDK 写在 `~/.claude/projects/<encoded cwd>/`。因此**删除会话必须删两处** —— 只删索引会留下孤儿 jsonl(且那个 id 居然还能 resume),只删 jsonl 会留下点开就空白的条目。
+- **打开 / 分叉 / 删除**三个动作语义不同,UI 分开:打开 = `resume`;分叉 = `resume + forkSession: true`(原会话不动);删除 = 索引 + jsonl,不可恢复(带二次确认)。历史正文经 `getSessionMessages` 渲染,**只取文本与工具名** —— 完整 tool_result 动辄几 KB,历史视图里没人会读,拉过来只会撑爆 IPC(要细节看审计表)。
+- **附件**:文件复制进 `userData/attachments/<uuid>/`,`additionalDirectories` 只授权这**一个稳定根**。逐个文件授权会让用户面对一串弹窗,授权文件原处的目录等于把 agent 放进用户的整个文件系统 —— 复制再授权一个根是第三条路。内置工具因此从 `['Skill']` 放宽到 `['Skill', 'Read']`;Write/Edit/**Bash** 一概不给(Bash 能跑 `pnpm cli complete`,给了它任何权限模式都名存实亡)。
+- **effort × thinking 不是自由矩阵**:可用档位由 `ModelInfo.supportedEffortLevels` 决定,不支持的直接禁用并给出原因;thinking 关闭时 effort 整排禁用。切换走 `applyFlagSettings({effortLevel})` 与 `setMaxThinkingTokens(n, display)`,都是 streaming-input 专属的中途生效控制方法,不必重启会话。
+- **用量账本**:每条 `ResultMessage` 累加进会话行;**缓存读写计入输入侧**(M8 用户问过"$0.20 从哪来",答案就是缓存写入)。渲染层重挂载不会把账清零 —— 账在主进程的 DB 里。
+- **thinking 展示态**:`thinking_delta` 渲染成可折叠的灰块,与正文气泡分开。「不显示」只是不渲染,**照样计费**,UI 明说这一点。
 
 **用户反馈**
 
@@ -679,6 +699,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-08-11 | **M9 + M10 实现完成待用户验收**:19 个写工具(domain usecase 薄包装,一次 usecase 一个事务)、5 种权限模式的判定表(单测逐格断言)、`canUseTool` 审批桥(fail-closed;Enter/Esc 都是拒绝)、`agent_audit`(审批落行 + 结果回填)、agent 写入后中栏实时刷新 + toast;会话列表/resume/fork/删除、附件目录、effort × thinking(按模型能力禁用非法组合)、用量账本。**D-33**:放行一律经 `canUseTool` 而非 `allowedTools`/`bypassPermissions`(否则自动放行的调用不进审计)。DESIGN §6.3/§6.4/§6.5/§6.8 按实现定稿 |
 | 2026-08-11 | **D-28 范围重定**:流程类功能(Focus/Engage、Weekly Review)不做 UI,算法保留在 domain,载体改为 agent skill + composer 建议按钮(DESIGN §6.9,归 M8–M10);M7 收缩为 Search(⌘K)+ Filters & Labels。已实现的桌面 Focus 面板撤除。INVARIANTS §5 补齐 D-25/26/27 表行并新增 D-28;INV-20 与 §4.11/§4.12 的载体表述改写。另修 Google 专用日历清理的三处缺陷(删除失败仍清本地指针、目标账号取 accounts[0]、清理无回执且横幅只按本地指针消失)|
 | 2026-08-08 | 文档初版:协作流程、Definition of Done、里程碑 M0–M11(全部 ⬜)、决策日志、变更记录 |
 | 2026-08-08 | 用户裁决落档:auth = 自用(复用本机 Claude Code 登录,API key 为备用);审批弹窗 UI 规格写入 DESIGN.md §6.5;M1/M8/M11 相应调整;M0 开工(🔄) |

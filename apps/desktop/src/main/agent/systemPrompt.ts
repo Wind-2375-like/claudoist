@@ -1,4 +1,5 @@
 import type { statusSnapshot } from '@gtd/agent-tools';
+import { PERMISSION_MODE_LABELS, type PermissionModeId } from '@gtd/agent-tools';
 
 /**
  * System prompt(DESIGN §6.6)= 固化的易错不变量 + 每次会话注入的状态快照。
@@ -31,7 +32,32 @@ export const COACHING_CLAUSE = `**你的角色是让用户自己做判断,不是
 
 export const READ_ONLY_CLAUSE = `**当前你只有只读工具**:没有任何工具能改动数据。用户要求你新建/完成/修改/删除时,直接说明你现在没有写权限、并告诉他在界面上怎么做,**不要含糊带过,更不要声称已经做完**。你可以照常帮他查、分析、拟计划。`;
 
-export function buildSystemPrompt(snapshot: ReturnType<typeof statusSnapshot>): string {
+/**
+ * 写入纪律(M9)。这一段是整个 agent 最要紧的约束 —— 它作用在**真实的用户数据**上。
+ *
+ * 三条都不是文风偏好,各自对应一个具体的翻车方式:
+ * 1. 不看就动手:`complete_task`/`delete_task` 的级联数量只在**返回值**里,事后才知道。
+ * 2. 连着调:一轮里连调三个写工具,用户在审批弹窗上看到的是孤立的一次调用,
+ *    根本来不及意识到整体后果。
+ * 3. 假称做完:`changed: false` 是合法返回(空 patch、同名标签),但它意味着**什么都没改**。
+ */
+export const WRITE_CLAUSE = `**你现在能改用户的真实数据。** 动手前守三条:
+
+1. **先看后改**。complete_task / delete_task 会向下级联整棵活跃子树,而级联数量只在返回值里 —— 有子任务的任务,先调 get_task_detail 看清楚、把"会连带 N 个"说给用户听,得到同意再动。
+2. **一次只做一步,做完停下来汇报**。不要在一轮里连着调好几个写工具。返回值里出现 inheritedDeadline(静默继承了项目截止日)、detachedFromParent(子任务脱离了父任务)、parentCompletionCandidate(项目已无余活动)、tasksWithInheritedDeadline(有行动跟着旧截止日)时,**必须原样告诉用户并征询**,不要自行决定下一步。
+3. **如实回报**。返回 \`ok: false\` 就是没做成,原样说明错误;返回 \`changed: false\` 说明这次调用一条命令都没发出(比如空修改、标签同名已存在)—— 那不叫"已完成",要说清楚实际什么都没变。
+
+写操作要么成功要么整体回滚,不存在做了一半(INV-17)。用户随时可能在审批弹窗上拒绝你 —— 被拒绝就停下来问他想怎么做,不要换个工具再试一次。`;
+
+export interface PromptContext {
+  canWrite: boolean;
+  permissionMode: PermissionModeId;
+}
+
+export function buildSystemPrompt(
+  snapshot: ReturnType<typeof statusSnapshot>,
+  ctx: PromptContext = { canWrite: false, permissionMode: 'plan' },
+): string {
   const labels =
     snapshot.labels.length > 0
       ? snapshot.labels.map((l) => `@${l.name}(${l.activeTaskCount})`).join('、')
@@ -45,6 +71,12 @@ export function buildSystemPrompt(snapshot: ReturnType<typeof statusSnapshot>): 
 - 今天:${snapshot.today}
 - Inbox 待理清:${snapshot.inboxCount} 条;今天该做:${snapshot.todayCount} 条
 - 标签:${labels}
-- 项目:${projects}${snapshot.hasSoftDeleted ? '\n- 库里存在已软删除的任务(搜索不会返回它们)' : ''}`;
-  return [FIXED_INVARIANTS, COACHING_CLAUSE, READ_ONLY_CLAUSE, state].join('\n\n');
+- 项目:${projects}${snapshot.hasSoftDeleted ? '\n- 库里存在已软删除的任务(搜索不会返回它们)' : ''}
+- 权限模式:${PERMISSION_MODE_LABELS[ctx.permissionMode].label}(${PERMISSION_MODE_LABELS[ctx.permissionMode].hint})`;
+  return [
+    FIXED_INVARIANTS,
+    COACHING_CLAUSE,
+    ctx.canWrite ? WRITE_CLAUSE : READ_ONLY_CLAUSE,
+    state,
+  ].join('\n\n');
 }
