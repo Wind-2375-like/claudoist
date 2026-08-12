@@ -112,6 +112,7 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
       .map((tl) => snap.labels.find((l) => l.id === tl.labelId))
       .filter((l) => l !== undefined)
       .map((l) => ({ id: l.id, name: l.name })),
+    done: t.status === 'done',
     completedAt: t.completedAt,
     parentTaskId: t.parentTaskId,
     subtaskCount: descendantTaskIds(snap, t.id).filter(

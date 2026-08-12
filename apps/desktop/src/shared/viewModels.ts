@@ -23,6 +23,16 @@ export interface TaskVM {
   projectId: string | null;
   projectName: string | null;
   labels: LabelVM[];
+  /**
+   * **判定"已完成"只看这个字段。**
+   *
+   * 不要用 `completedAt !== null` 自己推 —— 软删**故意保留** completedAt(完成记录不该被
+   * 删除抹掉),所以「删除前已完成、后来又恢复/复活成 active」的任务 completedAt 非空却
+   * 不是 done。2026-08-12 用户就踩到了:日历把这种任务画成划掉,点撤销却报
+   * 「只能重开已完成的行动」。
+   */
+  done: boolean;
+  /** 完成时刻;**只用于显示**,不要用它判断是否完成(见 done) */
   completedAt: string | null;
   parentTaskId: string | null;
   /** 整棵子树中 active 后代数(删除确认文案、行内计数用,INV-26) */

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ProjectListItemVM } from '../../shared/viewModels';
+import { isSubmitEnter } from './keys';
 
 /**
  * 项目新建 / 编辑对话框(D-21)。编辑改 deadline 时按 §5.4 单次调用模型:
@@ -74,7 +75,7 @@ export function ProjectModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (isSubmitEnter(e)) {
               e.preventDefault();
               void submit();
             }
@@ -83,8 +84,8 @@ export function ProjectModal({
         <div className="mt-2 flex items-center gap-2">
           <label className="text-xs text-neutral-500">Deadline</label>
           <input
-            placeholder="YYYY-MM-DD"
-            className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            type="date"
+            className="w-36 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
           />

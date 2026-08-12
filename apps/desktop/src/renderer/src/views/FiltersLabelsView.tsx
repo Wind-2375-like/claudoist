@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FilterListItemVM, LabelListItemVM } from '../../../shared/viewModels';
 import { useFilters, useLabels } from '../hooks';
 import { toast } from '../toast';
+import { isSubmitEnter } from '../keys';
 
 /**
  * Filters & Labels(M7b)。两段:保存的过滤器、标签。
@@ -155,7 +156,7 @@ export function FiltersLabelsView({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void addFilter();
+                if (isSubmitEnter(e)) void addFilter();
                 if (e.key === 'Escape') reset();
               }}
               placeholder="查询,例如:deadline before: +7 days & no date"
@@ -201,7 +202,7 @@ export function FiltersLabelsView({
                     value={editFilter.query}
                     onChange={(e) => setEditFilter({ ...editFilter, query: e.target.value })}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') void saveFilter();
+                      if (isSubmitEnter(e)) void saveFilter();
                       if (e.key === 'Escape') setEditFilter(null);
                     }}
                     className="w-full rounded border border-neutral-200 px-2 py-1 font-mono text-sm outline-none focus:border-blue-400"
@@ -287,7 +288,7 @@ export function FiltersLabelsView({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void addLabel();
+                if (isSubmitEnter(e)) void addLabel();
                 if (e.key === 'Escape') reset();
               }}
               placeholder="标签名(不用打 @)"
@@ -322,7 +323,7 @@ export function FiltersLabelsView({
                   autoFocus
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') void renameLabel(l);
+                    if (isSubmitEnter(e)) void renameLabel(l);
                     if (e.key === 'Escape') setEditing(null);
                   }}
                   onBlur={() => void renameLabel(l)}

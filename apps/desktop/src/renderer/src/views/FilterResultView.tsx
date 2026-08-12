@@ -57,11 +57,7 @@ export function FilterResultView({
           <ul>
             {sec.tasks.map((t) => (
               <li key={t.id} className="border-b border-neutral-100">
-                <TaskRow
-                  task={t}
-                  onDetail={() => setDetailId(t.id)}
-                  showCompletedAt={t.completedAt !== null}
-                />
+                <TaskRow task={t} onDetail={() => setDetailId(t.id)} showCompletedAt={t.done} />
               </li>
             ))}
           </ul>

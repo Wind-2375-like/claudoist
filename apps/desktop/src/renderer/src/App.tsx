@@ -18,6 +18,7 @@ import { MyProjectsView } from './views/MyProjectsView';
 import { BucketView, CompletedView } from './views/BucketView';
 import { FiltersLabelsView } from './views/FiltersLabelsView';
 import { FilterResultView } from './views/FilterResultView';
+import { ContextMenu, ContextMenuItem } from './ContextMenu';
 
 /** 三栏壳(D-21):侧栏平面项目(计数徽章/折叠/新建/右键编辑)+ GTD 组计数。 */
 
@@ -126,12 +127,12 @@ function SidebarProject({
     <li className="relative">
       <button
         type="button"
+        data-testid="project-row"
         onClick={onOpen}
         onContextMenu={(e) => {
           e.preventDefault();
-          // 相对按钮(currentTarget)定位;offsetX/Y 会随冒泡子元素错乱
-          const rect = e.currentTarget.getBoundingClientRect();
-          setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+          // 视口坐标 —— 菜单 portal 到 body(侧栏是 overflow-y-auto,absolute 会被裁掉)
+          setMenu({ x: e.clientX, y: e.clientY });
         }}
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm ${
           active ? 'bg-red-50 font-medium text-red-700' : 'hover:bg-neutral-200'
@@ -146,34 +147,24 @@ function SidebarProject({
         )}
       </button>
       {menu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
-          <div
-            className="absolute z-50 w-32 rounded-lg border border-neutral-200 bg-white py-1 shadow-xl"
-            style={{ left: menu.x, top: menu.y }}
+        <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          <ContextMenuItem
+            onClick={() => {
+              setMenu(null);
+              onEdit();
+            }}
           >
-            <button
-              type="button"
-              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50"
-              onClick={() => {
-                setMenu(null);
-                onEdit();
-              }}
-            >
-              ✎ 编辑
-            </button>
-            <button
-              type="button"
-              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50"
-              onClick={() => {
-                setMenu(null);
-                void complete();
-              }}
-            >
-              ✓ 标记完成
-            </button>
-          </div>
-        </>
+            ✎ 编辑
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              setMenu(null);
+              void complete();
+            }}
+          >
+            ✓ 标记完成
+          </ContextMenuItem>
+        </ContextMenu>
       )}
     </li>
   );
@@ -322,6 +313,7 @@ export function App(): React.JSX.Element {
   ): React.JSX.Element => (
     <button
       type="button"
+      data-testid={`nav-${kind}`}
       onClick={() => setView({ kind })}
       className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
         view.kind === kind ? 'bg-red-50 font-medium text-red-700' : 'hover:bg-neutral-200'

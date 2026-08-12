@@ -191,3 +191,56 @@ describe('INV-29 外部镜像:本地可改什么', () => {
     }
   });
 });
+
+/**
+ * INV-29 × INV-26.2 的交叉点(2026-08-12 用户实测踩到的真 bug)。
+ *
+ * 软删**故意保留** `completedAt`(完成记录不该被删除抹掉),所以任何"把任务从 deleted
+ * 拉回来"的路径都必须处理这一点。`restoreTask` 做对了;外部日历的**复活**分支没有,
+ * 于是产出 `status='active'` 且 `completedAt≠null` 的非法组合 —— 界面把它画成已完成、
+ * 点撤销却报"只能重开已完成的行动",而且这个状态会一直粘着。
+ */
+describe('INV-29 × INV-26.2:外部事件复活不得产生 active + completedAt', () => {
+  const deletedMirror = (completedAt: string | null) =>
+    snapshot({
+      tasks: [
+        task({
+          id: 't1',
+          externalId: KEY,
+          externalCalendarId: 'cal1',
+          scheduledDate: '2026-08-10',
+          startTime: '15:00',
+          status: 'deleted',
+          completedAt,
+          deletedAt: '2026-08-11T00:00:00',
+        }),
+      ],
+    });
+
+  it('删除前**已完成** → 复活成 done,并保留 completedAt', () => {
+    const snap = deletedMirror('2026-08-10T23:21:24');
+    const after = applyToSnapshot(snap, sync(snap, [ev()]).commands);
+    const t = after.tasks.find((x) => x.id === 't1')!;
+    expect(t.status).toBe('done');
+    expect(t.completedAt).toBe('2026-08-10T23:21:24');
+    expect(t.deletedAt).toBeNull();
+  });
+
+  it('删除前**未完成** → 复活成 active,且 completedAt 被清干净', () => {
+    const snap = deletedMirror(null);
+    const after = applyToSnapshot(snap, sync(snap, [ev()]).commands);
+    const t = after.tasks.find((x) => x.id === 't1')!;
+    expect(t.status).toBe('active');
+    expect(t.completedAt).toBeNull();
+  });
+
+  it('两种情形都绝不出现 active + completedAt(撤销按钮失效的成因)', () => {
+    for (const c of [null, '2026-08-10T23:21:24']) {
+      const snap = deletedMirror(c);
+      const t = applyToSnapshot(snap, sync(snap, [ev()]).commands).tasks.find(
+        (x) => x.id === 't1',
+      )!;
+      expect(t.status === 'active' && t.completedAt !== null).toBe(false);
+    }
+  });
+});

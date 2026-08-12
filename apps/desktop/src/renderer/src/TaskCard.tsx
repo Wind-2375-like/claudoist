@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AddSubtaskInputVM, QuickAddTaskInputVM, TaskVM } from '../../shared/viewModels';
 import { useLabels, useProjects } from './hooks';
 import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
+import { isSubmitEnter } from './keys';
 
 /**
  * Todoist 式统一卡片(D-20 容器模型):
@@ -191,7 +192,7 @@ export function TaskCard({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (isSubmitEnter(e)) {
             e.preventDefault();
             void submit();
           }
@@ -269,8 +270,8 @@ export function TaskCard({
             Tomorrow
           </button>
           <input
-            placeholder="YYYY-MM-DD"
-            className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            type="date"
+            className="w-36 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
             value={scheduled}
             onChange={(e) => setScheduled(e.target.value)}
           />
@@ -288,8 +289,8 @@ export function TaskCard({
       {showChip === 'deadline' && (
         <div className="mt-2 flex items-center gap-2">
           <input
-            placeholder="YYYY-MM-DD"
-            className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            type="date"
+            className="w-36 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
           />

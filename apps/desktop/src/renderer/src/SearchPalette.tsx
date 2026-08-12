@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SearchHitVM } from '../../shared/viewModels';
 import { useSearch } from './hooks';
+import { isSubmitEnter } from './keys';
 
 /**
  * ⌘K 全局搜索(M7a)。匹配、排序、截断全部来自 domain `searchAll` —— 这里只呈现与导航,
@@ -43,7 +44,7 @@ export function SearchPalette({
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setCursor((c) => (hits.length === 0 ? 0 : (c - 1 + hits.length) % hits.length));
-    } else if (e.key === 'Enter') {
+    } else if (isSubmitEnter(e)) {
       e.preventDefault();
       const hit = hits[cursor];
       if (hit) onPick(hit);

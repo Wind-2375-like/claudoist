@@ -54,13 +54,21 @@ export function syncExternalTasks(
     seen.add(ev.externalId);
     const prev = existing.get(ev.externalId);
     if (prev !== undefined && prev.status === 'deleted') {
-      // 复活:恢复 active 并同步外部字段(本地的标签/子任务/评论都还在)
+      // 复活:恢复并同步外部字段(本地的标签/子任务/评论都还在)。
+      // ⚠ 删除前已完成的,必须复活成 **done** 而不是 active —— 软删**故意保留**
+      // completedAt(完成记录不该被删除抹掉),所以直接写 active 会产出
+      // `status='active' 且 completedAt≠null` 这种非法组合,界面上表现为
+      // "画成已完成、点撤销却说只能重开已完成的行动"(2026-08-12 用户实测踩到)。
+      // 这与 restoreTask 对同一问题的裁决保持一致。
+      const revived: Partial<Omit<Task, 'id'>> =
+        prev.completedAt !== null
+          ? { status: 'done', deletedAt: null }
+          : { status: 'active', deletedAt: null, completedAt: null };
       commands.push({
         kind: 'updateTask',
         id: prev.id,
         patch: {
-          status: 'active',
-          deletedAt: null,
+          ...revived,
           title: ev.title,
           scheduledDate: ev.scheduledDate,
           startTime: ev.startTime,

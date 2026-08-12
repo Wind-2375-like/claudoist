@@ -452,4 +452,22 @@ DROP TABLE conversations;
 ALTER TABLE conversations_v14 RENAME TO conversations;
 `,
   },
+  {
+    version: 15,
+    name: 'repair-active-with-completed-at',
+    // 修数据:`status='active'` 且 `completed_at` 非空是**非法组合**。
+    // 成因是外部日历同步的"复活"分支设了 active 却没清 completed_at
+    // (软删故意保留 completed_at,以免删除抹掉完成记录)。表现是界面把这种任务画成
+    // 已完成、点撤销却报"只能重开已完成的行动",而且这个状态会一直粘着
+    // (2026-08-12 用户实测)。usecase 侧已修(见 INV-29 × INV-26.2 的 spec),
+    // 这里把存量修回来。
+    //
+    // 修向选 **清 completed_at**(而不是改成 done):任务当前确实出现在日历/Today 里
+    // 等着做,把它判成已完成会让它从视图里消失 —— 用户更可能是"它还没做",
+    // 而不是"它已经做完了但我看到它还在"。
+    sql: `
+UPDATE tasks SET completed_at = NULL
+ WHERE status = 'active' AND completed_at IS NOT NULL;
+`,
+  },
 ];

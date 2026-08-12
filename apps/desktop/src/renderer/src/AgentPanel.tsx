@@ -6,6 +6,7 @@ import { PermissionPrompt } from './PermissionPrompt';
 import { ErrorBoundary } from './ErrorBoundary';
 import { toast } from './toast';
 import type { PermissionRequestVM } from '../../shared/viewModels';
+import { isSubmitEnter } from './keys';
 
 /**
  * Agent 面板。M8 只读版 → M9 加审批与权限模式 → M10 加历史会话、附件、effort/thinking。
@@ -618,7 +619,7 @@ export function AgentPanel(): React.JSX.Element {
           onChange={(e) => setDraft(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (isSubmitEnter(e) && !e.shiftKey) {
               e.preventDefault();
               void submit(draft);
             }

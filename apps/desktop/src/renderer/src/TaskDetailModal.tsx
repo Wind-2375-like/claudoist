@@ -4,6 +4,7 @@ import { TaskCard } from './TaskCard';
 import { TaskTree } from './TaskTree';
 import { completeTitle, completeWithFeedback, reopenTask, toast } from './toast';
 import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
+import { isSubmitEnter } from './keys';
 
 /**
  * 任务详情弹窗(D-22 Todoist 式两栏,单击任务打开):
@@ -99,7 +100,7 @@ export function TaskDetailModal({
   };
 
   const t = data?.task;
-  const done = t?.completedAt != null;
+  const done = t?.done === true;
 
   // ── 右栏属性行(点 1:有值 → 点值本身编辑(toggle);无值 → 显 ＋)──
   const attrRow = (
@@ -261,7 +262,7 @@ export function TaskDetailModal({
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    if (isSubmitEnter(e)) {
                       e.preventDefault();
                       void addCommentFn();
                     }
@@ -322,8 +323,8 @@ export function TaskDetailModal({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <DraftField
                       initial={t.scheduledDate ?? ''}
-                      placeholder="YYYY-MM-DD"
-                      className="w-28"
+                      type="date"
+                      className="w-36"
                       onCommit={(v) => {
                         if (v !== '' && !ISO_DATE.test(v)) {
                           toast('日期格式须为 YYYY-MM-DD');
@@ -393,8 +394,8 @@ export function TaskDetailModal({
                 <div className="flex items-center gap-2">
                   <DraftField
                     initial={t.deadline ?? ''}
-                    placeholder="YYYY-MM-DD"
-                    className="w-28"
+                    type="date"
+                    className="w-36"
                     onCommit={(v) => {
                       if (v !== '' && !ISO_DATE.test(v)) {
                         toast('日期格式须为 YYYY-MM-DD');
@@ -507,12 +508,15 @@ const ISO_TIME = /^\d{2}:\d{2}$/;
 function DraftField({
   initial,
   placeholder,
+  type = 'text',
   className = '',
   onCommit,
   onCancel,
 }: {
   initial: string;
-  placeholder: string;
+  placeholder?: string;
+  /** 'date' 用原生日期选择器(值格式 YYYY-MM-DD,与存储一致,无需转换) */
+  type?: 'text' | 'date' | 'time';
   className?: string;
   onCommit: (value: string) => void;
   onCancel: () => void;
@@ -521,18 +525,21 @@ function DraftField({
   const ref = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     ref.current?.focus();
-    ref.current?.select();
+    // ⚠ date/time 类型不支持文本选区,调 select() 会抛 InvalidStateError ——
+    // 按元素的真实 type 判断,别按 props 猜(这个 effect 有两个使用者)
+    if (ref.current?.type === 'text') ref.current.select();
   }, []);
   return (
     <input
       ref={ref}
       value={value}
-      placeholder={placeholder}
+      type={type}
+      {...(placeholder !== undefined ? { placeholder } : {})}
       title="回车保存,Esc 取消"
       className={`rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400 ${className}`}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') {
+        if (isSubmitEnter(e)) {
           e.preventDefault();
           onCommit(value.trim());
         } else if (e.key === 'Escape') {
@@ -576,7 +583,9 @@ function TimeEditor({
   const ref = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     ref.current?.focus();
-    ref.current?.select();
+    // ⚠ date/time 类型不支持文本选区,调 select() 会抛 InvalidStateError ——
+    // 按元素的真实 type 判断,别按 props 猜(这个 effect 有两个使用者)
+    if (ref.current?.type === 'text') ref.current.select();
   }, []);
 
   const commit = (): void => {
@@ -597,7 +606,7 @@ function TimeEditor({
     );
   };
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'Enter') {
+    if (isSubmitEnter(e)) {
       e.preventDefault();
       commit();
     } else if (e.key === 'Escape') {

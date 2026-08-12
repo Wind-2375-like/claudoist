@@ -3,6 +3,7 @@ import type { TaskVM } from '../../../shared/viewModels';
 import { TaskDetailModal } from '../TaskDetailModal';
 import { useCalendarRange, useGoogleCalendars, useGoogleStatus, useGoogleSync } from '../hooks';
 import { completeWithFeedback, reopenTask, toast } from '../toast';
+import { isSubmitEnter } from '../keys';
 
 /**
  * 日历周网格(D-23/INV-28/M6b)。日历 = 任务按 scheduledDate + startTime 的投影,
@@ -289,7 +290,7 @@ export function CalendarView(): React.JSX.Element {
         // 落点必须在网格内或全天条上;否则丢弃(否则会按滚动位置外推出一个无关时刻)
         if (!overAllDay(e.clientY) && !insideGrid(e.clientX, e.clientY)) return;
         // 已完成/外部镜像不参与改期(起点已挡,这里兜底)
-        if (d.task.completedAt !== null || d.task.externalId !== null) return;
+        if (d.task.done || d.task.externalId !== null) return;
         if (overAllDay(e.clientY)) {
           void patchTask(d.task.id, {
             scheduledDate: days[d.day]!.date,
@@ -397,7 +398,7 @@ export function CalendarView(): React.JSX.Element {
           >
             {d.allDay.map((t) => {
               const external = t.externalId !== null;
-              const isDone = t.completedAt !== null;
+              const isDone = t.done;
               const canDrag = !external && !isDone;
               return (
                 <AllDayChip
@@ -450,7 +451,13 @@ export function CalendarView(): React.JSX.Element {
               }}
               className="relative min-w-0 flex-1 border-l border-neutral-100"
               onMouseDown={(e) => {
-                if (e.button !== 0 || e.currentTarget !== e.target) return;
+                if (e.button !== 0) return;
+                // 通常只在"落在列本身"时起手,免得在块上按下也开始拖选。
+                // 例外:**已完成的块是惰性的**(不拖、不拉、左键点了什么都不发生),
+                // 它却实实在在占着一片时间 —— 再把 mousedown 挡掉,那片时间就成了死区,
+                // 用户没法在它附近拖出新任务(2026-08-12 用户实测)。所以放它冒泡上来。
+                const inert = (e.target as HTMLElement).closest('[data-cal-inert]') !== null;
+                if (e.currentTarget !== e.target && !inert) return;
                 const m = snapQuarter(minutesAt(di, e.clientY));
                 setDrag({ mode: 'select', day: di, from: m, to: m, ox: e.clientX, oy: e.clientY });
               }}
@@ -480,7 +487,7 @@ export function CalendarView(): React.JSX.Element {
                 // - 已完成:日历上完全锁死(不拖、不拉、不点开)——先右键撤销完成再操作
                 // - 外部镜像:时间归 Google → 不拖不拉,但**可以点开**改优先级/标签/完成
                 const external = task.externalId !== null;
-                const isDone = task.completedAt !== null;
+                const isDone = task.done;
                 const draggable = !external && !isDone;
                 const dragging =
                   drag && drag.mode !== 'select' && drag.task.id === task.id ? drag : null;
@@ -586,11 +593,11 @@ export function CalendarView(): React.JSX.Element {
               onClick={() => {
                 const t = menu.task;
                 setMenu(null);
-                if (t.completedAt !== null) void reopenTask(t.id);
+                if (t.done) void reopenTask(t.id);
                 else void completeWithFeedback(t.title, t.id);
               }}
             >
-              {menu.task.completedAt !== null ? '↺ 撤销完成' : '✓ 完成'}
+              {menu.task.done ? '↺ 撤销完成' : '✓ 完成'}
             </button>
             {menu.task.completedAt === null && menu.task.externalId === null && (
               <button
@@ -657,7 +664,7 @@ function AllDayChip({
   onGrab: (e: React.MouseEvent) => void;
   onMenu: (e: React.MouseEvent) => void;
 }): React.JSX.Element {
-  const done = task.completedAt !== null;
+  const done = task.done;
   return (
     <div
       className={`mb-0.5 block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] ${
@@ -727,7 +734,7 @@ function CalendarBlock({
   onResize: (e: React.MouseEvent) => void;
   onMenu: (e: React.MouseEvent) => void;
 }): React.JSX.Element {
-  const done = task.completedAt !== null;
+  const done = task.done;
   const height = Math.max(MIN_BLOCK_PX, ((end - start) / 60) * HOUR_PX);
   return (
     <div
@@ -749,9 +756,17 @@ function CalendarBlock({
           ? { borderColor: externalColor, background: `${externalColor}1a` }
           : {}),
       }}
-      title={`${timeOf(start)}–${endLabel(end)} ${task.title}`}
+      title={
+        done
+          ? `${timeOf(start)}–${endLabel(end)} ${task.title}(已完成 — 右键可撤销)`
+          : `${timeOf(start)}–${endLabel(end)} ${task.title}`
+      }
+      {...(done ? { 'data-cal-inert': '1' } : {})}
       onMouseDown={(e) => {
         if (e.button !== 0) return;
+        // 已完成 = 惰性块:**不吞 mousedown**,让它冒泡给列去起拖选,
+        // 否则这块时间没法再建任务。右键仍由本块处理(contextmenu 是另一个事件)。
+        if (done) return;
         e.stopPropagation(); // 别在块上按下时触发列的"拖选建块"
         if (!draggable) return;
         const rect = e.currentTarget.getBoundingClientRect();
@@ -822,7 +837,7 @@ function QuickComposer({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && title.trim() !== '') onSubmit(title.trim());
+            if (isSubmitEnter(e) && title.trim() !== '') onSubmit(title.trim());
             if (e.key === 'Escape') onCancel();
           }}
         />

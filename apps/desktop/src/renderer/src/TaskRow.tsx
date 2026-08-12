@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { TaskVM } from '../../shared/viewModels';
 import { completeTitle, completeWithFeedback, reopenTask, toast } from './toast';
+import { ContextMenu, ContextMenuItem } from './ContextMenu';
 
 /**
  * 任务行(D-21/22):完成勾选圈(complete↔reopen 可切换)+ 标题 + 属性 chip(label 名)。
@@ -28,7 +29,7 @@ export function TaskRow({
   progress?: { done: number; total: number };
 }): React.JSX.Element {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const done = task.completedAt !== null;
+  const done = task.done;
 
   const remove = async (): Promise<void> => {
     // INV-26.2:级联仅含 active 子树;subtaskCount 与 deletedSubtaskCount 同口径
@@ -49,14 +50,18 @@ export function TaskRow({
         style={depth > 0 ? { paddingLeft: `${depth * 22 + 8}px` } : undefined}
         onContextMenu={(e) => {
           e.preventDefault();
-          // 相对行容器(currentTarget)定位;offsetX/Y 会随冒泡子元素错乱
-          const rect = e.currentTarget.getBoundingClientRect();
-          setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+          // 视口坐标 —— 菜单是 portal 到 body 的 fixed 元素(见 ContextMenu.tsx)
+          setMenu({ x: e.clientX, y: e.clientY });
         }}
       >
-        {leading !== undefined && (
-          <span className="flex w-4 shrink-0 justify-center">{leading}</span>
-        )}
+        {/*
+          折叠箭头的槽位**恒定占位**,不按有无内容显隐。
+          原来写成 `leading !== undefined &&`,于是没传 leading 的视图
+          (Today / Someday / Reference / 过滤器结果)整行比 Inbox、项目视图左移 24px,
+          在同一个应用里切来切去左边界会跳(2026-08-12 用户反馈缩进不一致)。
+          没有子任务时它就是个空槽 —— 宁可空着,也要让所有列表共用一条左边界。
+        */}
+        <span className="flex w-4 shrink-0 justify-center">{leading}</span>
         {!done ? (
           <button
             type="button"
@@ -127,48 +132,37 @@ export function TaskRow({
         </span>
       </div>
       {menu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
-          <div
-            className="absolute z-50 w-36 rounded-lg border border-neutral-200 bg-white py-1 shadow-xl"
-            style={{ left: menu.x, top: menu.y }}
-          >
-            {!done && (
-              <button
-                type="button"
-                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50"
-                onClick={() => {
-                  setMenu(null);
-                  void completeWithFeedback(task.title, task.id);
-                }}
-              >
-                ✓ 完成
-              </button>
-            )}
-            {onEdit && (
-              <button
-                type="button"
-                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50"
-                onClick={() => {
-                  setMenu(null);
-                  onEdit();
-                }}
-              >
-                ✎ 编辑 / 移动
-              </button>
-            )}
-            <button
-              type="button"
-              className="block w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+        <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          {!done && (
+            <ContextMenuItem
               onClick={() => {
                 setMenu(null);
-                void remove();
+                void completeWithFeedback(task.title, task.id);
               }}
             >
-              🗑 删除
-            </button>
-          </div>
-        </>
+              ✓ 完成
+            </ContextMenuItem>
+          )}
+          {onEdit && (
+            <ContextMenuItem
+              onClick={() => {
+                setMenu(null);
+                onEdit();
+              }}
+            >
+              ✎ 编辑 / 移动
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem
+            danger
+            onClick={() => {
+              setMenu(null);
+              void remove();
+            }}
+          >
+            🗑 删除
+          </ContextMenuItem>
+        </ContextMenu>
       )}
     </div>
   );
