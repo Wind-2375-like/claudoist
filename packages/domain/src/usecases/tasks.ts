@@ -37,7 +37,10 @@ export function completionFollowUpConsequences(
   const c: CompletionFollowUpConsequences = {};
   if (projectId === null) return c;
   const p = after.projects.find((x) => x.id === projectId);
-  if (!p || p.status === 'complete') return c;
+  // 守卫必须是 `!== 'active'` 而不是 `=== 'complete'`:否则完成一个挂在**已删项目**下的
+  // 任务时,系统会转头问"这个项目已经没别的活了,要不要一并完成?"—— 指着一个用户
+  // 认为已经删掉的项目(INV-34)
+  if (!p || p.status !== 'active') return c;
   // 余活动 = active next action(INV-05,D-23/M6a:active Task ∨ 未解决 Waiting)
   const remaining = hasActiveNextAction(after, p.id);
   c.projectBreadcrumb = projectBreadcrumb(after, p.id);
@@ -659,6 +662,15 @@ export function reopenTask(
   if (!task) return { error: `行动不存在: ${input.id}` };
   if (task.status !== 'done') return { error: `只能重开已完成的行动: ${input.id}` };
   const patch: Partial<Omit<Task, 'id'>> = { status: 'active', completedAt: null };
+  // 项目已删(或已完成)→ 落回 Inbox。否则会重开出一个 bucket='project' 却指向
+  // 不可见容器的活跃任务:它不在任何列表里,却照常参与 Today 与择事(INV-34)
+  if (task.projectId !== null) {
+    const proj = snap.projects.find((p) => p.id === task.projectId);
+    if (!proj || proj.status === 'deleted') {
+      patch.projectId = null;
+      patch.bucket = 'inbox';
+    }
+  }
   // 与 restoreTask 同守卫:父任务缺失/已删 → 脱离父,避免重开出一个引用死父、
   // 在 projectView 里不可达却计入徽章的悬空子任务(父仅 done 时保留链接,靠
   // isTaskListRoot 让它在列表成行,父重开后自然回归)。
@@ -696,6 +708,14 @@ export function restoreTask(
     task.completedAt !== null
       ? { status: 'done', deletedAt: null }
       : { status: 'active', deletedAt: null, completedAt: null };
+  // 与 reopenTask 同守卫:项目已删 → 落回 Inbox,别恢复出一个不可见却仍参与排程的任务
+  if (task.projectId !== null && patch.status === 'active') {
+    const proj = snap.projects.find((p) => p.id === task.projectId);
+    if (!proj || proj.status === 'deleted') {
+      patch.projectId = null;
+      patch.bucket = 'inbox';
+    }
+  }
   if (task.parentTaskId !== null) {
     const parent = snap.tasks.find((t) => t.id === task.parentTaskId);
     if (!parent || parent.status === 'deleted') patch.parentTaskId = null;

@@ -28,8 +28,12 @@ export function createWaitingForDirect(
   const description = input.description.trim();
   if (!description) return { error: 'description 不能为空' };
   const projectId = input.projectId ?? null;
-  if (projectId !== null && !snap.projects.some((p) => p.id === projectId)) {
-    return { error: `项目不存在: ${projectId}` };
+  // 必须是 active:往已完成/已删项目挂等待项 = 纯隐身数据,还会让 hasActiveNextAction 恒 true
+  if (
+    projectId !== null &&
+    !snap.projects.some((p) => p.id === projectId && p.status === 'active')
+  ) {
+    return { error: `项目不存在或不可用(已完成/在回收站): ${projectId}` };
   }
   const delegatedTo = input.delegatedTo?.trim() || DELEGATED_TO_DEFAULT; // 留空 → 'someone'(§2.6)
   const item: WaitingFor = {

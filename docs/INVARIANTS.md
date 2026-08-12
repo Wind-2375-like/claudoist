@@ -472,6 +472,45 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 **验收**:someday/reference 容器里的任务能被搜到;已删除的搜不到;已完成的排在活跃之后且有明确标记;只在描述里出现的关键词能命中;`limit` 截断后 `totalMatched` 仍为总数。
 
 
+
+#### INV-34 项目软删除(2026-08-12,D-35)
+
+**规则**:`ProjectStatus = 'active' | 'complete' | 'deleted'`,配 `deletedAt`。删除项目 =
+软删(可恢复),与 Task 的软删(INV-22)同规。
+
+1. **活跃任务绝不能留在已删项目里**。`deleteProject` 要求调用方**显式**给出去向
+   `contents: 'delete' | 'toInbox'`(**无默认值**,不选就调不动 —— INV-15:系统不替用户
+   决定跨实体的连锁):
+   - `'delete'` —— 项目取消了,里面的事也不做了 → 活跃任务一并软删;
+   - `'toInbox'` —— 项目归类错了,但事还要做 → 退回 Inbox 并**清掉 `projectId`**;
+     父任务若留在项目里则脱离父(INV-25.4)。
+   留在原地会造出"活着却看不见"的任务:任何容器视图都不显示它们,它们却照常进 Today、
+   择事候选与日历。
+2. **已完成的任务留在项目里不动**,`projectId` 保留 —— 与 INV-26.2 同源:删除不洗完成史。
+3. **未解决的等待项不动**,但必须在 consequences 里点明(INV-05:它计入项目的活跃度)。
+4. **回收站里的项目不是活项目**。`completeProject` / `updateProject` /
+   `createWaitingForDirect` 一律拒绝;完成追问的守卫必须写成 `status !== 'active'`
+   而**不是** `status === 'complete'`(否则完成一个挂在已删项目下的任务时,系统会转头问
+   "这个项目已经没别的活了,要不要一并完成?");`reopenTask` / `restoreTask` 遇到
+   项目已删时把任务落回 Inbox。
+5. **恢复**:`restoreProject` 默认只恢复项目自己;`restoreContents: true` 才连带恢复
+   **同批**软删的任务(判据 `task.deletedAt === project.deletedAt`)。删除前已完成的项目
+   恢复回 `complete`。
+6. **可发现性**:⌘K 仍返回已删项目(排在活跃与已完成之后),点进去是**只读视图 + 恢复按钮**。
+   —— 没有这条,软删对用户就等于不可见的硬删,而软删唯一不可替代的价值正是误删能拿回来。
+   `projectsList`(侧栏 / 位置选择器)仍**只含 active**。
+7. **预检与后果同源**:`projectDeletionPreview` 是确认框、CLI 提示、agent 报数与
+   `deleteProject` 的 consequences 的**唯一**数据来源(单一口径纪律,同 INV-20.6/32.6/33.9)。
+
+**为什么不硬删**:① 外键开着时 `DELETE FROM projects` 直接被拒,硬删就得级联硬删
+tasks/waiting_for/comments/labels —— 那是 D-01 否决过的"一次确认蒸发整张清单、无 undo";
+② 已完成任务保留 `projectId`,硬删会让"这件事当初属于哪个项目"永久消失;
+③ 误删撤销是软删唯一不可替代的价值。
+
+**验收**:两种 `contents` 跑完后项目里都不剩活跃任务;已完成任务仍在且 `projectId` 未变;
+未解决等待项数出现在 consequences;已删项目不能被完成/编辑/挂等待项;完成其下任务不再
+触发项目追问;⌘K 搜得到且排最后;`restoreContents` 只捞同批。
+
 ---
 
 ## 4. 流程规格
@@ -808,6 +847,7 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-18 | 理清 = 强制逐题问答(§4.3 交互形态) | **理清双路径(2026-08-08 用户定案)**:① 手动 specify —— Inbox 条目展开为 Todoist 式卡片,直接补属性转为 Task,或转为 Project,或归档 Someday/Reference/Trash;② 交给 Claude 对话理清(M8/M9 经 MCP 工具)。分步问答状态机**保留为内部机制**(agent 驱动与 Weekly Review 内嵌用),UI 无独立入口 | 逐题问答对日常理清过重;§4.3 的**去向语义**(六种去向、deadline 继承、逐项一次事务 = 一次确认)全部保留,变的只是交互载体 |
 | D-19 | Action 无"计划哪天做"概念(日程只能是 CalendarItem) | Task 新增 `scheduledDate`(与 deadline 并存)。(后续 D-23/M6a:CalendarItem 并入 Task,时间即 `startTime`) | Todoist 式 today/tomorrow 快速安排是用户核心工作流;时刻与最迟完成日的语义区分保留(§2.5) |
 | D-30 | context 是必填单值实体,与 label 并存 | **context 并入 label(2026-08-11 用户定案,INV-24 退役)**:与 Todoist 一致只保留一种自由多值标签;label 名不含 `@`(`@` 是语法/显示前缀)。迁移 v11 把 context 变同名标签并补关联,**撞名直接合并**;tasks.context_id 与 contexts 表删除。engage 的"选情境"变成"选标签"(可不选 = 全部);捕捉不再有任何前置。语义损失:情境从必填降级为可选标签 | ✅ 已定 |
+| D-35 | 项目只能"完成",没有删除 | **项目软删除(2026-08-12 用户诉求「project 没办法删除」,INV-34)**:`ProjectStatus` 加 `'deleted'` + `deletedAt`,与 Task 的软删同规。**不硬删**的三条理由:① 外键开着时 `DELETE FROM projects` 直接被拒,要硬删就得级联硬删 tasks/waiting_for/comments/labels —— 那正是 D-01 否决过的"一次确认蒸发整张清单、无 undo";② 已完成任务保留 `projectId` 是既定设计(与 INV-26.2 同源:删除不洗完成史),硬删会让"这件事当初属于哪个项目"永久消失;③ 误删撤销是软删唯一不可替代的价值。**项目内容的去向由用户显式二选**(`contents: 'delete' \| 'toInbox'`,无默认值):活跃任务**绝不能留在已删项目里** —— 留下的话它们在任何容器视图都不显示,却照样进 Today、择事与日历。配套:⌘K 仍返回已删项目(排最后)+ 只读项目视图 + 恢复按钮,否则软删对用户等于不可见的硬删。迁移 v16 重建 projects 表 | ✅ 已定 |
 | D-34 | 账号/模型/用量只能在"用户发过消息、有了活会话"之后读取(界面上写着「先发一条消息,再回来切换模型」) | **改为零 token 探针(2026-08-12,M11-A)**:SDK 那句 "only supported when streaming input/output is used" 说的是 **prompt 必须是 AsyncIterable**,**不是**"必须先发过一条消息"。给它一个**永不 yield** 的 AsyncIterable,子进程照常起、控制通道照常可用,而模型一次都不会被调用(实测 `session.total_cost_usd === 0`、`model_usage === {}`,端到端 0.8–1.7s)。于是 `initializationResult()`(账号 + 模型列表)与 `usage_EXPERIMENTAL_…()`(订阅额度 + 消耗归因)都能在没聊过天时读到。三条硬纪律:探针用**自己的** AbortController、**绝不**调 `startSession()`/`destroySession()`、有活会话且不忙时优先蹭活会话(探针与长驻会话并存已实测安全,两个独立子进程)。附带定案:护栏(`maxTurns`/`maxBudgetUsd`)是 spawn 期 CLI flag,**没有**热改途径 —— ⚠ `applyFlagSettings({maxTurns})` 会返回成功但什么都不做,是静默陷阱;改完只能显式重起会话(resume 保留上下文) | ✅ 已定 |
 | D-33 | 权限放行按 Claude Code 的原生机制:读工具进 `allowedTools` 自动放行、Bypass 用 `permissionMode: 'bypassPermissions'` | **改为「一切放行都经 `canUseTool`」(2026-08-11,M9 实现时定案)**:`allowedTools` 与 `bypassPermissions` 都会让调用**绕过** `canUseTool`,那条调用因此不进 `agent_audit` —— 审计缺了自动放行的那一半就等于没有审计(排查"它到底改了什么"时,恰恰是自动放行的那批最需要看)。改为工具面只由 `tools` + `mcpServers` 决定,放行一律在 `canUseTool` 里按策略表判定;"全部放行"实现为该函数一律返回 allow,于是连 `allowDangerouslySkipPermissions` 都不需要。代价:每次工具调用多一次进程内函数调用(可忽略)。另外两处随之调整:① **只读模式下写工具根本不注册**(纵深防御:审批逻辑写错了工具也不存在);② `complete_task` 是**动态**破坏性 —— 目标有活跃子任务时才升级,因为级联数量只在返回值里、事后才知道 | ✅ 已定 |
 | D-32 | filter 是结构化查询对象 `{contextId?, labelIds?, energyMax?, …}` | **改为 Todoist 式文本查询语言(2026-08-11 用户定案,INV-33)**:勾选框表达不了 `|`/`!`/括号,也表达不了"一周内到期却还没排期"。`SavedFilter.query` 存**查询原文**而非 AST —— AST 是派生物,语法一演进就要写一次数据迁移。迁移 v13 把存量结构体转写为等价文本;id 解析不出时**不丢条件**(丢了会让过滤器变宽),而是落成一个必然为空的名字并被"未知标签"提示抓到 | ✅ 已定 |

@@ -44,6 +44,7 @@ const rowToProject = (r: Row): Project => ({
   status: s(r['status']) as Project['status'],
   createdAt: s(r['created_at']),
   completedAt: sn(r['completed_at']),
+  deletedAt: sn(r['deleted_at']),
 });
 
 const rowToTask = (r: Row): Task => ({
@@ -142,6 +143,8 @@ const COLS: Record<string, ColumnSpec> = {
     status: { col: 'status' },
     createdAt: { col: 'created_at' },
     completedAt: { col: 'completed_at' },
+    // ⚠ 不在白名单里的字段会被 update() 静默丢弃 —— 漏了它,软删项目会写不进 deleted_at
+    deletedAt: { col: 'deleted_at' },
   },
   tasks: {
     title: { col: 'title' },

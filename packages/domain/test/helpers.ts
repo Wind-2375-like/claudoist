@@ -72,6 +72,7 @@ export function project(over: Partial<Project> = {}): Project {
     status: 'active',
     createdAt: '2026-08-01T00:00:00',
     completedAt: null,
+    deletedAt: null,
     ...over,
   };
 }

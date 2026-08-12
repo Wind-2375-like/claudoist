@@ -24,6 +24,7 @@ export * from './rules/externalMirror';
 export * from './rules/energy';
 export * from './rules/filterQuery';
 export * from './rules/priority';
+export * from './rules/projectDeletion';
 export * from './rules/projectHealth';
 export * from './rules/projectTree';
 export * from './rules/projectStats';

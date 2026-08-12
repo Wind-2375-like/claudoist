@@ -16,6 +16,7 @@ import type {
   LabelListItemVM,
   GtdChangedEvent,
   MoveTargetVM,
+  ProjectDeletionPreviewVM,
   ProjectListItemVM,
   SearchVM,
   ProjectViewVM,
@@ -85,6 +86,9 @@ declare global {
         propagateDeadline?: boolean;
       }) => Promise<WriteResultVM>;
       projectComplete: (id: string) => Promise<WriteResultVM>;
+      projectDeletionPreview: (id: string) => Promise<ProjectDeletionPreviewVM>;
+      projectDelete: (id: string, contents: 'delete' | 'toInbox') => Promise<WriteResultVM>;
+      projectRestore: (id: string, restoreContents: boolean) => Promise<WriteResultVM>;
     };
     google: {
       status: () => Promise<GoogleStatusVM>;

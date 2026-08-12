@@ -17,6 +17,7 @@ import type {
   LabelListItemVM,
   GtdChangedEvent,
   MoveTargetVM,
+  ProjectDeletionPreviewVM,
   ProjectListItemVM,
   ProjectViewVM,
   SearchVM,
@@ -115,6 +116,13 @@ const gtdApi = {
   }): Promise<WriteResultVM> => ipcRenderer.invoke('gtd:projects.update', input),
   projectComplete: (id: string): Promise<WriteResultVM> =>
     ipcRenderer.invoke('gtd:projects.complete', { id }),
+  projectDeletionPreview: (id: string): Promise<ProjectDeletionPreviewVM> =>
+    ipcRenderer.invoke('gtd:projects.deletionPreview', { id }),
+  /** contents 必填:项目里的活跃任务是一并删掉,还是退回 Inbox(INV-34) */
+  projectDelete: (id: string, contents: 'delete' | 'toInbox'): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:projects.delete', { id, contents }),
+  projectRestore: (id: string, restoreContents: boolean): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:projects.restore', { id, restoreContents }),
 };
 
 const googleApi = {

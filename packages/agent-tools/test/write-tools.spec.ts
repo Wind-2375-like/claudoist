@@ -109,6 +109,7 @@ describe('M9 写工具:后果原样透出', () => {
           status: 'active',
           createdAt: '2026-08-01T00:00:00',
           completedAt: null,
+          deletedAt: null,
         },
       ],
     });
@@ -139,6 +140,7 @@ describe('M9 写工具:后果原样透出', () => {
           status: 'active',
           createdAt: '2026-08-01T00:00:00',
           completedAt: null,
+          deletedAt: null,
         },
       ],
       tasks: [{ ...base(), id: 'a', projectId: 'p1', bucket: 'project' }],
@@ -177,6 +179,7 @@ describe('M9 写工具:名字解析', () => {
       status: 'active',
       createdAt: '2026-08-01T00:00:00',
       completedAt: null,
+      deletedAt: null,
     });
     const h = harness({ projects: [proj('aaa-1', '搬家计划'), proj('aaa-2', '搬家预算')] });
     expect(W.createTask(h, { title: 'x', project: '搬家计划' }).ok).toBe(true);

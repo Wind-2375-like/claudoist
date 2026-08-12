@@ -94,6 +94,7 @@ commands.push(
       status: 'active',
       createdAt: T,
       completedAt: null,
+      deletedAt: null,
     },
   },
   {
@@ -105,6 +106,7 @@ commands.push(
       status: 'active',
       createdAt: T,
       completedAt: null,
+      deletedAt: null,
     },
   },
   {
@@ -116,6 +118,7 @@ commands.push(
       status: 'complete',
       createdAt: T,
       completedAt: T,
+      deletedAt: null,
     },
   },
 );

@@ -470,4 +470,35 @@ UPDATE tasks SET completed_at = NULL
  WHERE status = 'active' AND completed_at IS NOT NULL;
 `,
   },
+  {
+    version: 16,
+    name: 'project-soft-delete',
+    // INV-34:项目软删除,与 Task 的软删(INV-22)同规。
+    // SQLite 改不了 CHECK,只能重建表 —— 沿用 v4/v14 的影子表套路。
+    //
+    // 三个要点:
+    // 1. **不要**自己写 BEGIN/COMMIT,也不要动 foreign_keys:migrate() 每条迁移独占一个
+    //    BEGIN IMMEDIATE,db.ts 在 migrate 前后开关外键。
+    // 2. 指向 projects 的外键(tasks.project_id / waiting_for.project_id)按**表名**解析,
+    //    DROP + RENAME 之后自动重新绑到新表(已在用户库副本上实测:外键仍真实生效,
+    //    插入不存在的 project_id 会被拒)。
+    // 3. **`ORDER BY rowid` 是必需的**:snapshot() 按 rowid 序读表,重建会重编 rowid;
+    //    不指定顺序时查询计划可能走主键索引,GtdSnapshot.projects 会静默变成按 id 排序。
+    sql: `
+CREATE TABLE projects_v16 (
+  id TEXT PRIMARY KEY,
+  outcome TEXT NOT NULL,
+  deadline TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','complete','deleted')),
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  deleted_at TEXT
+);
+INSERT INTO projects_v16 (id, outcome, deadline, status, created_at, completed_at, deleted_at)
+  SELECT id, outcome, deadline, status, created_at, completed_at, NULL
+    FROM projects ORDER BY rowid;
+DROP TABLE projects;
+ALTER TABLE projects_v16 RENAME TO projects;
+`,
+  },
 ];

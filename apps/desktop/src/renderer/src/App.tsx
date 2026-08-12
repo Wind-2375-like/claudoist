@@ -19,6 +19,7 @@ import { BucketView, CompletedView } from './views/BucketView';
 import { FiltersLabelsView } from './views/FiltersLabelsView';
 import { FilterResultView } from './views/FilterResultView';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
+import { ProjectDeleteDialog } from './ProjectDeleteDialog';
 
 /** 三栏壳(D-21):侧栏平面项目(计数徽章/折叠/新建/右键编辑)+ GTD 组计数。 */
 
@@ -106,6 +107,7 @@ function SidebarProject({
   onCompleted: () => void;
 }): React.JSX.Element {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const complete = async (): Promise<void> => {
     if (
       project.activeCount > 0 &&
@@ -164,7 +166,27 @@ function SidebarProject({
           >
             ✓ 标记完成
           </ContextMenuItem>
+          <ContextMenuItem
+            danger
+            onClick={() => {
+              setMenu(null);
+              setDeleting(true);
+            }}
+          >
+            🗑 删除项目
+          </ContextMenuItem>
         </ContextMenu>
+      )}
+      {deleting && (
+        <ProjectDeleteDialog
+          projectId={project.id}
+          projectName={project.name}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => {
+            setDeleting(false);
+            onCompleted();
+          }}
+        />
       )}
     </li>
   );

@@ -76,8 +76,22 @@ export interface ProjectViewVM {
   deadline: string | null;
   /** 项目已标记完成(视图只读展示,不再提供 Add task) */
   complete: boolean;
+  /** INV-34:在回收站里。视图只读 + 显示恢复按钮 */
+  deleted: boolean;
+  deletedAt: string | null;
+  /** 同批可一起恢复的任务数(恢复确认文案用) */
+  restorableTaskCount: number;
   tasks: TaskTreeVM[];
   doneCount: number;
+}
+
+/** 删除项目前的预检:确认框上的数字与 usecase 的 consequences 同一口径(INV-34) */
+export interface ProjectDeletionPreviewVM {
+  activeTaskCount: number;
+  doneTaskCount: number;
+  alreadyDeletedTaskCount: number;
+  mirrorTaskCount: number;
+  unresolvedWaitingCount: number;
 }
 
 export interface CommentVM {

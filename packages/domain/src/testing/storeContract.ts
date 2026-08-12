@@ -71,6 +71,7 @@ function batches(): Command[][] {
           status: 'active',
           createdAt: T0,
           completedAt: null,
+          deletedAt: null,
         },
       },
       {
@@ -82,6 +83,7 @@ function batches(): Command[][] {
           status: 'active',
           createdAt: T0,
           completedAt: null,
+          deletedAt: null,
         },
       },
       {

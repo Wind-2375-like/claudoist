@@ -8,6 +8,7 @@ import {
   addSubtask,
   captureToInbox,
   completeProject,
+  deleteProject,
   completeTask,
   createFilter,
   createLabel,
@@ -22,6 +23,8 @@ import {
   isValidIsoDate,
   moveTask,
   priorityLabel,
+  projectDeletionPreview,
+  restoreProject,
   projectStats,
   quickAddTask,
   reopenTask,
@@ -45,6 +48,7 @@ import type {
   FilterListItemVM,
   FilterRunVM,
   LabelListItemVM,
+  ProjectDeletionPreviewVM,
   ProjectListItemVM,
   ProjectViewVM,
   CalendarRangeVM,
@@ -73,6 +77,8 @@ export interface GtdViews {
   completed(): TaskVM[];
   projectsList(): ProjectListItemVM[];
   projectView(id: string): ProjectViewVM | null;
+  /** 删除项目前的预检(INV-34):确认框的数字与 usecase 的 consequences 同源 */
+  projectDeletionPreview(id: string): ProjectDeletionPreviewVM;
   taskDetail(id: string): TaskDetailVM | null;
   today(): TodayVM;
   /** 外部日历镜像任务(D-25/INV-29):独立容器,不与 Inbox 混淆 */
@@ -229,6 +235,17 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
         name: project.outcome,
         deadline: project.deadline,
         complete: project.status === 'complete',
+        deleted: project.status === 'deleted',
+        deletedAt: project.deletedAt,
+        restorableTaskCount:
+          project.deletedAt === null
+            ? 0
+            : snap.tasks.filter(
+                (t) =>
+                  t.projectId === project.id &&
+                  t.status === 'deleted' &&
+                  t.deletedAt === project.deletedAt,
+              ).length,
         tasks: snap.tasks
           .filter(
             (t) => t.projectId === project.id && t.status === 'active' && isTaskListRoot(snap, t),
@@ -237,6 +254,9 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
           .map((t) => treeVM(snap, t, today)),
         doneCount: projectStats(snap, project.id).doneCount,
       };
+    },
+    projectDeletionPreview(id) {
+      return projectDeletionPreview(store.snapshot(), id);
     },
     taskDetail(id) {
       const snap = store.snapshot();
@@ -621,5 +641,17 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   );
   ipcMain.handle('gtd:projects.complete', (_e, input: { id: string }) =>
     applyResult(completeProject(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle('gtd:projects.deletionPreview', (_e, input: { id: string }) =>
+    views.projectDeletionPreview(input.id),
+  );
+  /** INV-34:contents 无默认值 —— 调用方必须显式选内容去向 */
+  ipcMain.handle(
+    'gtd:projects.delete',
+    (_e, input: { id: string; contents: 'delete' | 'toInbox' }) =>
+      applyResult(deleteProject(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle('gtd:projects.restore', (_e, input: { id: string; restoreContents?: boolean }) =>
+    applyResult(restoreProject(store.snapshot(), deps, input)),
   );
 }

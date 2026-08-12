@@ -61,7 +61,14 @@ export function searchAll(
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
-  const projects = snap.projects.filter((p) => hit(p.outcome));
+  // 已删项目**保留但排在最后**(INV-34):INV-32.3 当初不返回软删任务的理由是
+  // "没有恢复入口,给一条点不动的结果不如不给" —— 而项目恰恰有了恢复入口(只读项目视图),
+  // 过滤掉反而等于把软删变成用户永远看不见的硬删。调用方按 status 标注即可。
+  const projectRank = (p: { status: string }): number =>
+    p.status === 'active' ? 0 : p.status === 'complete' ? 1 : 2;
+  const projects = snap.projects
+    .filter((p) => hit(p.outcome))
+    .sort((a, b) => projectRank(a) - projectRank(b));
   const waiting = snap.waiting.filter((w) => hit(w.description) || hit(w.delegatedTo));
 
   return {
