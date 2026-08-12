@@ -50,7 +50,7 @@
 | M8 | Agent 只读版 | SDK 会话 + 认证引导 + 流式聊天与工具 chip + 13 个只读工具 + 护栏 + engage skill | 🔄 |
 | M9 | Agent 写入 + 权限 | 写工具 + canUseTool 审批 + 权限模式 + agent_audit + 实时刷新 | 🔄 待验收 |
 | M10 | Agent 面板补全 | 会话管理/fork、图片粘贴、附件、模型与 effort 切换、用量账本、coaching evals | 🔄 待验收 |
-| M11 | 打包加固与打磨 | 无 Node 机器全流程复验、notarization、主题、错误上报面 | ⬜ |
+| M11 | 打包加固与打磨 | 无 Node 机器全流程复验、notarization、主题、错误上报面 | 🔄 M11-A(账号与用量 + 可调护栏)已完成待验收 |
 
 ---
 
@@ -699,6 +699,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-08-12 | **M11-A:账号与用量面板 + 可调护栏 + 模型直接可改**(用户三条要求)。核心是 **D-34 零 token 探针**:SDK 的 streaming-input 前置条件指的是"prompt 必须是 AsyncIterable",不是"必须先发过一条消息" —— 给一个永不 yield 的 iterable,控制通道就活了而模型一次都不会被调用(实测 cost=0、model_usage={})。于是账号/模型列表/订阅额度/消耗归因都能在没聊过天时读到,「先发一条消息再回来切换模型」这个限制直接消掉。面板对齐 Claude Code /usage:Session(5 小时)/Weekly(7 天)/Weekly·<模型> 进度条 + 重置倒计时 + "什么在消耗你的额度"(Day/Week、行为特征、skill/MCP/子代理归因),三层降级到 ~/.claude.json 缓存。护栏改成可调滑杆/输入框 + 显式「重起会话(保留上下文)」;文案改写("每会话预算上限"→"单次会话工作量刹车",并明说订阅用户不会被扣这笔钱)。DESIGN §6.14 新增 |
 | 2026-08-11 | **M9 + M10 实现完成待用户验收**:19 个写工具(domain usecase 薄包装,一次 usecase 一个事务)、5 种权限模式的判定表(单测逐格断言)、`canUseTool` 审批桥(fail-closed;Enter/Esc 都是拒绝)、`agent_audit`(审批落行 + 结果回填)、agent 写入后中栏实时刷新 + toast;会话列表/resume/fork/删除、附件目录、effort × thinking(按模型能力禁用非法组合)、用量账本。**D-33**:放行一律经 `canUseTool` 而非 `allowedTools`/`bypassPermissions`(否则自动放行的调用不进审计)。DESIGN §6.3/§6.4/§6.5/§6.8 按实现定稿 |
 | 2026-08-11 | **D-28 范围重定**:流程类功能(Focus/Engage、Weekly Review)不做 UI,算法保留在 domain,载体改为 agent skill + composer 建议按钮(DESIGN §6.9,归 M8–M10);M7 收缩为 Search(⌘K)+ Filters & Labels。已实现的桌面 Focus 面板撤除。INVARIANTS §5 补齐 D-25/26/27 表行并新增 D-28;INV-20 与 §4.11/§4.12 的载体表述改写。另修 Google 专用日历清理的三处缺陷(删除失败仍清本地指针、目标账号取 accounts[0]、清理无回执且横幅只按本地指针消失)|
 | 2026-08-08 | 文档初版:协作流程、Definition of Done、里程碑 M0–M11(全部 ⬜)、决策日志、变更记录 |

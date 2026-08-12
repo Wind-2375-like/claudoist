@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
+  AccountUsageVM,
+  GuardrailsVM,
   AuditRowVM,
   ConversationVM,
   ModelInfoVM,
@@ -150,7 +152,7 @@ const agentApi = {
     ipcRenderer.invoke('agent:skills.reset', { name }),
   toolManual: (): Promise<ToolManualEntryVM[]> => ipcRenderer.invoke('agent:tools.manual'),
   models: (): Promise<ModelInfoVM[]> => ipcRenderer.invoke('agent:models'),
-  setModel: (model: string): Promise<{ error?: string }> =>
+  setModel: (model: string): Promise<{ applied: boolean; error?: string }> =>
     ipcRenderer.invoke('agent:model.set', { model }),
   setEffort: (effort: string): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:effort.set', { effort }),
@@ -162,6 +164,18 @@ const agentApi = {
     fork?: boolean;
   }): Promise<{ started: boolean; conversationId: string }> =>
     ipcRenderer.invoke('agent:session.start', opts),
+  /** 重起并 resume 同一条会话(护栏改动靠它生效);上下文保留 */
+  restartSession: (): Promise<{ error?: string }> => ipcRenderer.invoke('agent:session.restart'),
+  // ── 账号与用量(M11-A)──
+  usageSnapshot: (force = false): Promise<AccountUsageVM> =>
+    ipcRenderer.invoke('agent:usage.snapshot', { force }),
+  openBilling: (): Promise<unknown> => ipcRenderer.invoke('agent:usage.openBilling'),
+  guardrails: (): Promise<GuardrailsVM> => ipcRenderer.invoke('agent:guardrails.get'),
+  setGuardrails: (
+    maxTurns: number | null,
+    maxBudgetUsd: number | null,
+  ): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:guardrails.set', { maxTurns, maxBudgetUsd }),
   newSession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.new'),
   destroySession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.destroy'),
   send: (

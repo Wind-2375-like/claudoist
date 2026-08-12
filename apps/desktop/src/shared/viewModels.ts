@@ -324,3 +324,107 @@ export interface ToolManualEntryVM {
   destructive: boolean;
   params: { name: string; type: string; required: boolean; description: string }[];
 }
+
+// --------------------------------------------------- 账号与用量(M11-A)
+
+/** 数据从哪来 —— 决定 UI 要不要打「本机缓存」的标。 */
+export type UsageSourceVM = 'live-session' | 'probe' | 'local-cache' | 'none';
+
+export interface UsageFreshnessVM {
+  source: UsageSourceVM;
+  /** 我们发起这次取数的时刻(epoch ms);绝不声称是服务端实时值 */
+  fetchedAtMs: number | null;
+  /** local-cache 时:缓存写入距今多久 */
+  cacheAgeMs: number | null;
+}
+
+export type AuthMethodVM =
+  'claude-ai' | 'oauth-token' | 'api-key' | 'third-party' | 'logged-out' | 'unknown';
+
+export interface AccountVM {
+  method: AuthMethodVM;
+  /** 直接展示的中文串,如「Claude 账号」 */
+  methodLabel: string;
+  email: string | null;
+  organization: string | null;
+  /** SDK 给的已经是展示串,如 'Claude Max' —— 不要再加前缀 */
+  planLabel: string | null;
+  /** 环境里存在 ANTHROPIC_API_KEY:会被优先使用并按 API 计费 */
+  apiKeyInEnv: boolean;
+}
+
+/** 一条额度进度条 */
+export interface LimitWindowVM {
+  id: string;
+  label: string;
+  /** 0–100,已 clamp */
+  utilization: number;
+  /** ISO8601;null = 服务端没给 */
+  resetsAt: string | null;
+}
+
+export interface SubscriptionUsageVM {
+  available: boolean;
+  /** available=false 时说明原因 */
+  unavailableReason: string | null;
+  windows: LimitWindowVM[];
+  extraUsage: {
+    utilization: number | null;
+    usedCredits: number | null;
+    monthlyLimit: number | null;
+    currency: string | null;
+  } | null;
+}
+
+export interface BehaviorRowVM {
+  key: string;
+  /** 0–100,按成本加权;**类别彼此重叠,加起来可以超过 100** */
+  pct: number;
+  /** 命中次数。⚠ 单位在不同 key 下不一致(请求数 / 会话数),故 UI 不标单位 */
+  count: number;
+  headline: string;
+  detail: string;
+}
+
+export interface AttributionRowVM {
+  kind: 'agent' | 'skill' | 'mcp' | 'plugin';
+  name: string;
+  pct: number;
+}
+
+export interface ContributionWindowVM {
+  requestCount: number;
+  sessionCount: number;
+  behaviors: BehaviorRowVM[];
+  attributions: AttributionRowVM[];
+}
+
+export interface ContributionVM {
+  day: ContributionWindowVM | null;
+  week: ContributionWindowVM | null;
+}
+
+export interface AccountUsageVM {
+  freshness: UsageFreshnessVM;
+  account: AccountVM;
+  usage: SubscriptionUsageVM;
+  /** null = 拿不到(离线缓存里没有这块数据) */
+  contribution: ContributionVM | null;
+  /** 本应用自己的账本(与订阅额度是两回事) */
+  appLedger: {
+    session: { costUsd: number; inputTokens: number; outputTokens: number };
+    totals: { conversations: number; costUsd: number; inputTokens: number; outputTokens: number };
+  };
+  error: string | null;
+}
+
+/** 护栏 */
+export interface GuardrailsVM {
+  /** null = 不限 */
+  maxTurns: number | null;
+  /** null = 不限;**下限 0.5,绝不能是 0** */
+  maxBudgetUsd: number | null;
+  /** 当前会话是否还在用旧值 */
+  sessionAlive: boolean;
+  sessionBusy: boolean;
+}

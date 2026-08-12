@@ -1,4 +1,6 @@
 import type {
+  AccountUsageVM,
+  GuardrailsVM,
   AuditRowVM,
   ConversationVM,
   ModelInfoVM,
@@ -114,7 +116,7 @@ declare global {
       resetSkill: (name: string) => Promise<{ error?: string }>;
       toolManual: () => Promise<ToolManualEntryVM[]>;
       models: () => Promise<ModelInfoVM[]>;
-      setModel: (model: string) => Promise<{ error?: string }>;
+      setModel: (model: string) => Promise<{ applied: boolean; error?: string }>;
       setEffort: (effort: string) => Promise<{ error?: string }>;
       setThinking: (mode: 'off' | 'hidden' | 'shown') => Promise<{ error?: string }>;
       startSession: (opts: {
@@ -122,6 +124,14 @@ declare global {
         conversationId?: string;
         fork?: boolean;
       }) => Promise<{ started: boolean; conversationId: string }>;
+      restartSession: () => Promise<{ error?: string }>;
+      usageSnapshot: (force?: boolean) => Promise<AccountUsageVM>;
+      openBilling: () => Promise<unknown>;
+      guardrails: () => Promise<GuardrailsVM>;
+      setGuardrails: (
+        maxTurns: number | null,
+        maxBudgetUsd: number | null,
+      ) => Promise<{ error?: string }>;
       newSession: () => Promise<unknown>;
       destroySession: () => Promise<unknown>;
       send: (

@@ -22,6 +22,68 @@ export interface AuthStatus {
   cwd: string;
 }
 
+/** 本机缓存快照(L3 兜底):断网 / 起不了子进程时,面板至少还能显示点东西。 */
+export interface LocalSnapshot {
+  email: string | null;
+  organization: string | null;
+  /** 'max' | 'pro' | 'team' | 'enterprise' | null —— 由 organizationType 反推 */
+  plan: string | null;
+  /** cachedUsageUtilization.utilization,交给 usageModel 解析 */
+  utilization: unknown;
+  /** 缓存写入时刻(epoch ms) */
+  fetchedAtMs: number | null;
+}
+
+/** CLI 自己的映射(organizationType → subscriptionType),再套展示名。 */
+const PLAN_LABEL: Record<string, string> = {
+  claude_max: 'Claude Max',
+  claude_pro: 'Claude Pro',
+  claude_team: 'Claude Team',
+  claude_enterprise: 'Claude Enterprise',
+};
+
+/**
+ * 读 `~/.claude.json` 的账号与用量缓存。
+ *
+ * 三道校验缺一不可,任何一道不过就当缓存不存在:
+ * 1. 文件可读且 JSON 合法;
+ * 2. **`cachedUsageUtilization.accountUuid` 必须等于 `oauthAccount.accountUuid`** ——
+ *    否则换过账号,面板会拿上一个账号的额度糊弄用户(CLI 自己在不等时会直接删缓存);
+ * 3. 写入时刻在 1 小时以内(CLI 自己也是这个上限,超时即判缓存失效)。
+ *
+ * 注意:accountUuid / organizationUuid 只用于**比对**,绝不进 VM、绝不进日志。
+ */
+export function localSnapshot(): LocalSnapshot | null {
+  try {
+    const p = join(homedir(), '.claude.json');
+    if (!existsSync(p)) return null;
+    const raw = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;
+    const oauth = raw['oauthAccount'] as Record<string, unknown> | undefined;
+    if (!oauth) return null;
+    const orgType = typeof oauth['organizationType'] === 'string' ? oauth['organizationType'] : '';
+    const snap: LocalSnapshot = {
+      email: typeof oauth['emailAddress'] === 'string' ? oauth['emailAddress'] : null,
+      organization:
+        typeof oauth['organizationName'] === 'string' ? oauth['organizationName'] : null,
+      plan: PLAN_LABEL[orgType] ?? null,
+      utilization: null,
+      fetchedAtMs: null,
+    };
+    const cached = raw['cachedUsageUtilization'] as Record<string, unknown> | undefined;
+    const fetchedAtMs = typeof cached?.['fetchedAtMs'] === 'number' ? cached['fetchedAtMs'] : null;
+    const sameAccount =
+      typeof cached?.['accountUuid'] === 'string' && cached['accountUuid'] === oauth['accountUuid'];
+    const fresh = fetchedAtMs !== null && Date.now() - fetchedAtMs < 60 * 60 * 1000;
+    if (sameAccount && fresh) {
+      snap.utilization = cached['utilization'];
+      snap.fetchedAtMs = fetchedAtMs;
+    }
+    return snap;
+  } catch {
+    return null;
+  }
+}
+
 export function authStatus(): AuthStatus {
   let loggedIn = false;
   let email: string | null = null;

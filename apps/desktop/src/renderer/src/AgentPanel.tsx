@@ -40,6 +40,10 @@ type Item =
       awaiting?: boolean;
     }
   | { kind: 'meta'; text: string }
+  /** 停下来了但不是故障(跑满往返上限);可以直接接着聊 */
+  | { kind: 'halt'; text: string }
+  /** 会话被工作量刹车卡死 —— **粘住的**,不重起就永远发不出去 */
+  | { kind: 'stuck'; text: string }
   | { kind: 'error'; text: string };
 
 interface StreamEvent {
@@ -260,10 +264,30 @@ export function AgentPanel(): React.JSX.Element {
         thinkBuf.current = '';
         void refreshStatus();
         if (m['is_error'] === true) {
-          setItems((p) => [
-            ...p,
-            { kind: 'error', text: `本轮结束于错误(${String(m['subtype'] ?? '')})` },
-          ]);
+          const subtype = String(m['subtype'] ?? '');
+          // 这两种"错误"其实是护栏在起作用,不该渲染成红色故障 ——
+          // 尤其 error_max_budget_usd 是**粘住的**:判定是「进程累计成本 >= 上限」,
+          // 一旦触发,之后每条消息都会立刻返回同样的错、一个 token 都不跑。
+          // 不专门识别它,用户只会对着一条看不懂的红字反复发消息。
+          if (subtype === 'error_max_turns') {
+            setItems((p) => [
+              ...p,
+              {
+                kind: 'halt',
+                text: '这一轮跑满了工具往返上限,先停下了。发一句「继续」就能接着跑。',
+              },
+            ]);
+          } else if (subtype === 'error_max_budget_usd') {
+            setItems((p) => [
+              ...p,
+              {
+                kind: 'stuck',
+                text: '本次会话达到了工作量刹车上限。**这个状态不会自己恢复** —— 现在发任何消息都会立刻返回同样的结果。重起会话即可继续(上下文保留,计数从 0 重新开始)。',
+              },
+            ]);
+          } else {
+            setItems((p) => [...p, { kind: 'error', text: `本轮结束于错误(${subtype})` }]);
+          }
         }
       }
     });
@@ -470,6 +494,48 @@ export function AgentPanel(): React.JSX.Element {
           }
           if (it.kind === 'tool') {
             return <ToolChip key={it.id} item={it} />;
+          }
+          if (it.kind === 'halt') {
+            return (
+              <p
+                key={i}
+                className="rounded-lg border border-neutral-700 bg-neutral-850/40 px-2.5 py-1.5 text-[11px] text-neutral-400"
+              >
+                {it.text}
+              </p>
+            );
+          }
+          if (it.kind === 'stuck') {
+            return (
+              <div
+                key={i}
+                className="rounded-lg border border-red-800 bg-red-950/50 px-2.5 py-2 text-[11px] text-red-200"
+              >
+                <p className="whitespace-pre-wrap">{it.text.replace(/\*\*/g, '')}</p>
+                <div className="mt-1.5 flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-red-700 px-2 py-0.5 hover:bg-red-900"
+                    onClick={() => {
+                      void window.agent.restartSession().then((r) => {
+                        if (r.error !== undefined) return toast(r.error);
+                        toast('已重起 —— 上下文已恢复,工作量计数从 0 重新开始');
+                        void refreshStatus();
+                      });
+                    }}
+                  >
+                    重起会话
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-red-800 px-2 py-0.5 hover:bg-red-900"
+                    onClick={() => setSettingsOpen(true)}
+                  >
+                    去调高上限
+                  </button>
+                </div>
+              </div>
+            );
           }
           if (it.kind === 'error') {
             return (

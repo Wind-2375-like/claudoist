@@ -30,6 +30,8 @@ const screenshotTypeArg = process.argv.find((a) => a.startsWith('--screenshot-ty
 const screenshotSubmit = process.argv.includes('--screenshot-submit');
 // 拍摄前额外等待,用于等异步界面(agent 一次往返十几秒)
 const screenshotDelayArg = process.argv.find((a) => a.startsWith('--screenshot-delay='));
+// 滚动某个容器再拍(长面板的下半截):--screenshot-scroll=<选择器>|<top px>
+const screenshotScrollArg = process.argv.find((a) => a.startsWith('--screenshot-scroll='));
 // 等待之后再点(用来点异步才出现的东西,比如审批弹窗上的按钮)
 const screenshotThenClickArgs = process.argv.filter((a) =>
   a.startsWith('--screenshot-then-click='),
@@ -218,6 +220,18 @@ if (agentSmokeArg) {
               })()`);
               if (!hit) process.stdout.write(`[SCREENSHOT] 延后点击无匹配:${sel}\n`);
               await new Promise((r) => setTimeout(r, 3000));
+            }
+            if (screenshotScrollArg) {
+              const [sel, top] = screenshotScrollArg
+                .slice('--screenshot-scroll='.length)
+                .split('|');
+              await win.webContents.executeJavaScript(`(() => {
+                const el = document.querySelector(${JSON.stringify(sel ?? '')});
+                if (!el) return false;
+                el.scrollTop = ${JSON.stringify(Number(top ?? 0))};
+                return true;
+              })()`);
+              await new Promise((r) => setTimeout(r, 400));
             }
             const img = await win.webContents.capturePage();
             writeFileSync(path, img.toPNG());

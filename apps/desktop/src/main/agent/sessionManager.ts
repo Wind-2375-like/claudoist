@@ -5,7 +5,6 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import type {
   CanUseTool,
   EffortLevel,
-  ModelInfo,
   Options,
   Query,
   SDKMessage,
@@ -187,8 +186,9 @@ export interface StartSessionInput {
   thinking?: ThinkingConfig;
   permissionMode: PermissionModeId;
   canUseTool: CanUseTool;
-  maxTurns: number;
-  maxBudgetUsd: number;
+  /** 省略 = 不限。**别用 0 表达"不限"**:0 预算会让会话一开口就熄火 */
+  maxTurns?: number;
+  maxBudgetUsd?: number;
 }
 
 /** 起一个长驻会话;返回后即可 `send()`。同一时刻只维持一个。 */
@@ -232,8 +232,8 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
       }),
     },
     ...skillsOption(input.settings),
-    maxTurns: input.maxTurns,
-    maxBudgetUsd: input.maxBudgetUsd,
+    ...(input.maxTurns !== undefined ? { maxTurns: input.maxTurns } : {}),
+    ...(input.maxBudgetUsd !== undefined ? { maxBudgetUsd: input.maxBudgetUsd } : {}),
     ...(input.model !== undefined ? { model: input.model } : {}),
     ...(input.effort !== undefined ? { effort: input.effort } : {}),
     ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
@@ -290,6 +290,14 @@ export function sdkSessionId(): string | null {
   return live?.sdkSessionId ?? null;
 }
 
+/**
+ * 活会话的 Query,供只读控制方法蹭用(见 probe.ts)。
+ * **调用方拿到它只能读**;任何会终止会话的操作都必须走 destroySession()。
+ */
+export function liveQuery(): Query | null {
+  return live?.q ?? null;
+}
+
 export function currentConversationId(): string | null {
   return live?.conversationId ?? null;
 }
@@ -330,35 +338,35 @@ export function destroySession(): void {
 
 app.on('will-quit', destroySession);
 
-/** 可选模型列表(SDK 侧解析,含别名行与 effort/thinking 能力)。会话未启动时为空。 */
-export async function supportedModels(): Promise<ModelInfo[]> {
-  if (!live) return [];
-  try {
-    return await live.q.supportedModels();
-  } catch {
-    return [];
-  }
-}
-
-/** 切换模型 —— 仅 streaming-input 模式可用,故必须有活会话。 */
-export async function setModel(model: string): Promise<{ error?: string }> {
-  if (!live) return { error: '会话未启动' };
+/**
+ * 切换模型。
+ *
+ * **没有活会话不是错误** —— 调用方已经把选择落了盘,下次起会话自然带上。
+ * 这里只负责"如果现在有会话,顺便热切一下"。早先版本在无会话时返回
+ * `{error: '会话未启动'}`,于是界面写着"先发一条消息再回来切模型" ——
+ * 那个限制是我们自己加的,SDK 侧并不存在。
+ */
+export async function setModel(model: string): Promise<{ applied: boolean; error?: string }> {
+  if (!live) return { applied: false };
   try {
     await live.q.setModel(model);
-    return {};
+    return { applied: true };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    // SDK 自带模型名校验,它的报错文案可以直接给用户看
+    return { applied: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
 /** 会话中途改 effort(flag settings 层,不写用户的 settings 文件)。 */
-export async function setEffort(effort: EffortLevel): Promise<{ error?: string }> {
-  if (!live) return { error: '会话未启动' };
+export async function setEffort(
+  effort: EffortLevel,
+): Promise<{ applied: boolean; error?: string }> {
+  if (!live) return { applied: false };
   try {
     await live.q.applyFlagSettings({ effortLevel: effort });
-    return {};
+    return { applied: true };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    return { applied: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -367,14 +375,18 @@ export async function setEffort(effort: EffortLevel): Promise<{ error?: string }
  * 用 `setMaxThinkingTokens(n, display)` —— 它在 streaming 模式下可中途生效,
  * 而 `thinking` 选项只能在起会话时给。
  */
-export async function setThinking(mode: 'off' | 'hidden' | 'shown'): Promise<{ error?: string }> {
-  if (!live) return { error: '会话未启动' };
+export async function setThinking(
+  mode: 'off' | 'hidden' | 'shown',
+): Promise<{ applied: boolean; error?: string }> {
+  if (!live) return { applied: false };
   try {
+    // 从 off 切回来时**必须显式给 display**:以 thinking 关闭起的会话没有 display 模式,
+    // 只传 null 会拿到 API 默认值而不是你以为的那个
     if (mode === 'off') await live.q.setMaxThinkingTokens(0, null);
     else await live.q.setMaxThinkingTokens(null, mode === 'shown' ? 'summarized' : 'omitted');
-    return {};
+    return { applied: true };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    return { applied: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 

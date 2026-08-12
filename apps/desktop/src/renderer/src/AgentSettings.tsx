@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from './ErrorBoundary';
 import { toast } from './toast';
-import type { AuditRowVM, ModelInfoVM, ToolManualEntryVM } from '../../shared/viewModels';
+import { AccountUsage } from './AccountUsage';
+import type { AuditRowVM, ToolManualEntryVM } from '../../shared/viewModels';
 
 /**
  * Agent 的账号/用量/模型/偏好/Skills —— 全部在应用内完成,不跳外部编辑器。
@@ -17,6 +18,7 @@ export interface AgentStatusVM {
   apiKeyInEnv: boolean;
   cwd: string;
   alive: boolean;
+  busy: boolean;
   maxTurns: number;
   maxBudgetUsd: number;
   lastConversationId: string | null;
@@ -82,7 +84,7 @@ export function AgentSettings({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <ErrorBoundary label="这一页">
-            {tab === 'account' && <AccountTab status={status} onChanged={onChanged} />}
+            {tab === 'account' && <AccountUsage status={status} onChanged={onChanged} />}
             {tab === 'permissions' && <PermissionsTab status={status} onChanged={onChanged} />}
             {tab === 'memory' && <MemoryTab />}
             {tab === 'skills' && <SkillsTab />}
@@ -90,176 +92,6 @@ export function AgentSettings({
           </ErrorBoundary>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------------ 账号与用量
-
-function AccountTab({
-  status,
-  onChanged,
-}: {
-  status: AgentStatusVM;
-  onChanged: () => void;
-}): React.JSX.Element {
-  const [models, setModels] = useState<ModelInfoVM[]>([]);
-  useEffect(() => {
-    void window.agent.models().then(setModels);
-  }, []);
-  const u = status.usage;
-  const t = status.totals;
-  const current = models.find((m) => m.value === status.model) ?? models[0];
-  const row = (k: string, v: string): React.JSX.Element => (
-    <div className="flex justify-between border-b border-neutral-800 py-1.5 text-xs">
-      <span className="text-neutral-400">{k}</span>
-      <span className="font-mono">{v}</span>
-    </div>
-  );
-  return (
-    <div className="space-y-4">
-      <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">账号</h3>
-        {row('登录方式', status.loggedIn ? '本机 Claude Code 登录' : '未登录')}
-        {row('账号', status.email ?? '—')}
-        {status.apiKeyInEnv && (
-          <p className="mt-1 rounded bg-amber-950/60 px-2 py-1 text-[11px] text-amber-200">
-            环境里存在 ANTHROPIC_API_KEY —— SDK 会优先用它,可能产生 API 计费。
-          </p>
-        )}
-        {!status.loggedIn && (
-          <p className="mt-1 rounded bg-amber-950/60 px-2 py-1 text-[11px] text-amber-200">
-            在终端执行 <code>claude</code> 登录后回来重试,不用重启应用。
-          </p>
-        )}
-      </section>
-
-      <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">用量账本</h3>
-        {row(
-          '本会话 token(输入含缓存 / 输出)',
-          `${String(u.inputTokens)} / ${String(u.outputTokens)}`,
-        )}
-        {row('本会话折算成本', `≈$${u.costUsd.toFixed(4)}`)}
-        {row('全部历史', `${String(t.conversations)} 个会话 · ≈$${t.costUsd.toFixed(4)}`)}
-        <p className="mt-1 text-[11px] text-neutral-500">
-          走的是本机 Claude Code 登录,<strong>不是</strong>本应用的 API key。金额是按 API
-          单价折算的估值,用于判断哪一轮吃了多少上下文;实际计费取决于你 Claude 账号的计划。
-        </p>
-      </section>
-
-      <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">模型</h3>
-        {models.length === 0 ? (
-          <p className="text-[11px] text-neutral-500">
-            {status.alive ? '读取中…' : '会话未启动 —— 先发一条消息,再回来切换模型。'}
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {models.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                title={m.description}
-                className={`rounded-md border px-2 py-1 text-xs ${
-                  status.model === m.value
-                    ? 'border-blue-500 bg-blue-950 text-blue-200'
-                    : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
-                }`}
-                onClick={() => {
-                  void window.agent.setModel(m.value).then((r) => {
-                    if (r.error !== undefined) toast(r.error);
-                    onChanged();
-                  });
-                }}
-              >
-                {m.displayName}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/*
-        effort × thinking 不是自由矩阵:哪些 effort 档位可用由**当前模型**决定
-        (ModelInfo.supportedEffortLevels),不支持的档位直接禁用而不是让用户点了没反应。
-      */}
-      <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">思考深度</h3>
-        <div className="flex flex-wrap gap-1.5">
-          {(['low', 'medium', 'high', 'xhigh', 'max'] as const).map((e) => {
-            const supported =
-              current?.supportsEffort !== false &&
-              (current?.supportedEffortLevels === undefined ||
-                current.supportedEffortLevels.includes(e));
-            return (
-              <button
-                key={e}
-                type="button"
-                disabled={!supported || status.thinking === 'off'}
-                title={
-                  status.thinking === 'off'
-                    ? '思考已关闭,effort 不生效'
-                    : supported
-                      ? undefined
-                      : `${current?.displayName ?? '当前模型'}不支持 ${e}`
-                }
-                className={`rounded-md border px-2 py-1 text-xs disabled:opacity-30 ${
-                  status.effort === e
-                    ? 'border-blue-500 bg-blue-950 text-blue-200'
-                    : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
-                }`}
-                onClick={() => {
-                  void window.agent.setEffort(e).then((r) => {
-                    if (r.error !== undefined) toast(r.error);
-                    onChanged();
-                  });
-                }}
-              >
-                {e}
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {(
-            [
-              ['off', '关闭思考'],
-              ['hidden', '思考但不显示'],
-              ['shown', '显示思考过程'],
-            ] as const
-          ).map(([m, label]) => (
-            <button
-              key={m}
-              type="button"
-              className={`rounded-md border px-2 py-1 text-xs ${
-                status.thinking === m
-                  ? 'border-blue-500 bg-blue-950 text-blue-200'
-                  : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
-              }`}
-              onClick={() => {
-                void window.agent.setThinking(m).then((r) => {
-                  if (r.error !== undefined) toast(r.error);
-                  onChanged();
-                });
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <p className="mt-1 text-[11px] text-neutral-500">
-          思考 token 计入输出计费 —— 开着更准,但更贵也更慢。「不显示」只是不渲染给你看,
-          <strong>照样计费</strong>。
-        </p>
-      </section>
-
-      <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">护栏</h3>
-        {row('每会话最多轮次', String(status.maxTurns))}
-        {row('每会话预算上限', `$${String(status.maxBudgetUsd)}`)}
-        {row('会话工作目录', status.cwd)}
-      </section>
     </div>
   );
 }
