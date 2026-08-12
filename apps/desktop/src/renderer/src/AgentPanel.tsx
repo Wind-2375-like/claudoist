@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AgentSettings } from './AgentSettings';
+import type { AgentStatusVM } from './AgentSettings';
 
 /**
  * Agent 面板(M8 只读版)。取代 M1 的 SpikeChat。
@@ -26,18 +28,6 @@ interface StreamEvent {
   payload?: Record<string, unknown>;
 }
 
-interface AgentStatus {
-  loggedIn: boolean;
-  email: string | null;
-  apiKeyInEnv: boolean;
-  cwd: string;
-  alive: boolean;
-  maxTurns: number;
-  maxBudgetUsd: number;
-  lastSessionId: string | null;
-  memoryPath: string;
-}
-
 /**
  * D-28:composer 下方的建议按钮 —— 只是预置提示,不是状态机,用户随时可以改口。
  *
@@ -57,18 +47,18 @@ const shortName = (n: string): string => n.replace(/^mcp__gtd__/, '');
 
 export function AgentPanel(): React.JSX.Element {
   const [items, setItems] = useState<Item[]>([]);
-  const [status, setStatus] = useState<AgentStatus | null>(null);
+  const [status, setStatus] = useState<AgentStatusVM | null>(null);
   const [draft, setDraft] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
   const [busy, setBusy] = useState(false);
-  const [footer, setFooter] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textBuf = useRef('');
   /** content_block index → tool chip id(input_json_delta 靠 index 找回 chip) */
   const blockTool = useRef<Map<number, string>>(new Map());
 
   const refreshStatus = useCallback(async () => {
-    setStatus((await window.agent.status()) as AgentStatus);
+    setStatus((await window.agent.status()) as AgentStatusVM);
   }, []);
 
   useEffect(() => {
@@ -201,16 +191,6 @@ export function AgentPanel(): React.JSX.Element {
       if (type === 'result') {
         setBusy(false);
         textBuf.current = '';
-        const u = m['usage'] as Record<string, number> | undefined;
-        const cw = u?.['cache_creation_input_tokens'] ?? 0;
-        const cr = u?.['cache_read_input_tokens'] ?? 0;
-        const bits = [
-          `${String(u?.['input_tokens'] ?? 0)}→${String(u?.['output_tokens'] ?? 0)} tok`,
-          cw > 0 ? `缓存写入 ${String(cw)}` : '',
-          cr > 0 ? `缓存命中 ${String(cr)}` : '',
-          `≈$${Number(m['total_cost_usd'] ?? 0).toFixed(4)}`,
-        ].filter(Boolean);
-        setFooter(bits.join(' · '));
         if (m['is_error'] === true) {
           setItems((p) => [
             ...p,
@@ -222,7 +202,7 @@ export function AgentPanel(): React.JSX.Element {
   }, [appendAssistant, refreshStatus]);
 
   const ensureSession = useCallback(async (): Promise<void> => {
-    const s = (await window.agent.status()) as AgentStatus;
+    const s = (await window.agent.status()) as AgentStatusVM;
     if (!s.alive) await window.agent.startSession(s.lastSessionId !== null);
   }, []);
 
@@ -262,23 +242,18 @@ export function AgentPanel(): React.JSX.Element {
       <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-3">
         <span className="text-sm font-semibold">Agent</span>
         <div className="flex items-center gap-2 text-neutral-400">
-          <span
-            className={`text-[10px] ${status?.loggedIn === true ? 'text-neutral-500' : 'text-amber-400'}`}
-            title={
-              status?.loggedIn === true
-                ? `以 ${status.email ?? '本机账号'} 的身份(本机 Claude Code 登录)`
-                : '未检测到本机 Claude Code 登录'
-            }
-          >
-            {status?.loggedIn === true ? '●' : '○'}
-          </span>
           <button
             type="button"
-            title="编辑我的偏好(CLAUDE.md)—— 称呼、语气、作息、排程习惯;规则类约束改这里无效"
-            className="leading-none hover:text-neutral-100"
-            onClick={() => void window.agent.openMemory()}
+            title="账号与用量 · 模型 · 我的偏好 · Skills"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 leading-none hover:bg-neutral-800 hover:text-neutral-100"
+            onClick={() => setSettingsOpen(true)}
           >
-            ⚙
+            <span className={status?.loggedIn === true ? 'text-emerald-500' : 'text-amber-400'}>
+              ●
+            </span>
+            <span className="max-w-24 truncate text-[11px]">
+              {status?.email?.split('@')[0] ?? '未登录'}
+            </span>
           </button>
           <span className="cursor-default" title="历史会话(M10)">
             🕘
@@ -290,7 +265,6 @@ export function AgentPanel(): React.JSX.Element {
             onClick={() => {
               void window.agent.newSession().then(() => {
                 setItems([]);
-                setFooter('');
                 void refreshStatus();
               });
             }}
@@ -413,8 +387,7 @@ export function AgentPanel(): React.JSX.Element {
           placeholder="给 Claude 发消息…(Enter 发送,可粘贴图片)"
           className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none placeholder:text-neutral-500 focus:border-neutral-500"
         />
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-neutral-500">
-          <span className="truncate">{footer}</span>
+        <div className="mt-1 flex min-h-[18px] items-center gap-2 text-[11px] text-neutral-500">
           {busy && (
             <button
               type="button"
@@ -427,6 +400,14 @@ export function AgentPanel(): React.JSX.Element {
           )}
         </div>
       </div>
+
+      {settingsOpen && status !== null && (
+        <AgentSettings
+          status={status}
+          onClose={() => setSettingsOpen(false)}
+          onChanged={() => void refreshStatus()}
+        />
+      )}
     </div>
   );
 }

@@ -98,7 +98,17 @@ declare global {
     };
     agent: {
       status: () => Promise<unknown>;
-      openMemory: () => Promise<unknown>;
+      readMemory: () => Promise<{ path: string; body: string }>;
+      writeMemory: (body: string) => Promise<unknown>;
+      listSkills: () => Promise<
+        { name: string; builtin: boolean; modified: boolean; path: string }[]
+      >;
+      readSkill: (name: string) => Promise<{ body: string }>;
+      writeSkill: (name: string, body: string) => Promise<{ error?: string }>;
+      deleteSkill: (name: string) => Promise<{ error?: string }>;
+      resetSkill: (name: string) => Promise<{ error?: string }>;
+      models: () => Promise<{ value: string; displayName: string }[]>;
+      setModel: (model: string) => Promise<{ error?: string }>;
       startSession: (resume: boolean) => Promise<unknown>;
       newSession: () => Promise<unknown>;
       destroySession: () => Promise<unknown>;

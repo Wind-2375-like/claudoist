@@ -1,5 +1,5 @@
-import { app, shell } from 'electron';
-import { existsSync, writeFileSync } from 'node:fs';
+import { app } from 'electron';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -68,8 +68,11 @@ export function ensureUserMemory(): { path: string; created: boolean } {
   return { path, created: true };
 }
 
-/** 用系统默认编辑器打开,让用户直接改。 */
-export async function openUserMemory(): Promise<void> {
+export function readUserMemory(): string {
   const { path } = ensureUserMemory();
-  await shell.openPath(path);
+  return readFileSync(path, 'utf8');
+}
+
+export function writeUserMemory(body: string): void {
+  writeFileSync(userMemoryPath(), body, 'utf8');
 }

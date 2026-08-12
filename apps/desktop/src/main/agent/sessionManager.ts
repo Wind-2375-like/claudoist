@@ -147,6 +147,7 @@ function buildEnv(): Record<string, string | undefined> {
 
 export interface StartSessionInput {
   deps: ReadToolDeps;
+  settings: { get<T>(key: string): T | null; set(key: string, value: unknown): void };
   /** 续接已有会话(SDK session id);缺省 = 新会话 */
   resume?: string;
   model?: string;
@@ -186,7 +187,7 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
       preset: 'claude_code',
       append: buildSystemPrompt(statusSnapshot(input.deps)),
     },
-    ...skillsOption(),
+    ...skillsOption(input.settings),
     maxTurns: input.maxTurns,
     maxBudgetUsd: input.maxBudgetUsd,
     ...(input.model !== undefined ? { model: input.model } : {}),
@@ -259,3 +260,25 @@ export function destroySession(): void {
 }
 
 app.on('will-quit', destroySession);
+
+/** 可选模型列表(SDK 侧解析,含别名行)。会话未启动时为空。 */
+export async function supportedModels(): Promise<{ value: string; displayName: string }[]> {
+  if (!live) return [];
+  try {
+    const rows = await live.q.supportedModels();
+    return rows.map((r) => ({ value: r.value, displayName: r.displayName }));
+  } catch {
+    return [];
+  }
+}
+
+/** 切换模型 —— 仅 streaming-input 模式可用,故必须有活会话。 */
+export async function setModel(model: string): Promise<{ error?: string }> {
+  if (!live) return { error: '会话未启动' };
+  try {
+    await live.q.setModel(model);
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}

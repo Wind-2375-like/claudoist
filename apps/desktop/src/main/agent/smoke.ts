@@ -1,9 +1,10 @@
 import { app } from 'electron';
 import type { Clock, GtdStore } from '@gtd/domain';
 import { READ_TOOL_NAMES, qualifiedToolName, statusSnapshot } from '@gtd/agent-tools';
+import { settingsStore } from '../db';
 import { authStatus } from './auth';
 import { startSession } from './sessionManager';
-import { SKILL_NAMES, skillsDir } from './skills';
+import { BUILTIN_SKILL_NAMES, skillsDir } from './skills';
 import { buildSystemPrompt } from './systemPrompt';
 
 /**
@@ -16,6 +17,7 @@ import { buildSystemPrompt } from './systemPrompt';
  * 3. 一次真实往返能拿到 result。
  */
 export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string): Promise<void> {
+  const settings = settingsStore();
   const question = arg.includes('=')
     ? arg.slice(arg.indexOf('=') + 1)
     : '我今天该做什么?只用工具查,简短回答。';
@@ -30,7 +32,7 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
   let answer = '';
 
   await new Promise<void>((resolve) => {
-    startSession({ deps: { store, clock }, maxTurns: 6, maxBudgetUsd: 1 }, (ev) => {
+    startSession({ deps: { store, clock }, settings, maxTurns: 6, maxBudgetUsd: 1 }, (ev) => {
       if (ev.type === 'error') {
         process.stdout.write(`[AGENT_SMOKE_ERROR] ${ev.message ?? ''}\n`);
         failed = true;
@@ -82,8 +84,8 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
     // 而 options.skills 是**启用过滤器** —— 未列出的对模型隐藏且 Skill 工具会拒绝。
     // 再加上我们不给 Read/Bash,用户的私人 skill 既看不到也调不动。
     skillsDiscovered: skillsLoaded.length,
-    skillsEnabled: SKILL_NAMES,
-    skillOk: SKILL_NAMES.every((n) => skillsLoaded.includes(n)),
+    skillsEnabled: BUILTIN_SKILL_NAMES,
+    skillOk: BUILTIN_SKILL_NAMES.every((n: string) => skillsLoaded.includes(n)),
     gtdToolCount: gtdTools.length,
     expectedToolCount: READ_TOOL_NAMES.length,
     toolsOk:

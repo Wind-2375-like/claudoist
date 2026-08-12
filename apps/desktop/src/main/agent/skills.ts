@@ -1,5 +1,6 @@
 import { app } from 'electron';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 /**
@@ -233,30 +234,117 @@ description: 带用户做每周回顾(GTD weekly review)。用户说"周回顾""
 ${COACHING}
 `;
 
-const SKILLS: [string, string][] = [
-  ['gtd-engage', ENGAGE],
-  ['gtd-today', TODAY],
-  ['gtd-plan-day', PLAN_DAY],
-  ['gtd-clarify', CLARIFY],
-  ['gtd-weekly-review', WEEKLY_REVIEW],
+const BUILTIN: { name: string; body: string }[] = [
+  { name: 'gtd-engage', body: ENGAGE },
+  { name: 'gtd-today', body: TODAY },
+  { name: 'gtd-plan-day', body: PLAN_DAY },
+  { name: 'gtd-clarify', body: CLARIFY },
+  { name: 'gtd-weekly-review', body: WEEKLY_REVIEW },
 ];
 
-export const SKILL_NAMES = SKILLS.map(([n]) => n);
+export const BUILTIN_SKILL_NAMES = BUILTIN.map((b) => b.name);
 
-/** 每次启动重写 skill 文件;返回可直接并入 Options 的片段。 */
-export function skillsOption(): { skills: string[] } {
-  const root = join(app.getPath('userData'), '.claude', 'skills');
-  // 先清空:改名/删掉的 skill 不该以旧副本的形式赖在用户机器上
-  rmSync(root, { recursive: true, force: true });
-  for (const [name, body] of SKILLS) {
-    const dir = join(root, name);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'SKILL.md'), body, 'utf8');
-  }
-  return { skills: [...SKILL_NAMES] };
+export interface SkillInfo {
+  name: string;
+  /** 随应用发布的五个之一 */
+  builtin: boolean;
+  /** 内置但被用户改过 —— 此后我们不再覆盖它 */
+  modified: boolean;
+  path: string;
 }
 
-/** 冒烟用:skill 文件写到哪了。 */
+const sha = (s: string): string => createHash('sha256').update(s).digest('hex').slice(0, 16);
+
 export function skillsDir(): string {
   return join(app.getPath('userData'), '.claude', 'skills');
+}
+
+const skillFile = (name: string): string => join(skillsDir(), name, 'SKILL.md');
+const hashKey = (name: string): string => `agent.skillHash.${name}`;
+
+/**
+ * 同步内置 skill。**用户改过的不覆盖** —— 判据是"文件内容的哈希是否仍等于我们上次写下的"。
+ *
+ * 早先的实现是每次启动整个目录 rm -rf 再重写。那在只有内置 skill 时没问题,一旦允许用户
+ * 自定义就会**删掉用户的东西** —— 这类"为了保证干净而清空"的做法,代价总是落在用户身上。
+ */
+export function syncBuiltinSkills(settings: SettingsLike): void {
+  mkdirSync(skillsDir(), { recursive: true });
+  for (const { name, body } of BUILTIN) {
+    const file = skillFile(name);
+    const dir = join(skillsDir(), name);
+    if (!existsSync(file)) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(file, body, 'utf8');
+      settings.set(hashKey(name), sha(body));
+      continue;
+    }
+    const current = sha(readFileSync(file, 'utf8'));
+    if (current === settings.get<string>(hashKey(name))) {
+      // 还是我们上次写的原样 → 可以安全更新到新版本
+      writeFileSync(file, body, 'utf8');
+      settings.set(hashKey(name), sha(body));
+    }
+    // 否则:用户改过,原样保留
+  }
+}
+
+/** 目录里现有的全部 skill(内置 + 用户自建)。 */
+export function listSkills(settings: SettingsLike): SkillInfo[] {
+  const root = skillsDir();
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && existsSync(join(root, e.name, 'SKILL.md')))
+    .map((e) => {
+      const builtin = BUILTIN_SKILL_NAMES.includes(e.name);
+      const modified =
+        builtin &&
+        sha(readFileSync(skillFile(e.name), 'utf8')) !== settings.get<string>(hashKey(e.name));
+      return { name: e.name, builtin, modified, path: skillFile(e.name) };
+    })
+    .sort((a, b) => (a.builtin === b.builtin ? a.name.localeCompare(b.name) : a.builtin ? -1 : 1));
+}
+
+export function readSkill(name: string): string {
+  return existsSync(skillFile(name)) ? readFileSync(skillFile(name), 'utf8') : '';
+}
+
+export function writeSkill(name: string, body: string): { error?: string } {
+  const clean = name.trim();
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(clean)) {
+    return { error: 'skill 名只能用小写字母、数字与连字符(它同时是目录名与调用名)' };
+  }
+  mkdirSync(join(skillsDir(), clean), { recursive: true });
+  writeFileSync(skillFile(clean), body, 'utf8');
+  return {};
+}
+
+/** 删除:内置的删不掉(会在下次启动重建);用户自建的真删。 */
+export function deleteSkill(name: string): { error?: string } {
+  if (BUILTIN_SKILL_NAMES.includes(name)) {
+    return { error: '内置 skill 不能删除 —— 改坏了可以"恢复默认"' };
+  }
+  rmSync(join(skillsDir(), name), { recursive: true, force: true });
+  return {};
+}
+
+/** 把某个内置 skill 恢复成随应用发布的版本。 */
+export function resetSkill(name: string, settings: SettingsLike): { error?: string } {
+  const b = BUILTIN.find((x) => x.name === name);
+  if (!b) return { error: `不是内置 skill: ${name}` };
+  mkdirSync(join(skillsDir(), name), { recursive: true });
+  writeFileSync(skillFile(name), b.body, 'utf8');
+  settings.set(hashKey(name), sha(b.body));
+  return {};
+}
+
+export interface SettingsLike {
+  get<T>(key: string): T | null;
+  set(key: string, value: unknown): void;
+}
+
+/** 起会话时用:同步内置 skill,并把**目录里全部** skill(含用户自建)交给 SDK 启用。 */
+export function skillsOption(settings: SettingsLike): { skills: string[] } {
+  syncBuiltinSkills(settings);
+  return { skills: listSkills(settings).map((s) => s.name) };
 }

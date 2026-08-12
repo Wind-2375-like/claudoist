@@ -129,7 +129,24 @@ const googleApi = {
 
 const agentApi = {
   status: (): Promise<unknown> => ipcRenderer.invoke('agent:status'),
-  openMemory: (): Promise<unknown> => ipcRenderer.invoke('agent:memory.open'),
+  readMemory: (): Promise<{ path: string; body: string }> =>
+    ipcRenderer.invoke('agent:memory.read'),
+  writeMemory: (body: string): Promise<unknown> =>
+    ipcRenderer.invoke('agent:memory.write', { body }),
+  listSkills: (): Promise<{ name: string; builtin: boolean; modified: boolean; path: string }[]> =>
+    ipcRenderer.invoke('agent:skills.list'),
+  readSkill: (name: string): Promise<{ body: string }> =>
+    ipcRenderer.invoke('agent:skills.read', { name }),
+  writeSkill: (name: string, body: string): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:skills.write', { name, body }),
+  deleteSkill: (name: string): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:skills.delete', { name }),
+  resetSkill: (name: string): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:skills.reset', { name }),
+  models: (): Promise<{ value: string; displayName: string }[]> =>
+    ipcRenderer.invoke('agent:models'),
+  setModel: (model: string): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:model.set', { model }),
   startSession: (resume: boolean): Promise<unknown> =>
     ipcRenderer.invoke('agent:session.start', { resume }),
   newSession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.new'),
