@@ -143,6 +143,14 @@ const agentApi = {
     ipcRenderer.invoke('agent:skills.delete', { name }),
   resetSkill: (name: string): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:skills.reset', { name }),
+  toolManual: (): Promise<
+    {
+      qualified: string;
+      name: string;
+      description: string;
+      params: { name: string; type: string; required: boolean; description: string }[];
+    }[]
+  > => ipcRenderer.invoke('agent:tools.manual'),
   models: (): Promise<{ value: string; displayName: string }[]> =>
     ipcRenderer.invoke('agent:models'),
   setModel: (model: string): Promise<{ error?: string }> =>

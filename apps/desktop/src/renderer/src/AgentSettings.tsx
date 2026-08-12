@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ErrorBoundary } from './ErrorBoundary';
 import { toast } from './toast';
 
 /**
@@ -30,7 +31,7 @@ export interface AgentStatusVM {
   };
 }
 
-type Tab = 'account' | 'memory' | 'skills';
+type Tab = 'account' | 'memory' | 'skills' | 'tools';
 
 export function AgentSettings({
   status,
@@ -51,6 +52,7 @@ export function AgentSettings({
               ['account', '账号与用量'],
               ['memory', '我的偏好'],
               ['skills', 'Skills'],
+              ['tools', '工具参考'],
             ] as [Tab, string][]
           ).map(([k, label]) => (
             <button
@@ -76,9 +78,12 @@ export function AgentSettings({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {tab === 'account' && <AccountTab status={status} onChanged={onChanged} />}
-          {tab === 'memory' && <MemoryTab />}
-          {tab === 'skills' && <SkillsTab />}
+          <ErrorBoundary label="这一页">
+            {tab === 'account' && <AccountTab status={status} onChanged={onChanged} />}
+            {tab === 'memory' && <MemoryTab />}
+            {tab === 'skills' && <SkillsTab />}
+            {tab === 'tools' && <ToolsTab />}
+          </ErrorBoundary>
         </div>
       </div>
     </div>
@@ -250,6 +255,7 @@ function SkillsTab(): React.JSX.Element {
   const [body, setBody] = useState('');
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [showTools, setShowTools] = useState(false);
 
   const reload = (): void => {
     void window.agent.listSkills().then(setList);
@@ -276,12 +282,19 @@ function SkillsTab(): React.JSX.Element {
             className="mb-2 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs outline-none focus:border-neutral-500"
           />
         )}
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          spellCheck={false}
-          className="min-h-0 flex-1 resize-none rounded border border-neutral-700 bg-neutral-950 p-2 font-mono text-xs outline-none focus:border-neutral-500"
-        />
+        <div className="flex min-h-0 flex-1 gap-2">
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            spellCheck={false}
+            className="min-h-0 flex-1 resize-none rounded border border-neutral-700 bg-neutral-950 p-2 font-mono text-xs outline-none focus:border-neutral-500"
+          />
+          {showTools && (
+            <div className="w-1/2 overflow-y-auto rounded border border-neutral-800 bg-neutral-950 p-2">
+              <ToolsTab compact />
+            </div>
+          )}
+        </div>
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
@@ -308,6 +321,13 @@ function SkillsTab(): React.JSX.Element {
           >
             返回
           </button>
+          <button
+            type="button"
+            className="text-xs text-neutral-400 underline hover:text-neutral-100"
+            onClick={() => setShowTools(!showTools)}
+          >
+            {showTools ? '收起工具参考' : '工具参考'}
+          </button>
           <span className="ml-auto text-[11px] text-neutral-600">
             改动内置 skill 后,应用升级不会再覆盖它
           </span>
@@ -320,7 +340,7 @@ function SkillsTab(): React.JSX.Element {
     <div>
       <div className="mb-2 flex items-center gap-2">
         <p className="text-[11px] text-neutral-500">
-          skill = 一段流程说明书。agent 按 description 判断何时加载。
+          skill = 一段流程说明书。agent 按 description 判断何时加载;能调的工具见「工具参考」。
         </p>
         <button
           type="button"
@@ -367,6 +387,64 @@ function SkillsTab(): React.JSX.Element {
               >
                 删除
               </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ 工具参考
+
+/**
+ * 用户写自己的 skill 时,得知道有哪些工具、全名叫什么、参数是什么。
+ * 内容由 `toolManual()` 从**工具定义本身**生成 —— 另抄一份迟早对不上,而那种错
+ * 只在 agent 调用失败时才暴露。
+ */
+function ToolsTab({ compact = false }: { compact?: boolean }): React.JSX.Element {
+  const [tools, setTools] = useState<
+    {
+      qualified: string;
+      name: string;
+      description: string;
+      params: { name: string; type: string; required: boolean; description: string }[];
+    }[]
+  >([]);
+  useEffect(() => {
+    void window.agent.toolManual().then(setTools);
+  }, []);
+  return (
+    <div>
+      {!compact && (
+        <p className="mb-2 text-[11px] text-neutral-500">
+          在 skill 里按<strong>全名</strong>调用,例如 <code>mcp__gtd__run_filter</code>
+          (点名字可复制)。当前全部为只读工具。
+        </p>
+      )}
+      <ul className="space-y-2">
+        {tools.map((t) => (
+          <li key={t.name} className="border-b border-neutral-800 pb-2">
+            <button
+              type="button"
+              className="font-mono text-xs text-emerald-400 hover:underline"
+              title="点击复制"
+              onClick={() => void navigator.clipboard.writeText(t.qualified)}
+            >
+              {t.qualified}
+            </button>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-neutral-400">{t.description}</p>
+            {t.params.length > 0 && (
+              <ul className="mt-1 space-y-0.5">
+                {t.params.map((p) => (
+                  <li key={p.name} className="text-[11px] text-neutral-500">
+                    <span className="font-mono text-neutral-300">{p.name}</span>
+                    <span className="ml-1 font-mono text-neutral-600">{p.type}</span>
+                    {!p.required && <span className="ml-1 text-neutral-600">(可选)</span>}
+                    {p.description !== '' && <span className="ml-1">— {p.description}</span>}
+                  </li>
+                ))}
+              </ul>
             )}
           </li>
         ))}

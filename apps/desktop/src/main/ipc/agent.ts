@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import type { Clock, GtdStore } from '@gtd/domain';
+import { toolManual } from '@gtd/agent-tools';
 import { authStatus } from '../agent/auth';
 import { ensureUserMemory, readUserMemory, writeUserMemory } from '../agent/userMemory';
 import {
@@ -60,6 +61,8 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
 
   /** Skills:内置 5 个 + 用户自建;内置被改过就不再被覆盖 */
   ipcMain.handle('agent:skills.list', () => listSkills(settingsStore()));
+  /** 工具手册:用户写自己的 skill 时要知道有哪些工具、参数叫什么 */
+  ipcMain.handle('agent:tools.manual', () => toolManual());
   ipcMain.handle('agent:skills.read', (_e, p: { name: string }) => ({ body: readSkill(p.name) }));
   ipcMain.handle('agent:skills.write', (_e, p: { name: string; body: string }) =>
     writeSkill(p.name, p.body),

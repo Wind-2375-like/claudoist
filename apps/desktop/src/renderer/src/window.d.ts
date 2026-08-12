@@ -107,6 +107,14 @@ declare global {
       writeSkill: (name: string, body: string) => Promise<{ error?: string }>;
       deleteSkill: (name: string) => Promise<{ error?: string }>;
       resetSkill: (name: string) => Promise<{ error?: string }>;
+      toolManual: () => Promise<
+        {
+          qualified: string;
+          name: string;
+          description: string;
+          params: { name: string; type: string; required: boolean; description: string }[];
+        }[]
+      >;
       models: () => Promise<{ value: string; displayName: string }[]>;
       setModel: (model: string) => Promise<{ error?: string }>;
       startSession: (resume: boolean) => Promise<unknown>;

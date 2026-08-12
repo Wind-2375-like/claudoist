@@ -6,6 +6,7 @@ import { ProjectModal } from './ProjectModal';
 import { SettingsModal } from './SettingsModal';
 import { SearchPalette } from './SearchPalette';
 import { TaskDetailModal } from './TaskDetailModal';
+import { ErrorBoundary } from './ErrorBoundary';
 import { toast, useToasts } from './toast';
 import { useBucketCounts, useInbox, useProjects, useToday } from './hooks';
 import { InboxView } from './views/InboxView';
@@ -518,7 +519,9 @@ export function App(): React.JSX.Element {
         className="flex shrink-0 flex-col border-l border-neutral-200 bg-neutral-900 text-neutral-100"
       >
         {/* 标题栏由 AgentPanel 自己画(它要显示登录态与新会话按钮) */}
-        <AgentPanel />
+        <ErrorBoundary label="Agent 面板">
+          <AgentPanel />
+        </ErrorBoundary>
       </aside>
     </div>
   );
