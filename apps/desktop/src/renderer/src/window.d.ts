@@ -98,6 +98,7 @@ declare global {
     };
     agent: {
       status: () => Promise<unknown>;
+      openMemory: () => Promise<unknown>;
       startSession: (resume: boolean) => Promise<unknown>;
       newSession: () => Promise<unknown>;
       destroySession: () => Promise<unknown>;

@@ -35,6 +35,7 @@ interface AgentStatus {
   maxTurns: number;
   maxBudgetUsd: number;
   lastSessionId: string | null;
+  memoryPath: string;
 }
 
 /**
@@ -271,6 +272,14 @@ export function AgentPanel(): React.JSX.Element {
           >
             {status?.loggedIn === true ? '●' : '○'}
           </span>
+          <button
+            type="button"
+            title="编辑我的偏好(CLAUDE.md)—— 称呼、语气、作息、排程习惯;规则类约束改这里无效"
+            className="leading-none hover:text-neutral-100"
+            onClick={() => void window.agent.openMemory()}
+          >
+            ⚙
+          </button>
           <span className="cursor-default" title="历史会话(M10)">
             🕘
           </span>

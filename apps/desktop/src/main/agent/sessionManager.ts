@@ -3,6 +3,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import {
   createGtdReadServer,
+  nowLine,
   qualifiedToolName,
   READ_TOOL_NAMES,
   statusSnapshot,
@@ -10,6 +11,7 @@ import {
 import type { ReadToolDeps } from '@gtd/agent-tools';
 import { resolveClaudeBinary } from './cliPath';
 import { skillsOption } from './skills';
+import { ensureUserMemory } from './userMemory';
 import { buildSystemPrompt } from './systemPrompt';
 
 /**
@@ -54,17 +56,26 @@ interface LiveSession {
 
 let live: LiveSession | null = null;
 
-/** 把用户消息变成 SDK 需要的形状;图片在前、文本在后(与 M1 spike 一致)。 */
+/**
+ * 把用户消息变成 SDK 需要的形状。
+ *
+ * **每条消息都前置"此刻"**(时刻/星期/时区/地区)。只在会话开头注入一次不够:长会话
+ * 跨几小时甚至隔夜,模型对"现在"的印象会停在开场那一刻,于是把下周的会议当成现在能做
+ * 的事(M8 复测实录)。时间戳单独成一个 content block,不与用户原话混在一起。
+ */
 export interface AgentImage {
   data: string;
   mediaType: string;
 }
 
 function userMessage(text: string, images: AgentImage[]): SDKUserMessage {
-  const content: unknown[] = images.map((img) => ({
-    type: 'image',
-    source: { type: 'base64', media_type: img.mediaType, data: img.data },
-  }));
+  const content: unknown[] = [{ type: 'text', text: nowLine() }];
+  content.push(
+    ...images.map((img) => ({
+      type: 'image',
+      source: { type: 'base64', media_type: img.mediaType, data: img.data },
+    })),
+  );
   content.push({ type: 'text', text });
   return {
     type: 'user',
@@ -146,6 +157,9 @@ export interface StartSessionInput {
 /** 起一个长驻会话;返回后即可 `send()`。同一时刻只维持一个(M10 再做多会话)。 */
 export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent) => void): void {
   destroySession();
+  // 用户可调的那层 prompt:SDK 会从 cwd 读 CLAUDE.md(settingSources 含 'project')。
+  // 只在缺失时创建,之后是用户的文件,我们不碰。
+  ensureUserMemory();
   const stream = pushableStream();
   const abort = new AbortController();
 

@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import type { Clock, GtdStore } from '@gtd/domain';
 import { authStatus } from '../agent/auth';
+import { ensureUserMemory, openUserMemory } from '../agent/userMemory';
 import { settingsStore } from '../db';
 import {
   destroySession,
@@ -29,10 +30,16 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
     }
   };
 
+  ipcMain.handle('agent:memory.open', async () => {
+    await openUserMemory();
+    return {};
+  });
+
   ipcMain.handle('agent:status', () => {
     const s = settingsStore();
     return {
       ...authStatus(),
+      memoryPath: ensureUserMemory().path,
       alive: sessionAlive(),
       maxTurns: s.get<number>(MAX_TURNS_KEY) ?? 40,
       maxBudgetUsd: s.get<number>(MAX_BUDGET_KEY) ?? 5,

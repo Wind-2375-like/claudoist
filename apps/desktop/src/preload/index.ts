@@ -129,6 +129,7 @@ const googleApi = {
 
 const agentApi = {
   status: (): Promise<unknown> => ipcRenderer.invoke('agent:status'),
+  openMemory: (): Promise<unknown> => ipcRenderer.invoke('agent:memory.open'),
   startSession: (resume: boolean): Promise<unknown> =>
     ipcRenderer.invoke('agent:session.start', { resume }),
   newSession: (): Promise<unknown> => ipcRenderer.invoke('agent:session.new'),

@@ -3,8 +3,10 @@ import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-
 import { z } from 'zod';
 import type { ReadToolDeps } from './readTools';
 import * as R from './readTools';
+import { timeContext } from './timeContext';
 
 export * from './readTools';
+export * from './timeContext';
 
 /**
  * @gtd/agent-tools — in-process MCP 工具面(M8:只读)。
@@ -39,6 +41,7 @@ export const READ_TOOL_NAMES = [
   'search',
   'run_filter',
   'get_engage_recommendations',
+  'get_now',
 ] as const;
 
 export const qualifiedToolName = (n: string): string => `mcp__${GTD_MCP_SERVER_NAME}__${n}`;
@@ -51,6 +54,12 @@ export function createGtdReadServer(deps: ReadToolDeps): McpSdkServerConfigWithI
       '本应用(Claudoist)的 GTD 数据。全部为只读:没有任何工具会改动数据。' +
       '条件查询一律用 run_filter(过滤器查询语言),list_* 只做按容器/项目列举。',
     tools: [
+      tool(
+        'get_now',
+        '当前时刻、星期、时区与地区。**长会话里时间会漂移** —— 需要精确判断"还有多久""来不来得及"时重新校一次',
+        {},
+        async () => json(timeContext()),
+      ),
       tool('list_inbox', 'Inbox 里待理清的任务(不含来自外部日历的镜像任务)', {}, async () =>
         json(R.listInbox(deps)),
       ),

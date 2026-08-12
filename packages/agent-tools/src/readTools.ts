@@ -13,7 +13,9 @@ import {
   todaysTimedTasks,
   unknownNames,
 } from '@gtd/domain';
-import type { Clock, GtdSnapshot, GtdStore, Task, TaskView } from '@gtd/domain';
+import type { Clock, GtdSnapshot, GtdStore, Task } from '@gtd/domain';
+import { timeContext, withRelativeTime } from './timeContext';
+import type { TimedTaskView } from './timeContext';
 
 /**
  * 只读 GTD 工具的**纯逻辑层**(M8)。这里不 import SDK —— 工具描述与 handler 是纯函数,
@@ -42,13 +44,19 @@ const snapAnd = (d: ReadToolDeps): { snap: GtdSnapshot; today: string } => ({
 const roots = (snap: GtdSnapshot): Task[] =>
   snap.tasks.filter((t) => t.status === 'active' && isTaskListRoot(snap, t));
 
-const views = (snap: GtdSnapshot, ts: Task[], today: string): TaskView[] =>
-  ts.map((t) => taskView(snap, t, today));
+/**
+ * 任务投影 + **相对此刻的时间**。后者不是锦上添花:实测只给日期时,agent 会把下周的
+ * 会议当成"现在可以做的候选"。让它直接看到"7 天后",比指望它算日期差可靠得多。
+ */
+const views = (snap: GtdSnapshot, ts: Task[], today: string): TimedTaskView[] => {
+  const ctx = timeContext();
+  return ts.map((t) => withRelativeTime(taskView(snap, t, today), ctx));
+};
 
 // ------------------------------------------------------------------ 列举
 
 /** D-20:Inbox 是 `bucket='inbox'` 的 Task,**不是** `inbox_items`(那张表自容器模型起零写入)。 */
-export function listInbox(d: ReadToolDeps): { tasks: TaskView[] } {
+export function listInbox(d: ReadToolDeps): { tasks: TimedTaskView[] } {
   const { snap, today } = snapAnd(d);
   return {
     tasks: views(
@@ -63,7 +71,7 @@ export function listInbox(d: ReadToolDeps): { tasks: TaskView[] } {
 export function listBucket(
   d: ReadToolDeps,
   kind: 'someday' | 'reference',
-): { bucket: string; tasks: TaskView[] } {
+): { bucket: string; tasks: TimedTaskView[] } {
   const { snap, today } = snapAnd(d);
   return {
     bucket: kind,
@@ -79,7 +87,7 @@ export function listBucket(
  * Today 口径(D-19/D-23,与桌面 Today 视图同源):计划 ≤ 今天 ∪(截止 ≤ 今天且未计划)。
  * 计划到未来 = 用户显式推迟,**不再**因过期 deadline 赖在 Today。
  */
-export function listToday(d: ReadToolDeps): { today: string; tasks: TaskView[] } {
+export function listToday(d: ReadToolDeps): { today: string; tasks: TimedTaskView[] } {
   const { snap, today } = snapAnd(d);
   const engageable = (t: Task): boolean =>
     t.status === 'active' && t.bucket !== 'someday' && t.bucket !== 'reference';
@@ -110,9 +118,9 @@ export function listCalendar(
   d: ReadToolDeps,
   fromDate: string,
   days: number,
-): { days: { date: string; allDay: TaskView[]; timed: TaskView[] }[] } {
+): { days: { date: string; allDay: TimedTaskView[]; timed: TimedTaskView[] }[] } {
   const { snap, today } = snapAnd(d);
-  const out: { date: string; allDay: TaskView[]; timed: TaskView[] }[] = [];
+  const out: { date: string; allDay: TimedTaskView[]; timed: TimedTaskView[] }[] = [];
   const [y, m, dd] = fromDate.split('-').map(Number);
   for (let i = 0; i < Math.min(Math.max(days, 1), 31); i += 1) {
     const dt = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (dd ?? 1) + i));
@@ -161,7 +169,7 @@ export function getProject(
   projectId: string,
 ):
   | { error: string }
-  | { project: { id: string; name: string; deadline: string | null }; tasks: TaskView[] } {
+  | { project: { id: string; name: string; deadline: string | null }; tasks: TimedTaskView[] } {
   const { snap, today } = snapAnd(d);
   const p = snap.projects.find((x) => x.id === projectId || x.outcome === projectId);
   if (!p) return { error: `项目不存在: ${projectId}` };
@@ -184,16 +192,16 @@ export function getTaskDetail(
 ):
   | { error: string }
   | {
-      task: TaskView;
+      task: TimedTaskView;
       activeDescendantCount: number;
-      subtasks: TaskView[];
+      subtasks: TimedTaskView[];
       comments: { body: string; createdAt: string }[];
     } {
   const { snap, today } = snapAnd(d);
   const t = snap.tasks.find((x) => x.id === taskId);
   if (!t) return { error: `任务不存在: ${taskId}` };
   return {
-    task: taskView(snap, t, today),
+    task: withRelativeTime(taskView(snap, t, today), timeContext()),
     activeDescendantCount: descendantTaskIds(snap, t.id).filter(
       (id) => snap.tasks.find((x) => x.id === id)?.status === 'active',
     ).length,
@@ -259,7 +267,7 @@ export function search(
   limit?: number,
 ):
   | { error: string }
-  | { tasks: TaskView[]; projects: { id: string; name: string }[]; totalMatched: number } {
+  | { tasks: TimedTaskView[]; projects: { id: string; name: string }[]; totalMatched: number } {
   const { snap, today } = snapAnd(d);
   const r = searchAll(
     snap,
@@ -284,7 +292,7 @@ export function runFilter(
 ):
   | { error: string }
   | {
-      sections: { source: string; tasks: TaskView[] }[];
+      sections: { source: string; tasks: TimedTaskView[] }[];
       unknownLabels: string[];
       unknownProjects: string[];
     } {
@@ -309,8 +317,8 @@ export function engageRecommendations(
 ):
   | { error: string }
   | {
-      calendarFirst: TaskView[];
-      candidates: TaskView[];
+      calendarFirst: TimedTaskView[];
+      candidates: TimedTaskView[];
       topN: number;
       matched: number;
     } {
@@ -337,6 +345,7 @@ export function engageRecommendations(
 
 /** 会话起始注入 system prompt 的轻量快照(DESIGN §6.6)。 */
 export function statusSnapshot(d: ReadToolDeps): {
+  time: ReturnType<typeof timeContext>;
   today: string;
   inboxCount: number;
   todayCount: number;
@@ -346,6 +355,7 @@ export function statusSnapshot(d: ReadToolDeps): {
 } {
   const { snap, today } = snapAnd(d);
   return {
+    time: timeContext(),
     today,
     inboxCount: listInbox(d).tasks.length,
     todayCount: listToday(d).tasks.length,
