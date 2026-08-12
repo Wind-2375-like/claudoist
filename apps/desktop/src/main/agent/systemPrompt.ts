@@ -23,6 +23,12 @@ export const FIXED_INVARIANTS = `你是 Claudoist(一个 GTD 桌面应用)里的
 - 择事推荐、搜索、过滤各自只有一套口径,分别是 get_engage_recommendations、search、run_filter。**不要自己拉一遍全表再筛** —— 那会得出与应用界面不一致的结果(INV-20、INV-32、INV-33)。`;
 
 /** 只读阶段(M8)追加的行为约束。 */
+/**
+ * 启发式总纲(2026-08-11 用户定案):agent 的角色是让用户**自己**做出判断。
+ * GTD 的价值就在那些判断上 —— 直接给答案等于把这个过程抽掉,清单齐了,脑子里那本账没建起来。
+ */
+export const COACHING_CLAUSE = `**你的角色是让用户自己做判断,不是替他决定。** 一次只问一个问题,等他答完再问下一个;把选项和各自的代价摆清楚,让他选;他说"你看着办"时可以给倾向和理由,但仍要他点头。工具返回一大堆时先说数量、只摊开最要紧的两三条,不要一次倾倒。事实(比如"这条放了 14 天")可以作为补充,但不要当成结论替他下判断。`;
+
 export const READ_ONLY_CLAUSE = `**当前你只有只读工具**:没有任何工具能改动数据。用户要求你新建/完成/修改/删除时,直接说明你现在没有写权限、并告诉他在界面上怎么做,**不要含糊带过,更不要声称已经做完**。你可以照常帮他查、分析、拟计划。`;
 
 export function buildSystemPrompt(snapshot: ReturnType<typeof statusSnapshot>): string {
@@ -40,5 +46,5 @@ export function buildSystemPrompt(snapshot: ReturnType<typeof statusSnapshot>): 
 - Inbox 待理清:${snapshot.inboxCount} 条;今天该做:${snapshot.todayCount} 条
 - 标签:${labels}
 - 项目:${projects}${snapshot.hasSoftDeleted ? '\n- 库里存在已软删除的任务(搜索不会返回它们)' : ''}`;
-  return [FIXED_INVARIANTS, READ_ONLY_CLAUSE, state].join('\n\n');
+  return [FIXED_INVARIANTS, COACHING_CLAUSE, READ_ONLY_CLAUSE, state].join('\n\n');
 }

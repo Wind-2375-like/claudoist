@@ -3,7 +3,7 @@ import type { Clock, GtdStore } from '@gtd/domain';
 import { READ_TOOL_NAMES, qualifiedToolName, statusSnapshot } from '@gtd/agent-tools';
 import { authStatus } from './auth';
 import { startSession } from './sessionManager';
-import { skillsDir } from './skills';
+import { SKILL_NAMES, skillsDir } from './skills';
 import { buildSystemPrompt } from './systemPrompt';
 
 /**
@@ -82,8 +82,8 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
     // 而 options.skills 是**启用过滤器** —— 未列出的对模型隐藏且 Skill 工具会拒绝。
     // 再加上我们不给 Read/Bash,用户的私人 skill 既看不到也调不动。
     skillsDiscovered: skillsLoaded.length,
-    skillsEnabled: ['gtd-engage'],
-    skillOk: skillsLoaded.includes('gtd-engage'),
+    skillsEnabled: SKILL_NAMES,
+    skillOk: SKILL_NAMES.every((n) => skillsLoaded.includes(n)),
     gtdToolCount: gtdTools.length,
     expectedToolCount: READ_TOOL_NAMES.length,
     toolsOk:

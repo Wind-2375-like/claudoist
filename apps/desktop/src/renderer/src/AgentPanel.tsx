@@ -37,12 +37,18 @@ interface AgentStatus {
   lastSessionId: string | null;
 }
 
-/** D-28:composer 下方的建议按钮 —— 只是预置提示,不是状态机,用户随时可以改口。 */
+/**
+ * D-28:composer 下方的建议按钮 —— 只是预置提示,不是状态机,用户随时可以改口。
+ *
+ * 五条都对应一个 skill,而 skill 一律是**启发式**的:agent 提问、给选项与代价,
+ * 让用户自己判断,而不是替他决定。这不是文风偏好 —— GTD 的价值就在"用户亲手做出
+ * 那些判断",一个直接给答案的助手会把这个过程整个抽掉。
+ */
 const SUGGESTIONS: { label: string; prompt: string; needsWrite?: boolean }[] = [
-  { label: '帮我挑一件事做', prompt: '帮我挑一件现在能做的事。' },
-  { label: '今天什么最紧', prompt: '今天有什么要做的?哪些已经过了截止日?' },
-  { label: '该排期了', prompt: '有哪些任务一周内到期但还没决定哪天做?' },
-  { label: '理清收件箱', prompt: '帮我过一遍收件箱,逐条建议怎么处理。', needsWrite: true },
+  { label: '挑一件事做', prompt: '帮我挑一件现在能做的事。' },
+  { label: '今天什么最紧', prompt: '今天什么最紧?带我判断一下轻重。' },
+  { label: '规划今日行程', prompt: '帮我规划今天的行程。' },
+  { label: '理清收件箱', prompt: '带我理清收件箱。', needsWrite: true },
   { label: '开始周回顾', prompt: '带我做一次每周回顾。', needsWrite: true },
 ];
 
@@ -252,26 +258,37 @@ export function AgentPanel(): React.JSX.Element {
 
   return (
     <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
-      <div className="flex items-center gap-2 border-b border-neutral-800 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-3">
         <span className="text-sm font-semibold">Agent</span>
-        <span className="text-[11px] text-neutral-500">
-          {status?.loggedIn === true ? (status.email ?? '已登录') : '未登录'}
-          {status?.apiKeyInEnv === true ? ' · ⚠ 环境里有 API key' : ''}
-        </span>
-        <button
-          type="button"
-          className="ml-auto rounded px-1.5 text-xs text-neutral-400 hover:bg-neutral-800"
-          title="新开会话"
-          onClick={() => {
-            void window.agent.newSession().then(() => {
-              setItems([]);
-              setFooter('');
-              void refreshStatus();
-            });
-          }}
-        >
-          ＋ 新会话
-        </button>
+        <div className="flex items-center gap-2 text-neutral-400">
+          <span
+            className={`text-[10px] ${status?.loggedIn === true ? 'text-neutral-500' : 'text-amber-400'}`}
+            title={
+              status?.loggedIn === true
+                ? `以 ${status.email ?? '本机账号'} 的身份(本机 Claude Code 登录)`
+                : '未检测到本机 Claude Code 登录'
+            }
+          >
+            {status?.loggedIn === true ? '●' : '○'}
+          </span>
+          <span className="cursor-default" title="历史会话(M10)">
+            🕘
+          </span>
+          <button
+            type="button"
+            title="新建会话"
+            className="leading-none hover:text-neutral-100"
+            onClick={() => {
+              void window.agent.newSession().then(() => {
+                setItems([]);
+                setFooter('');
+                void refreshStatus();
+              });
+            }}
+          >
+            ＋
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
@@ -328,6 +345,7 @@ export function AgentPanel(): React.JSX.Element {
             </p>
           );
         })}
+        {busy && <p className="text-center text-xs text-neutral-500">思考中…</p>}
       </div>
 
       {/* 建议按钮(D-28):点击 = 发预置提示;需要写权限的只读期明确降级 */}
@@ -353,7 +371,24 @@ export function AgentPanel(): React.JSX.Element {
 
       <div className="px-3 pt-2 pb-3">
         {images.length > 0 && (
-          <p className="mb-1 text-[11px] text-neutral-500">已附 {images.length} 张图片</p>
+          <div className="mb-1.5 flex gap-2">
+            {images.map((img, i) => (
+              <div key={i} className="relative">
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt=""
+                  className="h-12 w-12 rounded border border-neutral-600 object-cover"
+                />
+                <button
+                  type="button"
+                  className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-neutral-700 text-[10px] leading-none text-white"
+                  onClick={() => setImages((p) => p.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
         )}
         <textarea
           value={draft}
