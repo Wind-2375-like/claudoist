@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AddSubtaskInputVM, QuickAddTaskInputVM, TaskVM } from '../../shared/viewModels';
+import type {
+  AddSubtaskInputVM,
+  QuickAddTaskInputVM,
+  RepeatInputVM,
+  TaskVM,
+} from '../../shared/viewModels';
+import { RepeatButton } from './RepeatMenu';
 import { useLabels, useProjects } from './hooks';
 import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
 import { isSubmitEnter } from './keys';
@@ -60,6 +66,7 @@ export function TaskCard({
   const [priority, setPriority] = useState(task?.priority ?? 3);
   const [labelIds, setLabelIds] = useState<string[]>(task?.labels.map((l) => l.id) ?? []);
   const [reminderAt, setReminderAt] = useState('');
+  const [repeat, setRepeat] = useState<RepeatInputVM | null>(task?.repeatInput ?? null);
   const [location, setLocation] = useState(initialLocation);
   const [showChip, setShowChip] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -70,6 +77,7 @@ export function TaskCard({
   }, []);
 
   const specified =
+    repeat !== null || // R14:漏了它,"只设循环"会走 capture 分支,规则被静默丢掉
     scheduled !== '' ||
     deadline !== '' ||
     priority !== 3 ||
@@ -108,6 +116,8 @@ export function TaskCard({
       if ((scheduled || null) !== task.scheduledDate) patch['scheduledDate'] = scheduled || null;
       if ((deadline || null) !== task.deadline) patch['deadline'] = deadline || null;
       if (priority !== task.priority) patch['priority'] = priority;
+      // repeat 整条比较(值对象):变了就整条替换/关闭,不做字段级 diff(v18 全有或全无)
+      if (JSON.stringify(repeat) !== JSON.stringify(task.repeatInput)) patch['repeat'] = repeat;
       if (Object.keys(patch).length > 0) {
         const r = await window.gtd.taskUpdate({ id: task.id, patch });
         if (fail(r)) return;
@@ -158,6 +168,7 @@ export function TaskCard({
       ...(deadline ? { deadline } : {}),
       ...(labelIds.length > 0 ? { labelIds } : {}),
       ...(reminderAt ? { reminderAt: reminderAt.slice(0, 16) } : {}),
+      ...(repeat !== null ? { repeat } : {}),
       ...(!isBucketLoc ? { projectId: location } : {}),
     };
     const r = await window.gtd.taskCreate(input);
@@ -284,6 +295,21 @@ export function TaskCard({
               清除
             </button>
           )}
+          {/* 循环放在日期面板内部而不是并列的第四个 chip:做成独立 chip 就允许
+              「设了循环、没有日期」的非法中间态;放这里,依赖关系在界面上物理可见 */}
+          {!isSubtask &&
+            (task === undefined || (task.externalId === null && task.parentTaskId === null)) && (
+              <RepeatButton
+                anchor={scheduled}
+                value={repeat}
+                valueLabel={
+                  JSON.stringify(repeat) === JSON.stringify(task?.repeatInput ?? null)
+                    ? task?.repeatShort
+                    : undefined
+                }
+                onChange={setRepeat}
+              />
+            )}
         </div>
       )}
       {showChip === 'deadline' && (

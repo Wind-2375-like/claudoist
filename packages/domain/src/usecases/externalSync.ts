@@ -104,6 +104,8 @@ export function syncExternalTasks(
         pushedEventId: null,
         pushedFingerprint: null,
         timeZone: null,
+        repeat: null, // 镜像任务禁带本地循环(INV-29/INV-36.1)
+        seriesId: null,
       };
       commands.push({ kind: 'createTask', task });
       created += 1;

@@ -272,7 +272,17 @@ CREATE TABLE tasks (                                    -- 扁平表,取代 CLI 
   start_time TEXT,                                      -- 日历统一(迁移 0006,D-23/M6a):
                                                         --   HH:MM,NULL=全天/无时间;
                                                         --   带时间任务即日历 block(取代 calendar_items)
-  duration_minutes INTEGER                              --   block 时长(分钟);NULL 回退 estimated_minutes
+  duration_minutes INTEGER,                             --   block 时长(分钟);NULL 回退 estimated_minutes
+  -- (v12–v14 的外部日历列 time_zone / external_id / external_calendar_id /
+  --  pushed_event_id / pushed_fingerprint 见迁移注释)
+  repeat_unit TEXT,                                     -- 循环(迁移 v18,D-37/INV-36):
+  repeat_every INTEGER,                                 --   六列一体存结构化规则(不用 RRULE:
+  repeat_from TEXT,                                     --   表达不了 based-on-completed,UNTIL 与
+  repeat_weekdays INTEGER,                              --   INV-03 冲突,解析失败=静默不推进)。
+  repeat_until TEXT,                                    --   repeat_unit IS NULL ⟺ 不循环;
+  repeat_anchor TEXT,                                   --   跨列 CHECK 钉死「全有或全无」;
+                                                        --   anchor 只由人写,月末/闰日不漂移的载体
+  series_id TEXT                                        -- 系列身份:完成史按系列分组;关闭循环不清
 );
 CREATE INDEX idx_tasks_project ON tasks(project_id, status);
 CREATE INDEX idx_tasks_parent ON tasks(parent_task_id);

@@ -1,10 +1,12 @@
 import type { Energy, Id, IsoDate, IsoTime } from '../entities/common';
-import type { Task } from '../entities/task';
+import type { RepeatRule, Task } from '../entities/task';
 import { MAX_SUBTASK_DEPTH, TASK_DEFAULTS } from '../entities/task';
+import type { RepeatInput } from '../rules/repeat';
+import { daysBetweenIso, nextOccurrence, normalizeRepeat } from '../rules/repeat';
 import type { Command, GtdSnapshot } from '../ports/gtdStore';
 import { applyToSnapshot } from '../ports/gtdStore';
 import type { FlowDeps } from '../flows/framework';
-import { isValidIsoDate, isValidIsoTime } from '../rules/dates';
+import { addDaysIso, isValidIsoDate, isValidIsoTime } from '../rules/dates';
 import { normalizePriority } from '../rules/priority';
 import { inheritedTaskDeadline } from '../rules/deadlineInheritance';
 import { hasActiveNextAction } from '../rules/projectHealth';
@@ -72,6 +74,8 @@ export interface QuickAddTaskInput {
   durationMinutes?: number;
   /** 时区(D-27/INV-31);缺省 = 浮动时间 */
   timeZone?: string;
+  /** 循环(D-37/INV-36):须与 scheduledDate 搭配;anchor 自动取 scheduledDate */
+  repeat?: RepeatInput;
 }
 
 export interface QuickAddTaskConsequences {
@@ -117,6 +121,16 @@ export function quickAddTask(
   for (const lid of input.labelIds ?? []) {
     if (!snap.labels.some((l) => l.id === lid)) return { error: `label 不存在: ${lid}` };
   }
+  // INV-36.1:循环必须挂在计划日上("设了循环、没有日期"没有可推进的锚点)
+  let repeat: RepeatRule | null = null;
+  if (input.repeat !== undefined) {
+    if (input.scheduledDate === undefined) {
+      return { error: '循环任务必须有计划日期(--date / scheduledDate)' };
+    }
+    const r = normalizeRepeat(input.repeat, input.scheduledDate);
+    if ('error' in r) return { error: r.error };
+    repeat = r;
+  }
   // INV-10:项目有 deadline → 无条件获得副本(即使调用方另填了 deadline)
   const inherited = inheritedTaskDeadline(snap, projectId);
   const deadline = inherited ?? input.deadline ?? null;
@@ -151,6 +165,8 @@ export function quickAddTask(
     externalCalendarId: null,
     pushedEventId: null,
     pushedFingerprint: null,
+    repeat,
+    seriesId: repeat !== null ? deps.idGen.next() : null, // 系列身份随首次设 repeat 诞生
   };
   const commands: Command[] = [{ kind: 'createTask', task }];
   for (const labelId of input.labelIds ?? []) {
@@ -277,6 +293,10 @@ export function reorderTask(
   const newParentId = input.parentTaskId;
   if (newParentId !== null) {
     if (newParentId === task.id) return { error: '不能把任务拖到自己下面' };
+    // INV-36.1:循环只挂在根任务上 —— 拖成子任务会让规则失去载体,明确拒绝而不是静默丢
+    if (task.repeat !== null) {
+      return { error: '循环任务不能拖成子任务(循环挂在根任务上);要嵌套请先关闭循环' };
+    }
     const parent = snap.tasks.find((t) => t.id === newParentId);
     if (!parent || parent.status !== 'active') return { error: '目标父任务不存在或非活跃' };
     // 同容器约束(跨 bucket/项目走 Move to)
@@ -436,6 +456,8 @@ export function addSubtask(
     externalCalendarId: null,
     pushedEventId: null,
     pushedFingerprint: null,
+    repeat: null, // INV-36.1:循环只挂在根任务上(子任务的"下一次"由父任务复制子树产生)
+    seriesId: null,
   };
   const commands: Command[] = [{ kind: 'createTask', task }];
   for (const labelId of input.labelIds ?? []) {
@@ -478,6 +500,8 @@ export interface UpdateTaskPatch {
   durationMinutes?: number | null;
   /** 时区:IANA 名或 null(= 浮动时间,跨时区不变) */
   timeZone?: string | null;
+  /** 循环(D-37/INV-36)。**三态**:省略 = 不动;null = 关闭循环;对象 = 整条替换 */
+  repeat?: RepeatInput | null;
 }
 
 export interface UpdateTaskInput {
@@ -491,7 +515,7 @@ export interface UpdateTaskConsequences {
 
 export function updateTask(
   snap: GtdSnapshot,
-  _deps: FlowDeps,
+  deps: FlowDeps,
   input: UpdateTaskInput,
 ): UsecaseResult<UpdateTaskConsequences> {
   const task = snap.tasks.find((t) => t.id === input.id);
@@ -559,6 +583,45 @@ export function updateTask(
     }
     clean.timeZone = p.timeZone;
   }
+  // ---- 循环(D-37/INV-36)。改动后的口径先算出来,守卫才能对"补丁后的状态"判定
+  const nextScheduled =
+    clean.scheduledDate !== undefined ? clean.scheduledDate : task.scheduledDate;
+  if (p.repeat !== undefined) {
+    if (p.repeat === null) {
+      // 关闭循环:seriesId 留着 —— 完成史仍按系列分组(INV-36.9)
+      clean.repeat = null;
+    } else {
+      // INV-36.1:循环只挂在有计划日的本地根任务上
+      if (isExternalTask(task)) {
+        return { error: '该任务来自 Google 日历,不能设本地循环(请在 Google 日历中设置重复)' };
+      }
+      if (task.parentTaskId !== null) {
+        return { error: '子任务不能单独设循环(循环挂在根任务上,子任务随根任务一起重复)' };
+      }
+      if (nextScheduled === null) {
+        return { error: '循环任务必须有计划日期,请先设置计划日' };
+      }
+      const r = normalizeRepeat(p.repeat, nextScheduled);
+      if ('error' in r) return { error: r.error };
+      clean.repeat = r;
+      if (task.seriesId === null) clean.seriesId = deps.idGen.next(); // 首次设循环 → 系列诞生
+    }
+  }
+  // 既有循环的一致性守卫:清计划日必须先关循环(不静默丢规则,INV-36.1)
+  const nextRepeat = clean.repeat !== undefined ? clean.repeat : task.repeat;
+  if (nextRepeat !== null && nextScheduled === null) {
+    return { error: '循环任务必须有计划日;要关闭循环请把 repeat 设为 null(--repeat=none)' };
+  }
+  // INV-36.3:anchor 只由人写 —— 手动改计划日(拖拽/推迟/--date/update_task)= 重置锚点。
+  // 这正是「每周三」与「每 7 天」的可观测差别:推迟到周四完成后,前者下一次回到周三。
+  if (
+    nextRepeat !== null &&
+    p.repeat === undefined &&
+    clean.scheduledDate !== undefined &&
+    clean.scheduledDate !== null
+  ) {
+    clean.repeat = { ...nextRepeat, anchor: clean.scheduledDate };
+  }
   const commands: Command[] =
     Object.keys(clean).length > 0 ? [{ kind: 'updateTask', id: task.id, patch: clean }] : [];
   return { commands, consequences: { taskId: task.id } };
@@ -573,6 +636,12 @@ export interface CompleteTaskInput {
 export interface CompleteTaskConsequences extends CompletionFollowUpConsequences {
   /** INV-26.1(D-22):随本次一并完成的 active 后代子任务数(向下级联) */
   completedSubtaskCount: number;
+  /** INV-36.5/36.6d(G4):循环任务生成的下一次 —— 调用方**必须**向用户复述日期 */
+  nextOccurrence?: { taskId: Id; scheduledDate: IsoDate; copiedSubtaskCount: number };
+  /** INV-36.6d:下一次已越过 Ends 结束日,系列到此为止 */
+  repeatEnded?: boolean;
+  /** INV-36.6c(G3):同系列已有别的 active 任务(如 reopen 出来的),未生成 */
+  nextOccurrenceSkipped?: 'series-has-active';
 }
 
 export function completeTask(
@@ -594,6 +663,11 @@ export function completeTask(
     commands.push({ kind: 'updateTask', id: descId, patch });
     completedSubtaskCount += 1;
   }
+  // INV-36.5:循环任务的完成 = 完成这一次 + 同一命令批(INV-17)生成下一次。
+  // 这是 INV-15「系统绝不自动创建」的第四条例外 —— 执行的是用户先前显式声明的规则
+  // + 本次完成动作的完整语义,不是系统的推断;四条守卫(G1–G4)见 INV-36.6。
+  const extra = repeatSpawnCommands(snap, deps, task);
+  commands.push(...extra.commands);
   // INV-15:绝不自动完成父任务/项目 —— 项目以后果征询(after = 全子树完成后的口径)
   const after = applyToSnapshot(snap, commands);
   return {
@@ -601,6 +675,133 @@ export function completeTask(
     consequences: {
       ...completionFollowUpConsequences(after, task.projectId),
       completedSubtaskCount,
+      ...extra.consequences,
+    },
+  };
+}
+
+/**
+ * 循环任务完成时生成下一次(INV-36.5–36.8)。只被 completeTask 的同步路径调用(G2)、
+ * 一次完成至多生成一次(G1)—— 绝不补齐漏掉的 N 次,批量补齐才是系统凭空造实体。
+ */
+function repeatSpawnCommands(
+  snap: GtdSnapshot,
+  deps: FlowDeps,
+  task: Task,
+): {
+  commands: Command[];
+  consequences: Pick<
+    CompleteTaskConsequences,
+    'nextOccurrence' | 'repeatEnded' | 'nextOccurrenceSkipped'
+  >;
+} {
+  const none = { commands: [], consequences: {} };
+  if (task.repeat === null || task.scheduledDate === null) return none;
+  // G3:同系列已有其它 active(reopen 出来的旧一次等)→ 不生成,只报告。
+  // 注意这只是"不创建",不是"自动删除" —— INV-15 的另一半原样保留。
+  if (
+    snap.tasks.some(
+      (t) => t.seriesId === task.seriesId && t.id !== task.id && t.status === 'active',
+    )
+  ) {
+    return { commands: [], consequences: { nextOccurrenceSkipped: 'series-has-active' } };
+  }
+  const today = deps.clock.today();
+  const from = task.repeat.from === 'completed' ? today : task.scheduledDate;
+  const nextDate = nextOccurrence(task.repeat, from, today);
+  if (nextDate === null) return { commands: [], consequences: { repeatEnded: true } }; // G4
+  const now = deps.clock.now();
+  // 日期整体平移量:提醒、子任务的计划日/deadline 都按它平移(「周一买材料、周二打扫」
+  // 的周内结构随系列前移)。from='completed' 模式下同样相对原计划日算 —— 平移的是结构。
+  const delta = daysBetweenIso(task.scheduledDate, nextDate);
+  const projectDeadline = inheritedTaskDeadline(snap, task.projectId);
+  const shiftDeadline = (d: IsoDate | null): IsoDate | null => {
+    if (projectDeadline !== null) return projectDeadline; // INV-10:项目 deadline 复制不平移
+    return d === null ? null : addDaysIso(d, delta);
+  };
+  const commands: Command[] = [];
+  // 结构复制:新 id、全部 active、深度不变(INV-25.1 自动满足)。BFS 序 = 父先于子(FK 安全)
+  const idMap = new Map<Id, Id>([[task.id, deps.idGen.next()]]);
+  const copies: Task[] = [
+    {
+      ...task,
+      id: idMap.get(task.id)!,
+      status: 'active',
+      createdAt: now,
+      completedAt: null,
+      deletedAt: null,
+      scheduledDate: nextDate,
+      deadline: shiftDeadline(task.deadline),
+      // INV-27.1:追加到容器末尾,不占用原位(用户手排位置不随系列继承 —— 既定语义,不开特例)
+      sortOrder: nextRootSortOrder(snap, { bucket: task.bucket, projectId: task.projectId }),
+      // INV-29/INV-30:绝不带走外部身份 —— 否则两条任务认领同一个 Google 事件,
+      // planPush 互相覆盖、任一方删除会连带删掉对方的事件
+      externalId: null,
+      externalCalendarId: null,
+      pushedEventId: null,
+      pushedFingerprint: null,
+      repeat: task.repeat, // 规则活在行上随行前移;anchor 不变(INV-36.3:推进引擎永不改锚点)
+      seriesId: task.seriesId,
+    },
+  ];
+  let copiedSubtaskCount = 0;
+  for (const descId of descendantTaskIds(snap, task.id)) {
+    const desc = snap.tasks.find((t) => t.id === descId);
+    if (!desc || desc.status !== 'active') continue; // done/deleted 的旧账不进下一期
+    const parentCopy = idMap.get(desc.parentTaskId ?? '');
+    if (parentCopy === undefined) continue; // 父不在副本里(父是 done)→ 这支不复制
+    const newId = deps.idGen.next();
+    idMap.set(desc.id, newId);
+    copies.push({
+      ...desc,
+      id: newId,
+      parentTaskId: parentCopy,
+      status: 'active',
+      createdAt: now,
+      completedAt: null,
+      deletedAt: null,
+      scheduledDate: desc.scheduledDate === null ? null : addDaysIso(desc.scheduledDate, delta),
+      deadline: shiftDeadline(desc.deadline),
+      // sortOrder 原样保留:副本同级组是全新的,原相对顺序即目标顺序
+      externalId: null,
+      externalCalendarId: null,
+      pushedEventId: null,
+      pushedFingerprint: null,
+      repeat: null, // INV-36.1/36.8:循环只挂在根上
+      seriesId: null,
+    });
+    copiedSubtaskCount += 1;
+  }
+  for (const c of copies) commands.push({ kind: 'createTask', task: c });
+  // 标签是系列属性(@health 不因今天做完就没了)—— 根与子树逐条复制
+  for (const tl of snap.taskLabels) {
+    const newId = idMap.get(tl.taskId);
+    if (newId !== undefined) {
+      commands.push({ kind: 'assignLabel', taskId: newId, labelId: tl.labelId });
+    }
+  }
+  // 提醒平移复制(「每天 18:50 提醒」不复制就只响一次);评论**不**复制 ——
+  // 评论是"这一次我遇到了什么"的日志,复制会让同一句话在一年里出现 365 遍
+  for (const r of snap.reminders) {
+    const newId = idMap.get(r.taskId);
+    if (newId === undefined) continue;
+    const datePart = r.remindAt.slice(0, 10);
+    const timePart = r.remindAt.slice(10);
+    commands.push({
+      kind: 'createReminder',
+      reminder: {
+        id: deps.idGen.next(),
+        taskId: newId,
+        remindAt: `${addDaysIso(datePart, delta)}${timePart}`,
+        dispatched: false,
+        createdAt: now,
+      },
+    });
+  }
+  return {
+    commands,
+    consequences: {
+      nextOccurrence: { taskId: idMap.get(task.id)!, scheduledDate: nextDate, copiedSubtaskCount },
     },
   };
 }
@@ -647,6 +848,12 @@ export interface ReopenTaskInput {
 
 export interface ReopenTaskConsequences {
   taskId: Id;
+  /**
+   * INV-36.10:重开循环任务的某一次时,该系列当前 active 的"下一次"。系统**不**自动删它
+   * (INV-15 前半段),由 UI/agent 拿着这两个字段征询用户"下一次那条要不要一起删掉?"
+   */
+  successorTaskId?: Id;
+  successorScheduledDate?: IsoDate | null;
 }
 
 /**
@@ -678,9 +885,21 @@ export function reopenTask(
     const parent = snap.tasks.find((t) => t.id === task.parentTaskId);
     if (!parent || parent.status === 'deleted') patch.parentTaskId = null;
   }
+  const consequences: ReopenTaskConsequences = { taskId: task.id };
+  // INV-36.10:重开会让系列短暂出现两条 active(这是允许的 —— 设"至多一条 active"的
+  // 不变量就会逼出自动软删)。把后继报出去,删不删由用户定。
+  if (task.seriesId !== null) {
+    const successor = snap.tasks.find(
+      (t) => t.seriesId === task.seriesId && t.id !== task.id && t.status === 'active',
+    );
+    if (successor !== undefined) {
+      consequences.successorTaskId = successor.id;
+      consequences.successorScheduledDate = successor.scheduledDate;
+    }
+  }
   return {
     commands: [{ kind: 'updateTask', id: task.id, patch }],
-    consequences: { taskId: task.id },
+    consequences,
   };
 }
 

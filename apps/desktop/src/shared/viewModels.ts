@@ -46,6 +46,34 @@ export interface TaskVM {
   /** 外部日历镜像(D-25/INV-29):非空 = 来自 Google 日历,时间/标题不可本地修改 */
   externalId: string | null;
   externalCalendarId: string | null;
+  /** 循环(D-37/INV-36):「每周三」;不循环为 null。文本由 domain 生成,渲染层不拼 */
+  repeatShort: string | null;
+  /** 「每周三 · 按完成日推进 · 到 2026-12-31 为止」(tooltip) */
+  repeatLong: string | null;
+  /** Custom 对话框回填/回传用的输入型(纯数据);不循环为 null */
+  repeatInput: RepeatInputVM | null;
+  seriesId: string | null;
+}
+
+/** 循环规则输入(D-37):三个入口共用的形状,渲染层只透传,解析/校验在 domain。 */
+export interface RepeatInputVM {
+  unit: 'day' | 'week' | 'month' | 'year';
+  every?: number;
+  weekdays?: ('su' | 'mo' | 'tu' | 'we' | 'th' | 'fr' | 'sa')[];
+  from?: 'scheduled' | 'completed';
+  until?: string | null;
+}
+
+export interface RepeatPresetVM {
+  key: string;
+  label: string;
+  input: RepeatInputVM;
+}
+
+export interface RepeatPreviewVM {
+  /** 接下来最多 3 次发生日;结束早于 3 次则截断 */
+  next: string[];
+  error?: string;
 }
 
 export type MoveTargetVM =
@@ -270,6 +298,9 @@ export interface QuickAddTaskInputVM {
   reminderAt?: string;
   startTime?: string;
   durationMinutes?: number;
+  /** 循环(D-37):须与 scheduledDate 搭配。⚠ TaskCard 用条件展开传字段 —— 条件展开会
+   * 绕过 TS 的多余属性检查,这里没声明也不会报错,所以**必须**保持与 domain 入参同步 */
+  repeat?: RepeatInputVM;
 }
 
 export interface AddSubtaskInputVM {

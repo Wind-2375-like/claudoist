@@ -44,7 +44,7 @@ type TaskStatus = 'active' | 'done' | 'deleted';
 type Bucket = 'inbox' | 'project' | 'someday' | 'reference';
 
 export type FilterFlag =
-  'hasLabels' | 'hasProject' | 'hasTime' | 'hasDescription' | 'subtask' | 'mirrored';
+  'hasLabels' | 'hasProject' | 'hasTime' | 'hasDescription' | 'subtask' | 'mirrored' | 'recurring';
 
 export type AtomNode =
   | { kind: 'label'; name: string; span: Span }
@@ -507,6 +507,9 @@ class Parser {
     if (w === 'subtask') return { kind: 'flag', flag: 'subtask', span: t.span };
     if (w === 'mirrored' || w === 'upstream')
       return { kind: 'flag', flag: 'mirrored', span: t.span };
+    // INV-36.12。关键字是 recurring(Todoist 过滤语言的既有 token),字段名是 repeat
+    // (用户原话)—— 这处不对称是**有意的**,不要"顺手统一"
+    if (w === 'recurring') return { kind: 'flag', flag: 'recurring', span: t.span };
 
     this.fail(`不认识的条件 "${raw}" —— 关键词是不是拼错了?文本搜索请写 search: ${raw}`, t.span);
   }
@@ -654,6 +657,8 @@ function matchAtom(a: AtomNode, t: Task, snap: GtdSnapshot, ctx: FilterEvalConte
           return t.parentTaskId !== null;
         case 'mirrored':
           return t.externalId !== null;
+        case 'recurring':
+          return t.repeat !== null;
       }
   }
 }

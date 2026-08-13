@@ -112,6 +112,12 @@ export function TaskRow({
             </span>
           )}
           {task.scheduledDate && <span className="text-blue-600">📅 {task.scheduledDate}</span>}
+          {/* 🔁 紧贴 📅:循环是对计划日的修饰,不该被 🎯deadline 隔开 */}
+          {task.repeatShort !== null && (
+            <span className="text-blue-600" title={task.repeatLong ?? undefined}>
+              🔁 {task.repeatShort}
+            </span>
+          )}
           {task.deadline && (
             <span className={task.overdue ? 'font-medium text-red-600' : ''}>
               🎯 {task.deadline}

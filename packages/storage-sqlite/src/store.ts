@@ -73,6 +73,19 @@ const rowToTask = (r: Row): Task => ({
   pushedEventId: sn(r['pushed_event_id']),
   pushedFingerprint: sn(r['pushed_fingerprint']),
   timeZone: sn(r['time_zone']),
+  // v18:repeat_unit 是唯一判别列(IS NULL ⟺ 不循环)
+  repeat:
+    r['repeat_unit'] == null
+      ? null
+      : {
+          every: r['repeat_every'] as number,
+          unit: s(r['repeat_unit']) as NonNullable<Task['repeat']>['unit'],
+          from: s(r['repeat_from']) as NonNullable<Task['repeat']>['from'],
+          weekdays: (r['repeat_weekdays'] ?? null) as number | null,
+          until: sn(r['repeat_until']),
+          anchor: s(r['repeat_anchor']),
+        },
+  seriesId: sn(r['series_id']),
 });
 
 const rowToWaiting = (r: Row): WaitingFor => ({
@@ -127,11 +140,34 @@ const rowToFilter = (r: Row): SavedFilter => ({
   query: s(r['query_json']),
 });
 
-/** 实体字段 → 列名/序列化(update patch 白名单即这些键)。 */
-type ColumnSpec = Record<string, { col: string; enc?: (v: unknown) => SQLInputValue }>;
+/**
+ * 实体字段 → 列名/序列化(update patch 白名单即这些键)。
+ * 多列形态(cols)给"一个实体键落多个列"的值对象用 —— Task.repeat 六列一体
+ * (v18 跨列 CHECK 保证全有或全无,分开 patch 会撞 CHECK 整批回滚)。
+ */
+type ColumnSpec = Record<
+  string,
+  | { col: string; enc?: (v: unknown) => SQLInputValue }
+  | { cols: string[]; enc: (v: unknown) => SQLInputValue[] }
+>;
 
 const encBool = (v: unknown): SQLInputValue => int(v as boolean);
 const id0 = (v: unknown): SQLInputValue => v as SQLInputValue;
+
+const REPEAT_COLS = [
+  'repeat_unit',
+  'repeat_every',
+  'repeat_from',
+  'repeat_weekdays',
+  'repeat_until',
+  'repeat_anchor',
+];
+const encRepeat = (v: unknown): SQLInputValue[] => {
+  const r = v as Task['repeat'];
+  return r === null
+    ? [null, null, null, null, null, null]
+    : [r.unit, r.every, r.from, r.weekdays, r.until, r.anchor];
+};
 
 const COLS: Record<string, ColumnSpec> = {
   inbox_items: {
@@ -171,6 +207,9 @@ const COLS: Record<string, ColumnSpec> = {
     pushedEventId: { col: 'pushed_event_id' },
     pushedFingerprint: { col: 'pushed_fingerprint' },
     timeZone: { col: 'time_zone' },
+    // ⚠ 漏了这两条,update() 会静默丢弃:用户在 UI 设了循环、界面显示成功、重启后规则消失
+    repeat: { cols: REPEAT_COLS, enc: encRepeat },
+    seriesId: { col: 'series_id' },
   },
   waiting_for: {
     description: { col: 'description' },
@@ -297,10 +336,12 @@ export class SqliteGtdStore implements GtdStore {
 
   private insert(table: string, entity: Record<string, unknown>): void {
     const spec = COLS[table]!;
-    const cols = ['id', ...Object.values(spec).map((c) => c.col)];
+    const cols = ['id', ...Object.values(spec).flatMap((c) => ('cols' in c ? c.cols : [c.col]))];
     const values: SQLInputValue[] = [
       entity['id'] as SQLInputValue,
-      ...Object.entries(spec).map(([key, c]) => (c.enc ?? id0)(entity[key])),
+      ...Object.entries(spec).flatMap(([key, c]) =>
+        'cols' in c ? c.enc(entity[key]) : [(c.enc ?? id0)(entity[key])],
+      ),
     ];
     const sql = `INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`;
     this.db.prepare(sql).run(...values);
@@ -313,8 +354,17 @@ export class SqliteGtdStore implements GtdStore {
     for (const [key, value] of Object.entries(patch)) {
       const c = spec[key];
       if (!c) continue; // 白名单外的键忽略(与参照实现的展开合并等价:实体无未知键)
-      sets.push(`${c.col} = ?`);
-      values.push((c.enc ?? id0)(value));
+      // 多列值对象(repeat)逐列展开 —— 六列同批 SET,守住 v18 的全有或全无 CHECK
+      if ('cols' in c) {
+        const vs = c.enc(value);
+        c.cols.forEach((col, i) => {
+          sets.push(`${col} = ?`);
+          values.push(vs[i]!);
+        });
+      } else {
+        sets.push(`${c.col} = ?`);
+        values.push((c.enc ?? id0)(value));
+      }
     }
     if (sets.length === 0) return;
     values.push(id);

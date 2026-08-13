@@ -57,6 +57,8 @@ export function captureToInbox(
       pushedEventId: null,
       pushedFingerprint: null,
       timeZone: null,
+      repeat: null, // capture 只写标题
+      seriesId: null,
     };
     commands.push({ kind: 'createTask', task });
     createdIds.push(task.id);

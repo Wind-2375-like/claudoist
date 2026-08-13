@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLabels, useProjects, useTaskDetail } from './hooks';
 import { TaskCard } from './TaskCard';
+import { RepeatButton } from './RepeatMenu';
 import { TaskTree } from './TaskTree';
 import { completeTitle, completeWithFeedback, reopenTask, toast } from './toast';
 import { PRIORITY_CHOICES as PRIORITIES } from '../../shared/priority';
@@ -315,8 +316,15 @@ export function TaskDetailModal({
               {attrRow(
                 'date',
                 'Date(计划哪天做)',
-                t.scheduledDate !== null,
-                <span>{t.scheduledDate}</span>,
+                t.scheduledDate !== null || t.repeatShort !== null,
+                <span>
+                  {t.scheduledDate}
+                  {t.repeatShort !== null && (
+                    <span className="ml-1.5 text-blue-600" title={t.repeatLong ?? undefined}>
+                      🔁 {t.repeatShort}
+                    </span>
+                  )}
+                </span>,
                 t.externalId !== null ? (
                   <ExternalOwnedHint />
                 ) : (
@@ -356,6 +364,15 @@ export function TaskDetailModal({
                       >
                         清除
                       </button>
+                    )}
+                    {/* 循环入口在日期编辑器内部(D-37:循环挂在计划日上);子任务无此入口(INV-36.1) */}
+                    {t.parentTaskId === null && (
+                      <RepeatButton
+                        anchor={t.scheduledDate ?? ''}
+                        value={t.repeatInput}
+                        valueLabel={t.repeatShort}
+                        onChange={(v) => void patch({ repeat: v })}
+                      />
                     )}
                   </div>
                 ),

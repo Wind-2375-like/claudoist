@@ -112,6 +112,8 @@ function batches(): Command[][] {
           pushedEventId: null,
           pushedFingerprint: null,
           timeZone: null,
+          repeat: null,
+          seriesId: null,
         },
       },
       {
@@ -140,6 +142,8 @@ function batches(): Command[][] {
           pushedEventId: null,
           pushedFingerprint: null,
           timeZone: null,
+          repeat: null,
+          seriesId: null,
         },
       },
       {
@@ -168,6 +172,8 @@ function batches(): Command[][] {
           pushedEventId: null,
           pushedFingerprint: null,
           timeZone: null,
+          repeat: null,
+          seriesId: null,
         },
       },
       {
@@ -232,6 +238,28 @@ function batches(): Command[][] {
         },
       },
       { kind: 'deleteReminder', id: 'r2' },
+    ],
+    // 批4:循环六列往返(D-37/INV-36)—— 开启(整条值对象)→ 只改别的字段不碰 repeat →
+    // 关闭(null,seriesId 留着)。漏了 COLS.tasks 白名单这批会当场对不上参照实现。
+    [
+      {
+        kind: 'updateTask',
+        id: 't2',
+        patch: {
+          scheduledDate: '2026-08-12',
+          repeat: {
+            every: 2,
+            unit: 'week',
+            from: 'completed',
+            weekdays: 8,
+            until: '2026-12-31',
+            anchor: '2026-08-12',
+          },
+          seriesId: 'series-t2',
+        },
+      },
+      { kind: 'updateTask', id: 't2', patch: { title: '改标题不碰循环' } },
+      { kind: 'updateTask', id: 't2', patch: { repeat: null } },
     ],
   ];
 }

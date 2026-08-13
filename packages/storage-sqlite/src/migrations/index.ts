@@ -533,4 +533,47 @@ ALTER TABLE agent_audit ADD COLUMN rewound_at TEXT;
 ALTER TABLE conversations ADD COLUMN forked_at_message_uuid TEXT;
 `,
   },
+  {
+    version: 18,
+    name: 'task-repeat',
+    // D-37/INV-36:任务循环。存**结构化字段**而不是 RRULE 串 —— RRULE 表达不了
+    // "Based on: Completed date",它的 UNTIL 又是 UTC DATETIME(与 INV-03 的本地
+    // naive 日期冲突),而且解析失败的后果是任务**静默不推进**。
+    //
+    // 三个刻意的设计:
+    // 1. **repeat_unit 是唯一判别列**:IS NULL ⟺ 不循环。其余列的 NULL 因此各只有一个
+    //    含义(repeat_until IS NULL = Ends: Never,不兼职"没设过")。
+    // 2. **repeat_anchor 是月末/闰日不漂移的载体**。少了它,锚 1/31 的规则第二期就永久烂在 28 号。
+    // 3. **跨列 CHECK 必须挂在最后一次 ALTER 上**(它引用的列此时才全部存在)。
+    //    SQLite 的 ADD COLUMN 允许 CHECK 引用其它列,INSERT 与 UPDATE 双路生效。
+    //    `IS NOT 'week'` 是 null-safe 比较:repeat_unit 为 NULL 时求值为真,于是
+    //    "不循环 ⇒ weekdays 必须 NULL"被同一条式子覆盖;**括号必需**(IS NOT 左结合)。
+    //    这条 CHECK 把"半套规则"从静默损坏变成整批 ROLLBACK —— update() 只 SET patch
+    //    里出现的列,漏白名单会静默丢字段,本仓踩过(projects.deleted_at)。
+    // series_id 与 repeat_* **不联动**:关闭循环只清 repeat_*,seriesId 留着让完成史仍按系列分组。
+    // repeat_until / repeat_anchor 不加日期格式 CHECK:与 deadline/scheduled_date 同规
+    // (INV-03:写入侧领域层校验、读取侧宽容)。
+    sql: `
+ALTER TABLE tasks ADD COLUMN repeat_unit TEXT
+  CHECK (repeat_unit IS NULL OR repeat_unit IN ('day','week','month','year'));
+ALTER TABLE tasks ADD COLUMN repeat_every INTEGER
+  CHECK (repeat_every IS NULL OR (repeat_every BETWEEN 1 AND 999));
+ALTER TABLE tasks ADD COLUMN repeat_from TEXT
+  CHECK (repeat_from IS NULL OR repeat_from IN ('scheduled','completed'));
+ALTER TABLE tasks ADD COLUMN repeat_weekdays INTEGER
+  CHECK (repeat_weekdays IS NULL OR (repeat_weekdays BETWEEN 1 AND 127));
+ALTER TABLE tasks ADD COLUMN repeat_until TEXT;
+ALTER TABLE tasks ADD COLUMN repeat_anchor TEXT CHECK (
+      ((repeat_unit IS NULL) = (repeat_every  IS NULL))
+  AND ((repeat_unit IS NULL) = (repeat_from   IS NULL))
+  AND ((repeat_unit IS NULL) = (repeat_anchor IS NULL))
+  AND ((repeat_weekdays IS NULL) = (repeat_unit IS NOT 'week'))
+  AND (repeat_until IS NULL OR repeat_unit IS NOT NULL)
+);
+ALTER TABLE tasks ADD COLUMN series_id TEXT;
+
+CREATE INDEX idx_tasks_repeat ON tasks(repeat_unit) WHERE repeat_unit IS NOT NULL;
+CREATE INDEX idx_tasks_series ON tasks(series_id) WHERE series_id IS NOT NULL;
+`,
+  },
 ];

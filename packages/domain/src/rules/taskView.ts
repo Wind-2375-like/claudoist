@@ -1,8 +1,9 @@
 import type { Id, IsoDate } from '../entities/common';
-import type { Task } from '../entities/task';
+import type { RepeatRule, Task } from '../entities/task';
 import type { GtdSnapshot } from '../ports/gtdStore';
 import { priorityLabel } from './priority';
 import { projectBreadcrumb } from './projectTree';
+import { formatRepeat, nextOccurrences } from './repeat';
 
 /**
  * 任务的**纯数据投影**:CLI 的 `--json` 与 agent 只读工具共用同一份。
@@ -42,6 +43,14 @@ export interface TaskView {
   timeZone: string | null;
   /** INV-29:来自外部日历的镜像任务(标题与时间不可本地修改) */
   mirrored: boolean;
+  /** 循环(D-37/INV-36):null = 不循环 */
+  repeat: RepeatRule | null;
+  /** 「每周三」;不循环为 null */
+  repeatShort: string | null;
+  /** 「每周三 · 按完成日推进 · 到 2026-12-31 为止」 */
+  repeatLong: string | null;
+  /** 未来三次发生日(agent 回答"下一次是哪天"直接用,别自己算日历 —— 月末/闰日必错) */
+  nextOccurrences: IsoDate[];
 }
 
 export function taskView(snap: GtdSnapshot, t: Task, today: IsoDate): TaskView {
@@ -69,5 +78,12 @@ export function taskView(snap: GtdSnapshot, t: Task, today: IsoDate): TaskView {
     durationMinutes: t.durationMinutes,
     timeZone: t.timeZone,
     mirrored: t.externalId !== null,
+    repeat: t.repeat,
+    repeatShort: t.repeat === null ? null : formatRepeat(t.repeat).short,
+    repeatLong: t.repeat === null ? null : formatRepeat(t.repeat).long,
+    nextOccurrences:
+      t.repeat === null || t.scheduledDate === null
+        ? []
+        : nextOccurrences(t.repeat, t.scheduledDate, today, 3),
   };
 }

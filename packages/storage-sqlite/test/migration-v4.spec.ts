@@ -85,6 +85,8 @@ describe('迁移 v3 → v4(项目平面化 + 子任务 + 评论)', () => {
             pushedEventId: null,
             pushedFingerprint: null,
             timeZone: null,
+            repeat: null,
+            seriesId: null,
           },
         },
         { kind: 'createComment', comment: { id: 'cm1', taskId: 't1', body: 'ok', createdAt: 'T' } },

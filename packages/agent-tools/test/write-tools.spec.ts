@@ -223,6 +223,8 @@ function base(): GtdSnapshot['tasks'][number] {
     pushedEventId: null,
     pushedFingerprint: null,
     timeZone: null,
+    repeat: null,
+    seriesId: null,
   };
 }
 
@@ -283,5 +285,83 @@ describe('INV-35 逆命令日志:必须真的被记下来', () => {
       (m) => ((m as { rewindLog?: { toolName?: string } }).rewindLog ?? {}).toolName,
     );
     expect(names).toEqual(['create_task', 'capture']);
+  });
+});
+
+describe('D-37/INV-36 循环:工具层管道', () => {
+  it('create_task 带 repeat → 真的设上了(白名单守卫);缺计划日 → 报错', () => {
+    const h = harness();
+    const r = W.createTask(h, {
+      title: '写周会纪要',
+      scheduledDate: '2026-08-12',
+      repeat: { unit: 'week', weekdays: ['we'], until: '2026-12-31' },
+    });
+    expect(r.ok).toBe(true);
+    const t = h.snap().tasks[0]!;
+    // 漏了 taskFields 白名单会 ok:true 但 repeat 是 null —— 这条测试就是防那个
+    expect(t.repeat).toMatchObject({ unit: 'week', weekdays: 8, until: '2026-12-31' });
+    expect(t.seriesId).not.toBeNull();
+
+    const bad = W.createTask(h, { title: 'x', repeat: { unit: 'day' } });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toContain('计划日');
+  });
+
+  it('update_task repeat:null 穿过 undefined 过滤(三态里的"关闭"不能被当成"省略")', () => {
+    const h = harness({
+      tasks: [
+        {
+          ...base(),
+          id: 'r1',
+          scheduledDate: '2026-08-12',
+          repeat: {
+            every: 1,
+            unit: 'day',
+            from: 'scheduled',
+            weekdays: null,
+            until: null,
+            anchor: '2026-08-12',
+          },
+          seriesId: 's1',
+        },
+      ],
+    });
+    const r = W.updateTaskTool(h, { taskId: 'r1', repeat: null });
+    expect(r.ok).toBe(true);
+    expect(h.snap().tasks[0]!.repeat).toBeNull();
+    expect(h.snap().tasks[0]!.seriesId).toBe('s1'); // 系列身份留着(INV-36.9)
+  });
+
+  it('add_subtask 带 repeat → 明确拒绝(domain 入参没有该字段,不拒会静默丢)', () => {
+    const h = harness({ tasks: [{ ...base(), id: 'p' }] });
+    const r = W.addSubtaskTool(h, { parentTaskId: 'p', title: '子', repeat: { unit: 'day' } });
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain('子任务');
+    expect(h.applies).toHaveLength(0);
+  });
+
+  it('complete_task 对循环任务:consequences 带 nextOccurrence 且原样透出', () => {
+    const h = harness({
+      tasks: [
+        {
+          ...base(),
+          id: 'r1',
+          scheduledDate: '2026-08-12',
+          repeat: {
+            every: 1,
+            unit: 'week',
+            from: 'scheduled',
+            weekdays: 8,
+            until: null,
+            anchor: '2026-08-12',
+          },
+          seriesId: 's1',
+        },
+      ],
+    });
+    const r = W.completeTaskTool(h, 'r1');
+    expect(r.ok).toBe(true);
+    expect(h.applies).toHaveLength(1); // 完成 + 生成同一批(INV-17)
+    expect(r['nextOccurrence']).toMatchObject({ scheduledDate: '2026-08-19' });
   });
 });

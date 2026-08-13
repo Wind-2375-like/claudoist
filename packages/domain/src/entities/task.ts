@@ -64,6 +64,51 @@ export interface Task {
   pushedEventId: string | null;
   /** 上次推送出去的内容指纹(标题|日期|时刻|时长|完成);相同则跳过 API 调用 */
   pushedFingerprint: string | null;
+  /**
+   * 循环(D-37/INV-36):null = 不循环。**必填不可省** —— 写成 `repeat?:` 的话,
+   * 7 处构造完整 Task 字面量的地方漏了它 tsc 不会报,循环会静默丢失。
+   */
+  repeat: RepeatRule | null;
+  /**
+   * 循环系列身份:同一系列的每一次共享(完成史分组、"该系列已有一条 active"守卫都靠它)。
+   * 关闭 repeat **不清**它 —— 完成史仍按系列归堆(INV-36.9)。
+   */
+  seriesId: Id | null;
+}
+
+export type RepeatUnit = 'day' | 'week' | 'month' | 'year';
+/** 从哪天往后推:'scheduled' = 原计划日(逾期会追赶到未来);'completed' = 实际完成日(永不追赶) */
+export type RepeatFrom = 'scheduled' | 'completed';
+
+/**
+ * 循环规则(D-37/INV-36)。**整体是一个值**:要么 `Task.repeat` 为 null(不循环),要么
+ * 六个字段全部有意义 —— 由迁移 v18 的跨列 CHECK 在 schema 层钉死,patch 时必须整体替换,
+ * 不能只改其中一个字段(改一半会撞 CHECK 整批回滚,这是刻意选的响亮失败方向)。
+ *
+ * 存结构化字段而不是 RRULE 串:RRULE 表达不了 "Based on: Completed date",它的 UNTIL
+ * 是 UTC DATETIME(与 INV-03 的本地 naive 日期冲突),且解析失败的后果是任务**静默不推进**
+ * —— 承诺不能挂在运行时解析上。
+ */
+export interface RepeatRule {
+  /** Every N;1..999 */
+  every: number;
+  unit: RepeatUnit;
+  from: RepeatFrom;
+  /**
+   * 星期集合位掩码:bit i = 星期 i,**0=周日 … 6=周六**(与 epoch-day 星期算子同序,
+   * 少一次转换 = 少一个静默 off-by-one)。1..127,0 非法。
+   * 不变式(INV-36.2):`unit==='week'` ⟺ `weekdays !== null`。
+   * 例:每周三 = 0b0001000 = 8;Mon–Fri = 0b0111110 = 62。
+   */
+  weekdays: number | null;
+  /** Ends:null = 永不;否则 = 结束日,**含当日**(inclusive) */
+  until: IsoDate | null;
+  /**
+   * **原始锚点日 —— 月末/闰日不漂移的全部秘密**。推进永远是"从 anchor 加 k 个周期再夹取
+   * 月末",绝不是"从上次结果加一个周期"(后者会让锚 1/31 的规则在 2 月之后永久烂在 28 号)。
+   * 只在**人**写 scheduledDate 时重置;推进引擎永不碰它(INV-36.3)。
+   */
+  anchor: IsoDate;
 }
 
 /** 子任务嵌套上限(INV-25;根任务算第 1 层)。 */

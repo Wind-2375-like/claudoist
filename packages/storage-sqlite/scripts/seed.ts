@@ -231,6 +231,8 @@ for (const [ti, t] of seedTasks.entries()) {
       pushedEventId: null,
       pushedFingerprint: null,
       timeZone: null,
+      repeat: null,
+      seriesId: null,
     },
   });
   // D-30:原 context 现在就是一个标签(去掉 '@');与 t.labels 去重由 assignLabel 幂等保证
@@ -269,6 +271,8 @@ const subtask = (tid: string, title: string, parent: string | null, done = false
     pushedEventId: null,
     pushedFingerprint: null,
     timeZone: null,
+    repeat: null,
+    seriesId: null,
   },
 });
 commands.push(
@@ -313,6 +317,8 @@ function seedBucketTask(title: string, bucket: 'someday' | 'reference'): void {
       pushedEventId: null,
       pushedFingerprint: null,
       timeZone: null,
+      repeat: null,
+      seriesId: null,
     },
   });
 }
@@ -344,6 +350,8 @@ for (const [ri, title] of rawThoughts.entries()) {
       pushedEventId: null,
       pushedFingerprint: null,
       timeZone: null,
+      repeat: null,
+      seriesId: null,
     },
   });
 }
@@ -382,6 +390,8 @@ const timed = (
     pushedEventId: null,
     pushedFingerprint: null,
     timeZone: null,
+    repeat: null,
+    seriesId: null,
   },
 });
 commands.push(

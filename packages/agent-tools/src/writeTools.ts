@@ -22,6 +22,7 @@ import {
 } from '@gtd/domain';
 import { invertCommands } from '@gtd/domain';
 import type {
+  RepeatInput,
   ApplyMeta,
   Command,
   FlowDeps,
@@ -186,6 +187,7 @@ export type CreateTaskArgs = { title: string } & Loose<{
   priority: number;
   reminderAt: string;
   timeZone: string;
+  repeat: RepeatInput;
 }>;
 
 /** 把名字型入参翻成 domain 入参;其余字段原样透传(undefined 不落键,exactOptionalPropertyTypes)。 */
@@ -205,6 +207,8 @@ function taskFields(
     'priority',
     'reminderAt',
     'timeZone',
+    // ⚠ 这是**显式白名单**:漏了新键会 ok:true、changed:true,字段却根本没设上
+    'repeat',
   ] as const) {
     if (a[k] !== undefined) fields[k] = a[k];
   }
@@ -231,6 +235,11 @@ export function addSubtaskTool(
   d: WriteToolDeps,
   a: CreateTaskArgs & { parentTaskId: string },
 ): WriteResult {
+  // INV-36.1:循环只挂在根任务上。domain 的 AddSubtaskInput 没有 repeat 字段,
+  // 不在这里拒绝的话入参会被**静默丢弃** —— 用户以为设了循环,其实什么都没发生
+  if (a.repeat !== undefined) {
+    return { ok: false, error: '子任务不能设循环(循环挂在根任务上,子任务随根任务一起重复)' };
+  }
   const f = taskFields(d.store.snapshot(), a);
   if ('error' in f) return { ok: false, error: f.error };
   // 子任务的容器由父任务决定(INV-25),project 参数在这里无意义

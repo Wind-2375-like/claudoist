@@ -55,6 +55,8 @@ export function task(over: Partial<Task> = {}): Task {
     externalCalendarId: null,
     pushedEventId: null,
     pushedFingerprint: null,
+    repeat: null,
+    seriesId: null,
     timeZone: null,
     ...over,
   };

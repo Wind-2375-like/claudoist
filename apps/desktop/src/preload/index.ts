@@ -29,6 +29,9 @@ import type {
   TaskVM,
   TodayVM,
   WriteResultVM,
+  RepeatInputVM,
+  RepeatPresetVM,
+  RepeatPreviewVM,
 } from '../shared/viewModels';
 
 /** 类型化 IPC 桥(docs/DESIGN.md §4.1)。 */
@@ -82,6 +85,10 @@ const gtdApi = {
   filtersList: (): Promise<FilterListItemVM[]> => ipcRenderer.invoke('gtd:filters.list'),
   filterRun: (query: string): Promise<FilterRunVM> =>
     ipcRenderer.invoke('gtd:filters.run', { query }),
+  repeatPresets: (anchor: string): Promise<RepeatPresetVM[]> =>
+    ipcRenderer.invoke('gtd:repeat.presets', { anchor }),
+  repeatPreview: (input: RepeatInputVM, anchor: string): Promise<RepeatPreviewVM> =>
+    ipcRenderer.invoke('gtd:repeat.preview', { input, anchor }),
   filterAdd: (name: string, query: string): Promise<WriteResultVM> =>
     ipcRenderer.invoke('gtd:filters.add', { name, query }),
   filterUpdate: (id: string, patch: { name?: string; query?: string }): Promise<WriteResultVM> =>

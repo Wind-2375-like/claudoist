@@ -114,12 +114,24 @@ export function classify(
   const cascading = descendantTaskIds(snap, taskId).filter(
     (id) => byId.get(id)?.status === 'active',
   ).length;
-  if (cascading === 0) return { tool, toolClass: base };
-  return {
-    tool,
-    toolClass: 'destructive',
-    escalation: `会连带完成 ${String(cascading)} 个子任务(向下级联,INV-26.1)`,
-  };
+  if (cascading > 0) {
+    return {
+      tool,
+      toolClass: 'destructive',
+      escalation:
+        `会连带完成 ${String(cascading)} 个子任务(向下级联,INV-26.1)` +
+        (byId.get(taskId)?.repeat != null ? ';且是循环任务,会同时生成下一次' : ''),
+    };
+  }
+  // INV-36.5:完成循环任务会同时**新建**下一次 —— 按 create 类审批,不再是单纯 edit
+  if (byId.get(taskId)?.repeat != null) {
+    return {
+      tool,
+      toolClass: 'create',
+      escalation: '循环任务:完成会在同一事务里生成下一次(新建任务)',
+    };
+  }
+  return { tool, toolClass: base };
 }
 
 export interface DecideInput {

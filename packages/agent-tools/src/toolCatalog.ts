@@ -65,6 +65,29 @@ const s = (a: Record<string, never>, k: string): string => a[k] as unknown as st
 const opt = <T>(a: Record<string, never>, k: string): T | undefined =>
   a[k] as unknown as T | undefined;
 
+/**
+ * 循环规则入参(D-37/INV-36)。**语义提示都写在 describe 里** —— agent 只看得到这些字:
+ * - 用户说"做完之后 / 隔 N 天再 / 从上次算起" → from:'completed';说具体星期或号数 →
+ *   'scheduled';拿不准选 'scheduled'。
+ * - `{unit:'week', weekdays:['we']}` 与 `{unit:'day', every:7}` 不是一回事:前者被推迟到
+ *   周五完成后下一次仍回周三,后者会跟着漂。
+ */
+const REPEAT = z
+  .object({
+    unit: z.enum(['day', 'week', 'month', 'year']).describe('单位;月/年的几号几月取自计划日'),
+    every: z.number().int().min(1).max(999).optional().describe('每几个单位,默认 1'),
+    weekdays: z
+      .array(z.enum(['mo', 'tu', 'we', 'th', 'fr', 'sa', 'su']))
+      .optional()
+      .describe('仅 unit=week:每周哪几天;不给 = 计划日那天。每 N 周(N≥2)时只能是计划日那天'),
+    from: z
+      .enum(['scheduled', 'completed'])
+      .optional()
+      .describe('从哪天往后推:scheduled=原计划日(逾期会追赶,默认)/ completed=实际完成日(不追赶)'),
+    until: z.string().optional().describe('结束日 YYYY-MM-DD,含当天;不给 = 永不结束'),
+  })
+  .describe('循环规则;必须与 scheduledDate 搭配');
+
 // 写工具共用的可选任务属性(create_task / add_subtask 同形)
 const TASK_ATTRS = {
   description: z.string().optional().describe('补充说明'),
@@ -193,7 +216,7 @@ const SPECS: ToolSpec[] = [
       'deadline: today / deadline before: +7 days / no deadline(**截止日只能这样写**)·',
       'energy: low · est: 30 · inbox/someday/reference · bucket: project ·',
       'done / status: active,done / status: any · search:/title:/desc: 词 ·',
-      'no labels / no project / no time · subtask · mirrored · & | ! ( ) · 顶层逗号 = 并列两段。',
+      'no labels / no project / no time · subtask · mirrored · recurring(循环任务)· & | ! ( ) · 顶层逗号 = 并列两段。',
       '默认只看活跃任务;写了状态但没提 deleted 时仍排除软删。',
       '引用了不存在的标签/项目不会报错,而是返回空结果 + unknownLabels/unknownProjects ——',
       '那说明条件恒不成立,不要当作"没有这样的任务"。',
@@ -235,11 +258,12 @@ const SPECS: ToolSpec[] = [
     name: 'create_task',
     kind: 'write',
     description:
-      '新建任务。不给 project 就落 Inbox。挂到有 deadline 的项目时会**静默继承**项目 deadline(INV-10),返回的 inheritedDeadline 要告诉用户。Someday/Reference 不能直接建 —— 先建再 move_task',
+      '新建任务。不给 project 就落 Inbox。挂到有 deadline 的项目时会**静默继承**项目 deadline(INV-10),返回的 inheritedDeadline 要告诉用户。Someday/Reference 不能直接建 —— 先建再 move_task。repeat 须与 scheduledDate 搭配(循环挂在计划日上)',
     schema: {
       title: z.string().min(1).describe('任务标题'),
       project: z.string().optional().describe('项目 id 或名称;不给 = Inbox'),
       ...TASK_ATTRS,
+      repeat: REPEAT.optional(),
     },
     run: (d, a) => W.createTask(w(d), taskArgs(a)),
   },
@@ -270,7 +294,9 @@ const SPECS: ToolSpec[] = [
     name: 'update_task',
     kind: 'write',
     description:
-      '改任务属性。日期类字段传 null = 清除。**改不了容器/项目/父任务**(那要用 move_task),也改不了状态(用 complete/reopen/delete)。来自外部日历的镜像任务拒绝改标题与时间(INV-29)',
+      '改任务属性。日期类字段传 null = 清除。**改不了容器/项目/父任务**(那要用 move_task),也改不了状态(用 complete/reopen/delete)。来自外部日历的镜像任务拒绝改标题与时间(INV-29)。' +
+      '**用户说"这个循环我不做了/停掉它"时,要的是这里的 repeat:null,不是 complete_task**(完成反而会生成下一次);连这一次也不做才是 delete_task。' +
+      'repeat 与 scheduledDate 是一对:设 repeat 必须已有计划日;清计划日而循环还在会被拒。改 scheduledDate 只挪这一次并重置锚点,不改规则本身',
     schema: {
       taskId: z.string().describe('任务 id'),
       title: z.string().optional(),
@@ -283,6 +309,9 @@ const SPECS: ToolSpec[] = [
       energy: z.enum(['low', 'medium', 'high']).optional(),
       priority: z.number().int().min(1).max(5).optional().describe('5=最高'),
       timeZone: z.string().nullable().optional(),
+      repeat: REPEAT.nullable()
+        .optional()
+        .describe('三态:省略=不动 / null=关闭循环 / 对象=整条替换'),
     },
     run: (d, a) => W.updateTaskTool(w(d), a as unknown as W.UpdateTaskArgs),
   },
@@ -337,7 +366,8 @@ const SPECS: ToolSpec[] = [
     name: 'complete_task',
     kind: 'write',
     description:
-      '完成任务。**会向下级联完成整棵活跃子树**(INV-26.1),数量只在返回值 completedSubtaskCount 里 —— 所以有子任务时先 get_task_detail 看清楚、问过用户再调。返回 parentCompletionCandidate 时说明项目已无余活动:**征询**用户要不要一并完成项目,绝不自动完成(INV-15)',
+      '完成任务。**会向下级联完成整棵活跃子树**(INV-26.1),数量只在返回值 completedSubtaskCount 里 —— 所以有子任务时先 get_task_detail 看清楚、问过用户再调。返回 parentCompletionCandidate 时说明项目已无余活动:**征询**用户要不要一并完成项目,绝不自动完成(INV-15)。' +
+      '目标带循环规则时,完成**不会让它消失**:当前这条置 done,并在同一事务里新建下一次(返回 nextOccurrence.{taskId,scheduledDate,copiedSubtaskCount},或 repeatEnded:true)。完成后**必须**向用户复述下一次的日期。**用户说"这个循环停掉/不做了"要的是 update_task {repeat:null},不是这里** —— 调完成反而会生成下一次',
     schema: { taskId: z.string().describe('任务 id') },
     run: (d, a) => W.completeTaskTool(w(d), s(a, 'taskId')),
   },
@@ -521,8 +551,23 @@ function describeField(f: z.ZodTypeAny): Omit<ToolManualParam, 'name'> {
     : Array.isArray(node?.def?.values)
       ? (node.def.values as string[])
       : null;
+  // object/array 展开内部结构 —— 不展开的话手册里 repeat 只显示一个光秃秃的 "object",
+  // 内部字段全不可见,用户照手册写 skill 会卡住
+  let typeText = enumValues !== null ? enumValues.join(' | ') : kind;
+  const shape = (node?.def as { shape?: Record<string, z.ZodTypeAny> } | undefined)?.shape;
+  if (kind === 'object' && shape) {
+    typeText = `{ ${Object.entries(shape)
+      .map(([k, v]) => {
+        const inner = describeField(v);
+        return `${k}${inner.required ? '' : '?'}: ${inner.type}`;
+      })
+      .join(', ')} }`;
+  } else if (kind === 'array') {
+    const el = (node?.def as { element?: z.ZodTypeAny } | undefined)?.element;
+    typeText = el ? `${describeField(el).type}[]` : 'array';
+  }
   return {
-    type: (enumValues !== null ? enumValues.join(' | ') : kind) + (nullable ? ' | null' : ''),
+    type: typeText + (nullable ? ' | null' : ''),
     required,
     description,
   };

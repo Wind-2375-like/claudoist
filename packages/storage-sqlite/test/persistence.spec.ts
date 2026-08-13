@@ -42,6 +42,8 @@ describe('文件持久化', () => {
             pushedEventId: null,
             pushedFingerprint: null,
             timeZone: null,
+            repeat: null,
+            seriesId: null,
           },
         },
       ];

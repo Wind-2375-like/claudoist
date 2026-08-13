@@ -1,4 +1,5 @@
 import type {
+  RepeatInput,
   Clock,
   FlowDeps,
   GtdSnapshot,
@@ -34,6 +35,8 @@ import {
   reorderTask,
   createFilter,
   parseFilterQuery,
+  parseRepeatShorthand,
+  weekdayMaskOf,
   runFilterQuery,
   searchAll,
   taskView,
@@ -209,6 +212,8 @@ function taskLine(j: TaskView): string {
   if (j.project !== null) bits.push(`[${j.project}]`);
   else if (j.bucket !== 'inbox') bits.push(`[${j.bucket}]`);
   if (j.scheduledDate !== null) bits.push(`📅${j.scheduledDate}`);
+  // 🔁 紧贴 📅:循环是对计划日的修饰(list/today/search/filter 一次性全都显示)
+  if (j.repeatShort !== null) bits.push(`🔁${j.repeatShort}`);
   if (j.startTime !== null) {
     const tz = j.timeZone !== null ? `(${j.timeZone})` : '';
     bits.push(`🕐${j.startTime}·${j.durationMinutes ?? j.estimatedMinutes}m${tz}`);
@@ -223,6 +228,62 @@ function taskLine(j: TaskView): string {
 function taskSection(title: string, rows: TaskView[]): string {
   const body = rows.length === 0 ? '(空)' : rows.map((r) => `- ${taskLine(r)}`).join('\n');
   return `${title}(${rows.length})\n${body}`;
+}
+
+// ------------------------------------------------------------ 循环 flag 组装
+
+const MASK_NAMES = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'] as const;
+
+/** 现有规则折回输入型(update 只给 --repeat-basis/--repeat-until 时在其上单改)。 */
+function ruleToInput(r: NonNullable<Task['repeat']>): RepeatInput {
+  return {
+    unit: r.unit,
+    every: r.every,
+    from: r.from,
+    until: r.until,
+    ...(r.weekdays !== null
+      ? { weekdays: MASK_NAMES.filter((_, i) => (r.weekdays! & (1 << i)) !== 0) }
+      : {}),
+  };
+}
+
+/**
+ * `--repeat` / `--repeat-basis` / `--repeat-until` → RepeatInput(D-37)。
+ * 文法解析在 domain 的 parseRepeatShorthand(INV-36.13 单一口径),这里只组装 flag。
+ * `--repeat=none`(关闭)由 update 调用方先行分辨,不进这里。
+ */
+function buildRepeatInput(opts: {
+  expr: string | undefined;
+  basis: string | undefined;
+  until: string | undefined;
+  clock: Clock;
+  /** update:任务现有循环(允许单改 basis/until);add 传 null */
+  existing: Task['repeat'];
+}): RepeatInput | undefined {
+  const { expr, basis, until, clock, existing } = opts;
+  if (basis !== undefined && basis !== 'scheduled' && basis !== 'completed') {
+    throw new CliError(`--repeat-basis 只能是 scheduled 或 completed,得到 "${basis}"`);
+  }
+  let input: RepeatInput;
+  if (expr !== undefined) {
+    const r = parseRepeatShorthand(expr);
+    if ('error' in r) throw new CliError(r.error);
+    input = r;
+  } else if (basis !== undefined || until !== undefined) {
+    if (existing === null) {
+      throw new CliError(
+        '--repeat-basis / --repeat-until 需要任务已有循环,或与 --repeat= 同时给出',
+      );
+    }
+    input = ruleToInput(existing);
+  } else {
+    return undefined;
+  }
+  if (basis !== undefined) input = { ...input, from: basis };
+  if (until !== undefined) {
+    input = { ...input, until: until === 'none' ? null : parseDay(until, clock) };
+  }
+  return input;
 }
 
 // ------------------------------------------------------------------ handlers
@@ -251,10 +312,27 @@ const add: Handler = (store, deps, args) => {
   const tz = opt(args, 'tz');
   const durationRaw = opt(args, 'duration');
   const duration = durationRaw !== undefined ? parseDuration(durationRaw, false) : undefined;
+  // 循环(D-37/INV-36)
+  const repeatExpr = opt(args, 'repeat');
+  if (repeatExpr === 'none') throw new CliError('--repeat=none 仅用于 update(关闭循环)');
+  const repeat = buildRepeatInput({
+    expr: repeatExpr,
+    basis: opt(args, 'repeat-basis'),
+    until: opt(args, 'repeat-until'),
+    clock: deps.clock,
+    existing: null,
+  });
+  // 循环未给 --date 时静默取今天 + **必须转告**(与 INV-10 继承 deadline 的既有范式一致)
+  let repeatDateNote = '';
+  if (repeat !== undefined && date === undefined && parentRef === undefined) {
+    repeatDateNote = `(未给 --date,循环从今天 ${deps.clock.today()} 起算)`;
+  }
   // --parent = 建子任务(INV-25:容器/项目继承父,≤5 层;D-22 支持完整属性集)
   if (parentRef !== undefined) {
     if (projectRef !== undefined)
       throw new CliError('--parent 与 --project 不能同用(子任务跟随父任务的项目)');
+    if (repeat !== undefined)
+      throw new CliError('子任务不能设循环(循环挂在根任务上,子任务随根任务一起重复)');
     const parent = findTask(snap, parentRef);
     const c = applyUsecase(
       store,
@@ -285,7 +363,11 @@ const add: Handler = (store, deps, args) => {
     title,
     ...(projectRef !== undefined && { projectId: findProject(snap, projectRef).id }),
     ...(desc !== undefined && { description: desc }),
-    ...(date !== undefined && { scheduledDate: parseDay(date, deps.clock) }),
+    ...(date !== undefined
+      ? { scheduledDate: parseDay(date, deps.clock) }
+      : repeat !== undefined
+        ? { scheduledDate: deps.clock.today() }
+        : {}),
     ...(deadline !== undefined && { deadline: parseDay(deadline, deps.clock) }),
     ...(priority !== undefined && { priority: Number(priority) }),
     ...(minutes !== undefined && { estimatedMinutes: Number(minutes) }),
@@ -295,13 +377,27 @@ const add: Handler = (store, deps, args) => {
     ...(time !== undefined && { startTime: time }),
     ...(duration !== undefined && duration !== null && { durationMinutes: duration }),
     ...(tz !== undefined && tz !== 'floating' && { timeZone: tz }),
+    ...(repeat !== undefined && { repeat }),
   };
   const c = applyUsecase(store, quickAddTask(snap, deps, input));
   const after = store.snapshot();
   const j = taskView(after, findTask(after, c.taskId), deps.clock.today());
   const notes = c.inheritedDeadline ? `(继承项目 deadline ${c.inheritedDeadline},INV-10)` : '';
-  return { data: j, text: `已添加: ${taskLine(j)} ${notes}${danglingTimeHint(j)}`.trim() };
+  return {
+    data: j,
+    text: `已添加: ${taskLine(j)} ${notes}${repeatDateNote}${repeatAnchorNote(j)}${danglingTimeHint(j)}`.trim(),
+  };
 };
+
+/**
+ * `--repeat=weekly:wed` 撞上 `--date=周五`:**不报错,尊重用户给的日期**,
+ * 但点明"首次落在计划日、之后按规则走" —— 否则用户会以为规则没生效。
+ */
+function repeatAnchorNote(j: TaskView): string {
+  if (j.repeat === null || j.scheduledDate === null || j.repeat.weekdays === null) return '';
+  if ((j.repeat.weekdays & weekdayMaskOf(j.scheduledDate)) !== 0) return '';
+  return `(首次 ${j.scheduledDate},之后${j.repeatShort ?? ''}:${j.nextOccurrences.join('、')})`;
+}
 
 const capture: Handler = (store, deps, args) => {
   if (args.positionals.length === 0) throw new CliError('用法: capture <想法> [<想法>...]');
@@ -862,6 +958,20 @@ const complete: Handler = (store, deps, args) => {
   } else if (c.projectHasRemainingActivity === true) {
     followUp += `\n项目「${c.projectBreadcrumb}」仍有余活动。`;
   }
+  // INV-36.6 G4:循环的后续必须复述给用户 —— 生成了下一次 / 系列结束 / 因已有 active 未生成
+  if (c.nextOccurrence !== undefined) {
+    const after = store.snapshot();
+    const nv = taskView(after, findTask(after, c.nextOccurrence.taskId), deps.clock.today());
+    const subs =
+      c.nextOccurrence.copiedSubtaskCount > 0
+        ? `,连同 ${c.nextOccurrence.copiedSubtaskCount} 个子任务`
+        : '';
+    followUp += `\n↻ 下一次:${c.nextOccurrence.scheduledDate}(${nv.repeatShort ?? '循环'}${subs})`;
+  } else if (c.repeatEnded === true) {
+    followUp += `\n↻ 循环已结束${task.repeat?.until != null ? `(到 ${task.repeat.until} 为止)` : ''}。`;
+  } else if (c.nextOccurrenceSkipped !== undefined) {
+    followUp += `\n↻ 该系列已有一条进行中的任务,未生成下一次。`;
+  }
   return { data: { taskId: task.id, ...c }, text: `已完成: ${task.title}${followUp}` };
 };
 
@@ -904,6 +1014,18 @@ const update: Handler = (store, deps, args) => {
   const time = opt(args, 'time');
   const duration = opt(args, 'duration');
   const tzu = opt(args, 'tz');
+  // 循环(D-37):--repeat=none 关闭;表达式 = 整条替换;只给 basis/until = 在现有规则上单改
+  const repeatExpr = opt(args, 'repeat');
+  const repeatOff = repeatExpr === 'none';
+  const repeat = repeatOff
+    ? undefined
+    : buildRepeatInput({
+        expr: repeatExpr,
+        basis: opt(args, 'repeat-basis'),
+        until: opt(args, 'repeat-until'),
+        clock: deps.clock,
+        existing: task.repeat,
+      });
   const patch = {
     ...(title !== undefined && { title }),
     ...(desc !== undefined && { description: desc }),
@@ -919,12 +1041,17 @@ const update: Handler = (store, deps, args) => {
     ...(time !== undefined && { startTime: time === 'none' ? null : time }),
     ...(duration !== undefined && { durationMinutes: parseDuration(duration, true) }),
     ...(tzu !== undefined && { timeZone: tzu === 'floating' || tzu === 'none' ? null : tzu }),
+    ...(repeatOff ? { repeat: null } : repeat !== undefined ? { repeat } : {}),
   };
   if (Object.keys(patch).length === 0) throw new CliError('没有要更新的字段');
   applyUsecase(store, updateTask(snap, deps, { id: task.id, patch }));
   const after = store.snapshot();
   const j = taskView(after, findTask(after, task.id), deps.clock.today());
-  return { data: j, text: `已更新: ${taskLine(j)}${danglingTimeHint(j)}` };
+  const offNote = repeatOff ? '(循环已关闭)' : '';
+  return {
+    data: j,
+    text: `已更新: ${taskLine(j)}${offNote}${repeatAnchorNote(j)}${danglingTimeHint(j)}`,
+  };
 };
 
 const show: Handler = (store, deps, args) => {
@@ -970,6 +1097,8 @@ const show: Handler = (store, deps, args) => {
     parent && `父任务: ${parent.id.slice(0, 8)}  ${parent.title}`,
     j.description && `描述: ${j.description}`,
     j.scheduledDate !== null && `计划日期: ${j.scheduledDate}`,
+    j.repeatLong !== null && `循环: ${j.repeatLong}`,
+    j.nextOccurrences.length > 0 && `下三次: ${j.nextOccurrences.join(', ')}`,
     j.deadline !== null && `deadline: ${j.deadline}${j.overdue ? '(过期)' : ''}`,
     `优先级: ${j.priorityLabel}  ·  ${j.estimatedMinutes} 分钟  ·  精力 ${j.energy}`,
     j.labels.length > 0 && `labels: ${j.labels.join(', ')}`,
@@ -1010,6 +1139,7 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
              [--time=HH:MM(日历 block,D-23)] [--duration=分钟] [--tz=floating|IANA]
              [--priority=1..5(1最低,5最高)] [--labels=a,b] [--remind=YYYY-MM-DDTHH:MM]
              [--minutes=] [--energy=low|medium|high]
+             [--repeat=表达式] [--repeat-basis=scheduled|completed] [--repeat-until=YYYY-MM-DD]
   capture <想法> [<想法>...]        逐条捕捉进 Inbox(零判断,INV-16)
   list [inbox|someday|reference|project|completed|all]   completed 可加 --limit=N
   today                             统一待办(计划 ≤ 今天 ∪ 截止 ≤ 今天;带时间任务按时刻排)
@@ -1029,15 +1159,28 @@ export const HELP = `Claudoist CLI — 经 domain usecase 操作任务数据(与
   inbox someday reference bucket: project           容器
   done  status: active,done  status: any            状态(默认只看活跃;没提 deleted 就永不含软删)
   search: 词  title: 词  desc: 词                    文本搜索
-  no labels / no project / no time / subtask / mirrored
+  no labels / no project / no time / subtask / mirrored / recurring(循环任务)
   & | ! ( )            与/或/非/分组       a, b     顶层逗号 = 并列两段
+
+循环任务(repeat,D-37/INV-36):完成一次 = 这一次照常记完成 + 自动生成下一次(子任务重置为
+未完成一并复制;评论不带走)。--repeat= 表达式:
+  daily | weekly | monthly | yearly    每 1 个单位;星期/几号由 --date 的那天决定
+  weekday                              每个工作日(周一–周五)
+  weekly:wed  weekly:mon,wed,fri       指定星期(仅每 1 周)
+  "every 2 weeks"                      自定义间隔 ⚠ 有空格必须整体加引号 —— 不加引号时
+                                       那三个词会被当成标题的一部分
+  none                                 仅 update:关闭循环(已完成的历史保留)
+--repeat-basis=completed = 从**实际完成日**起算、永不追赶(换滤芯每 3 个月);缺省 scheduled =
+按**原计划日**网格推进、逾期一次补齐到未来(每周三例会)。--repeat-until 含当天。
+关闭循环用 --repeat=none;清计划日(--date=none)会被拒 —— 循环必须挂在计划日上。
   show <任务>                       任务详情(含子任务树 / 评论 / 提醒)
   comment <任务> <内容>             加评论
   move <任务> <inbox|someday|reference|项目引用>   根任务子树随动;子任务先脱离父
   reorder <任务> [--parent=|--top] [--before=]     手动排序/拖成子任务(同容器,INV-27)
   complete <任务>                   完成(向下级联完成子树,D-22;项目余活动以提示返回)
   reopen <任务>                     撤销完成(done → active,仅当前任务)
-  update <任务> [--title=] [--desc=] [--date=|none] [--deadline=|none] [--priority=] ...
+  update <任务> [--title=] [--desc=] [--date=|none] [--deadline=|none] [--priority=]
+                [--repeat=表达式|none] [--repeat-basis=] [--repeat-until=|none] ...
   delete <任务>                     软删除(active 子树级联,输出数量;done 子任务保留)
   projects                          平面项目 + 进度 / project-add <成果> [--deadline=]
   project-update <项目> [--name=] [--deadline=|none] [--propagate|--keep-tasks]
@@ -1096,6 +1239,9 @@ const COMMAND_OPTS: Record<string, string[]> = {
     'remind',
     'minutes',
     'energy',
+    'repeat',
+    'repeat-basis',
+    'repeat-until',
   ],
   capture: [],
   list: ['limit'],
@@ -1117,6 +1263,9 @@ const COMMAND_OPTS: Record<string, string[]> = {
     'priority',
     'minutes',
     'energy',
+    'repeat',
+    'repeat-basis',
+    'repeat-until',
   ],
   delete: [],
   projects: [],

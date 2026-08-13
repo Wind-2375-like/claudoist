@@ -21,7 +21,7 @@ const SYNTAX_HELP: [string, string][] = [
   ['inbox  someday  reference  bucket: project', '容器'],
   ['done  status: active,done  status: any', '状态(默认只看活跃;没提 deleted 就永不含软删)'],
   ['search: 关键词   title:   desc:', '文本搜索(标题+描述)'],
-  ['no labels  no project  no time  subtask  mirrored', '标志位'],
+  ['no labels  no project  no time  subtask  mirrored  recurring', '标志位'],
   ['& | ! ( )', '与 / 或 / 非 / 分组'],
   ['a, b', '顶层逗号 = 并列两段结果(不是"或")'],
 ];

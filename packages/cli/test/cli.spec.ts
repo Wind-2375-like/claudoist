@@ -272,6 +272,56 @@ describe('@gtd/cli 命令层(真实 sqlite 库)', () => {
     expect(() => run('nonsense')).toThrow(CliError);
     expect(() => run('list', args(['trash']))).toThrow(CliError);
   });
+
+  // ---- 循环(D-37/INV-36)
+  it('repeat:add --repeat=weekly:wed → 🔁 上行;complete 输出 ↻ 下一次;show 有下三次', () => {
+    const t = run(
+      'add',
+      args(['写周会纪要'], {
+        date: '2026-08-12',
+        repeat: 'weekly:wed',
+        'repeat-until': '2026-12-31',
+      }),
+    ) as {
+      id: string;
+      repeatShort: string | null;
+    };
+    expect(t.repeatShort).toBe('每周三');
+    const out = runCommand('complete', store, deps, args(['写周会纪要']));
+    expect(out.text).toContain('↻ 下一次:2026-08-19');
+    const nxt = run('show', args(['写周会纪要'])) as {
+      scheduledDate: string;
+      nextOccurrences: string[];
+    };
+    expect(nxt.scheduledDate).toBe('2026-08-19');
+    expect(nxt.nextOccurrences).toEqual(['2026-08-26', '2026-09-02', '2026-09-09']);
+  });
+
+  it('repeat:未给 --date 默认今天且输出点明;--date=none 被拒;--repeat=none 关闭', () => {
+    const out = runCommand('add', store, deps, args(['倒垃圾'], { repeat: 'daily' }));
+    expect(out.text).toContain('未给 --date,循环从今天 2026-08-09 起算');
+    expect(() => run('update', args(['倒垃圾'], { date: 'none' }))).toThrow(/repeat=none/);
+    const t = run('update', args(['倒垃圾'], { repeat: 'none' })) as { repeat: unknown };
+    expect(t.repeat).toBeNull();
+  });
+
+  it('repeat:--repeat-basis 单独出现而无循环 → 报错;filter recurring 命中', () => {
+    run('add', args(['一次性'], {}));
+    expect(() => run('update', args(['一次性'], { 'repeat-basis': 'completed' }))).toThrow(
+      CliError,
+    );
+    const f = run('filter', args(['recurring'])) as { sections: { tasks: { title: string }[] }[] };
+    const titles = f.sections.flatMap((s) => s.tasks.map((r) => r.title));
+    expect(titles).toContain('写周会纪要');
+  });
+
+  it('repeat:子任务设循环被拒;裸表达式解析错误可读', () => {
+    run('add', args(['父任务'], {}));
+    expect(() => run('add', args(['子'], { parent: '父任务', repeat: 'daily' }))).toThrow(/子任务/);
+    expect(() => run('add', args(['x'], { date: '2026-08-12', repeat: 'fortnightly' }))).toThrow(
+      /无法解析/,
+    );
+  });
 });
 
 describe('resolveDbPath 优先级', () => {

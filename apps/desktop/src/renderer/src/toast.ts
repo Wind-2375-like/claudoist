@@ -50,10 +50,24 @@ export async function completeWithFeedback(taskTitle: string, taskId: string): P
     parentCompletionCandidate?: boolean;
     projectHasRemainingActivity?: boolean;
     projectBreadcrumb?: string;
+    nextOccurrence?: { taskId: string; scheduledDate: string; copiedSubtaskCount: number };
+    repeatEnded?: boolean;
+    nextOccurrenceSkipped?: string;
   };
   const bits: string[] = [];
   if ((c.completedSubtaskCount ?? 0) > 0) {
     bits.push(`连同 ${c.completedSubtaskCount} 个子任务一并完成`);
+  }
+  // INV-36.6 G4:用户点完勾看到任务还在(日期变了)必须有解释,否则会以为没完成成功
+  if (c.nextOccurrence !== undefined) {
+    bits.push(
+      `↻ 下一次 ${c.nextOccurrence.scheduledDate}` +
+        (c.nextOccurrence.copiedSubtaskCount > 0 ? `(子任务重置为未完成)` : ''),
+    );
+  } else if (c.repeatEnded === true) {
+    bits.push('↻ 循环已结束');
+  } else if (c.nextOccurrenceSkipped !== undefined) {
+    bits.push('↻ 该系列已有一条进行中,未生成下一次');
   }
   if (c.parentCompletionCandidate === true && c.projectBreadcrumb) {
     bits.push(`项目「${c.projectBreadcrumb}」已无余活动,可在侧栏右键标记完成`);

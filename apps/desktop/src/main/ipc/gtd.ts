@@ -27,6 +27,10 @@ import {
   restoreProject,
   projectStats,
   quickAddTask,
+  formatRepeat,
+  nextOccurrences,
+  normalizeRepeat,
+  repeatPresets,
   reopenTask,
   parseFilterQuery,
   reorderTask,
@@ -59,6 +63,9 @@ import type {
   TaskTreeVM,
   TaskVM,
   TodayVM,
+  RepeatInputVM,
+  RepeatPresetVM,
+  RepeatPreviewVM,
 } from '../../shared/viewModels';
 
 /**
@@ -93,6 +100,24 @@ export interface GtdViews {
   filters(): FilterListItemVM[];
   /** 求值一条查询(可传 filter id 或直接传查询原文) */
   filterRun(query: string): FilterRunVM;
+  /** 循环预设菜单项(D-37):文案从 anchor 现算(「每月 12 日」的 12 来自计划日) */
+  repeatPresets(anchor: string): RepeatPresetVM[];
+  /** Custom 对话框预览:接下来三次 + 校验错误(与写入走同一 normalizeRepeat,同源) */
+  repeatPreview(input: RepeatInputVM, anchor: string): RepeatPreviewVM;
+}
+
+/** RepeatRule → 输入型 VM(掩码折回星期名数组,渲染层可直接回传) */
+function ruleToInputVM(r: NonNullable<Task['repeat']>): RepeatInputVM {
+  const names = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'] as const;
+  return {
+    unit: r.unit,
+    every: r.every,
+    from: r.from,
+    until: r.until,
+    ...(r.weekdays !== null
+      ? { weekdays: names.filter((_, i) => (r.weekdays! & (1 << i)) !== 0) }
+      : {}),
+  };
 }
 
 export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
@@ -129,6 +154,12 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
     timeZone: t.timeZone,
     externalId: t.externalId,
     externalCalendarId: t.externalCalendarId,
+    // 循环(D-37/INV-36.13):标签文本由 domain 生成(先例 priorityLabel),渲染层不拼字符串;
+    // repeatInput 是给 Custom 对话框回填/回传用的输入型(纯数据,渲染层不 import @gtd/*)
+    repeatShort: t.repeat === null ? null : formatRepeat(t.repeat).short,
+    repeatLong: t.repeat === null ? null : formatRepeat(t.repeat).long,
+    repeatInput: t.repeat === null ? null : ruleToInputVM(t.repeat),
+    seriesId: t.seriesId,
   });
 
   // 同级组排序(INV-27):sortOrder 升序,createdAt 兜底(反对称:全等返回 0)
@@ -443,6 +474,15 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
         unknownProjects: unknown.projects,
       };
     },
+    repeatPresets(anchor) {
+      // 预设/预览都不在渲染层算日期(DESIGN §4.1;月末/闰年正是最容易漂的地方,INV-36.13)
+      return repeatPresets(anchor);
+    },
+    repeatPreview(input, anchor) {
+      const r = normalizeRepeat(input, anchor);
+      if ('error' in r) return { next: [], error: r.error };
+      return { next: nextOccurrences(r, anchor, clock.today(), 3) };
+    },
     today() {
       const snap = store.snapshot();
       const today = clock.today();
@@ -589,6 +629,12 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   ipcMain.handle('gtd:labels.list', () => views.labels());
   ipcMain.handle('gtd:filters.list', () => views.filters());
   ipcMain.handle('gtd:filters.run', (_e, p: { query: string }) => views.filterRun(p.query));
+  ipcMain.handle('gtd:repeat.presets', (_e, p: { anchor: string }) =>
+    views.repeatPresets(p.anchor),
+  );
+  ipcMain.handle('gtd:repeat.preview', (_e, p: { input: RepeatInputVM; anchor: string }) =>
+    views.repeatPreview(p.input, p.anchor),
+  );
   ipcMain.handle('gtd:filters.add', (_e, input: { name: string; query: string }) =>
     applyResult(createFilter(store.snapshot(), deps, input)),
   );

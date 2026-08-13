@@ -264,7 +264,7 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 
 #### INV-15 征询原则与 agent 后果返回约定
 
-**规则**:系统(UI 或 agent)**绝不自动**创建、完成、删除任何实体;一切级联、修复、生成都以问句/提示呈现,等待用户明确同意。**例外(D-21/D-22,用户单次动作的完整语义,不算"自动")**:移动带子任务的任务 = 整棵子树随动;软删除带子任务的任务 = active 子树级联软删(UI 确认文案带数量);**完成带子任务的任务 = active 子树级联完成(D-22 向下,UI 完成控件 hover 提示数量而非弹确认)**。这些都是单次动作在子树上的完整语义,不是系统自作主张。agent 路径的执行机制:**所有写工具返回 consequence 字段**(`parentCompletionCandidate`、`inheritedDeadline`、`projectHasRemainingActivity`、`completedSubtaskCount` 等,全表见 [./DESIGN.md](./DESIGN.md)),agent 读到后果后必须**先向用户提问、获同意后再发起下一次工具调用**,与 CLI 的 y/n 征询完全同构。
+**规则**:系统(UI 或 agent)**绝不自动**创建、完成、删除任何实体;一切级联、修复、生成都以问句/提示呈现,等待用户明确同意。**例外(D-21/D-22,用户单次动作的完整语义,不算"自动")**:移动带子任务的任务 = 整棵子树随动;软删除带子任务的任务 = active 子树级联软删(UI 确认文案带数量);**完成带子任务的任务 = active 子树级联完成(D-22 向下,UI 完成控件 hover 提示数量而非弹确认)**;**完成一个带 repeat 的任务时生成下一次(及其子树副本、标签、提醒)(D-37)**:用户先前显式声明的规则 + 本次完成动作的完整语义,四条守卫见 INV-36.6。这些都是单次动作(或用户显式声明的规则)的完整语义,不是系统自作主张。agent 路径的执行机制:**所有写工具返回 consequence 字段**(`parentCompletionCandidate`、`inheritedDeadline`、`projectHasRemainingActivity`、`completedSubtaskCount` 等,全表见 [./DESIGN.md](./DESIGN.md)),agent 读到后果后必须**先向用户提问、获同意后再发起下一次工具调用**,与 CLI 的 y/n 征询完全同构。
 **为什么**:agent 若把"最后一个子项目完成"自动升级成"顺手把父项目也完成了",信任即崩塌。
 **验收**:coaching eval(见 ROADMAP M10)断言 `complete_task` 返回 `parentCompletionCandidate` 后,agent 的下一动作是向用户提问而非直接调 `complete_project`。
 
@@ -444,7 +444,7 @@ weekly review、项目管理、capture 均不直接触发(review 的 Step 1 / St
 
 **规则**:保存的 filter 存**查询原文**(D-32),由 `rules/filterQuery.ts` 解析求值,是 Filters 视图、CLI `filter`、agent 的**唯一**过滤口径。
 
-1. **token**:`@标签` · `#项目`(带空格加引号)· `pN` / `p>=N` · 计划日(`today`/`tomorrow`/`yesterday`/`overdue`/`no date`/`next N days`/`due:`/`date:` 族,含 `a..b` 闭区间)· 截止日(`deadline:` 族 / `deadline overdue` / `no deadline`)· `created:` / `completed:` · `energy:` / `est:`(比较符或冒号,冒号 = `≤` 的容量语义,与 INV-02 同向)· `bucket:` 与裸写 `inbox`/`someday`/`reference` · `status:`(含 `any`、逗号列举)与裸写 `done` · `search:` / `title:` / `desc:` · 标志位 `no labels`/`no project`/`no time`/`no description`/`subtask`/`mirrored`。
+1. **token**:`@标签` · `#项目`(带空格加引号)· `pN` / `p>=N` · 计划日(`today`/`tomorrow`/`yesterday`/`overdue`/`no date`/`next N days`/`due:`/`date:` 族,含 `a..b` 闭区间)· 截止日(`deadline:` 族 / `deadline overdue` / `no deadline`)· `created:` / `completed:` · `energy:` / `est:`(比较符或冒号,冒号 = `≤` 的容量语义,与 INV-02 同向)· `bucket:` 与裸写 `inbox`/`someday`/`reference` · `status:`(含 `any`、逗号列举)与裸写 `done` · `search:` / `title:` / `desc:` · 标志位 `no labels`/`no project`/`no time`/`no description`/`subtask`/`mirrored`/`recurring`(= `repeat` 非空;关键字取 Todoist 既有 token,字段名取用户原话 repeat,这处不对称是**有意的**)。
 2. **两个日期字段互不混用**(照搬 Todoist 的 Date/Deadline 分离):**裸关键字与 `due:`/`date:` 族一律指计划日**;截止日**只能**经 `deadline:` 族访问,没有任何裸关键字会落到它上面。因此"这周要做的"(`next 7 days`)与"这周之前必须做完的"(`deadline before: +7 days`)是两条不同的查询,GTD 检视最有价值的一条恰是二者的组合:`deadline before: +7 days & no date`。
 3. **优先级方向**:`p5` = 最高(INV-01 ⚠SP),与 Todoist 的 `p1` **相反**;正因为同向于存储,`p>=4`(高及以上)才只有一种读法。粘贴 Todoist 过滤器时优先级会反。
 4. **布尔**:`!` > `&` > `|`,括号分组;**不支持隐式 AND**(空格),否则 `no date` 会被拆成 `no & date`。
@@ -541,6 +541,30 @@ tasks/waiting_for/comments/labels —— 那是 D-01 否决过的"一次确认�
 
 **验收**:apply 后逆 apply 回到原快照(往返性质);两轮改同一字段、倒序回滚回到最初值;
 用户插一手后预检报出字段级冲突;`create` 的逆让行整个消失;标签幂等;提醒不重响。
+
+#### INV-36 任务循环(repeat,2026-08-13,D-37)
+
+**规则**:
+
+1. **载体与前置条件**:`repeat` 非 null ⟹ `scheduledDate` 非 null **且** `parentTaskId === null` **且** `externalId === null`。清计划日、把带 repeat 的任务拖成子任务、给镜像任务设 repeat —— 三者一律**报错**,不静默丢弃。
+2. **唯一表示**:`unit==='week'` ⟺ `weekdays !== null`(位掩码 1..127,bit 0=周日);`every ∈ 1..999`;`every ≥ 2 且 unit==='week'` 时 `weekdays` 必须恰为 anchor 当天那一位(v1 收紧;算法层保留多位掩码的 WKST=Mon 块对齐实现)。前两条由迁移 v18 的跨列 CHECK 双重保障。
+3. **anchor 只由人写**:新建、保存循环对话框、手动改 `scheduledDate`(拖拽/推迟/`--date`/`update_task`)时 anchor := 该计划日;**推进引擎永不改它**。anchor 是月末/闰日不漂移的载体:推进永远是"从 anchor 加 k 个周期再夹取月末",锚 1/31 → 02-28 → **03-31**(以上次结果为锚则永久烂在 28 号)。
+4. **推进是纯日历算术**(`rules/repeat.ts`):零 `Date` 构造,epoch-day 整数运算 + `(y,m,d)` 三元组加月并夹取月末。`from='scheduled'` 的枢轴 = `max(计划日, 今天)`(逾期一次补齐到未来第一个格点、相位不丢);`from='completed'` 从完成日推、永不追赶、**有意漂移**。返回 `null` 当且仅当越过 `until`(**含当日**);算不出来抛 `RangeError`,绝不以 null 顶替。
+5. **完成 = 完成这一次 + 生成下一次**,同一命令批(INV-17)。当前行照 INV-26.1 级联完成;追加 `createTask` 生成下一次。
+6. **生成守卫**:(a) 一次完成至多生成一次,绝不批量补齐漏掉的 N 次;(b) 只在 `completeTask` 同步路径上生成,绝不由定时器/开机扫描/Google 同步触发;(c) 同 `seriesId` 下已有其它 active 任务时不生成,报 `nextOccurrenceSkipped`(只是"不创建",不是"自动删除");(d) 越过 `until` 时不生成,报 `repeatEnded`。`consequences.nextOccurrence` 必须回报,UI/CLI/agent 必须向用户复述下一次日期。
+7. **下一次的字段口径**:逐字复制 title/description/projectId/bucket/priority/energy/estimatedMinutes/startTime/durationMinutes/timeZone/repeat(含 anchor)/seriesId;重算 scheduledDate(推进结果)、sortOrder(`nextRootSortOrder`,追加末尾,INV-27.1)、id、createdAt;deadline:项目有 deadline → INV-10 copy-on-create,否则按与计划日相同的天数 delta 平移;**强制 null**:externalId/externalCalendarId(INV-29)、pushedEventId/pushedFingerprint(INV-30:不清的话两条任务认领同一个 Google 事件,planPush 互相覆盖、任一方删除连带删掉对方);标签复制(系列属性)、提醒按 delta 平移且 `dispatched=false`、**评论不复制**(评论是"这一次"的日志)。
+8. **子树复制**:active 子树结构复制、新 id、全部 active、深度不变(INV-25.1 自动满足)、子任务计划日/deadline 按 delta 平移、副本自身 `repeat=null`。`copiedSubtaskCount` 必须报数。
+9. **系列身份**:`seriesId` 随首次设 repeat 诞生、系列内共享;完成后 repeat 与 seriesId 都**留在 done 行上**(Completed/日历/`recurring & done` 因此可见);关闭循环(repeat=null)**不清** seriesId。
+10. **reopen 不自动删后继**:`reopenTask` 在 consequences 返回 `successorTaskId`/`successorScheduledDate`,由 UI/agent 征询用户(INV-15)。系列可短暂两条 active —— 允许,**不设**"至多一条 active"的不变量(设了就会逼出自动软删)。
+11. **软删 = 结束系列**(规则活在行上);`restoreTask` 现有逻辑对循环天然正确,零改动。
+12. **过滤器**:`recurring` = `repeat !== null`,受 INV-33.6 隐式活跃作用域约束。
+13. **单一口径**:解析(`normalizeRepeat`/`parseRepeatShorthand`)、格式化(`formatRepeat`)、预设(`repeatPresets`)、预览(`nextOccurrences`)全部只在 domain 一份;渲染层经 `gtd:repeat.presets`/`gtd:repeat.preview` 取结果(DESIGN §4.1),**禁止**在渲染层算任何日期。
+
+**为什么(存结构化列而不是 RRULE)**:RRULE 表达不了 "Based on: Completed date";其 `UNTIL` 是 UTC DATETIME,与 INV-03 本地 naive 日期、INV-31 浮动时间正面冲突;且解析失败的后果是任务**静默不推进** —— 承诺不能挂在运行时解析上。完成语义走"生成新行"而不是"就地推进":INV-28.1(D-23 用户定案)要求完成的任务仍留在日历上,就地推进会让过去每一天的 block 凭空消失,且本仓 Completed 就是 `status='done'` 的 Task,没有第二套事件流可兜底。
+
+**边界备注**:INV-14 —— 项目里有未结束的循环任务时 `hasActiveNextAction` 恒真,系统不会提示"项目可以完成了"(语义正确:项目里放着每周例会,项目当然没完)。INV-27.1 —— 下一次追加到列表末尾,不继承用户手排位置(不开特例)。projectStats/searchAll 的按系列折叠属 Phase 3,**需用户拍板**(见 ROADMAP)。
+
+**验收**:`INV-36-repeat.spec.ts`(51 条推进用例:月末夹取、闰日回归、工作日、完成日推进、Ends 含当日、相位保持)+ `INV-36-complete-generates-next.spec.ts`(字段口径逐项、子树/标签/提醒复制、评论不复制、G1–G4、reopen 征询);完成带 startTime 的循环任务后旧日期的 block 仍在日历上(INV-28)。
 
 ---
 
@@ -879,6 +903,7 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-19 | Action 无"计划哪天做"概念(日程只能是 CalendarItem) | Task 新增 `scheduledDate`(与 deadline 并存)。(后续 D-23/M6a:CalendarItem 并入 Task,时间即 `startTime`) | Todoist 式 today/tomorrow 快速安排是用户核心工作流;时刻与最迟完成日的语义区分保留(§2.5) |
 | D-30 | context 是必填单值实体,与 label 并存 | **context 并入 label(2026-08-11 用户定案,INV-24 退役)**:与 Todoist 一致只保留一种自由多值标签;label 名不含 `@`(`@` 是语法/显示前缀)。迁移 v11 把 context 变同名标签并补关联,**撞名直接合并**;tasks.context_id 与 contexts 表删除。engage 的"选情境"变成"选标签"(可不选 = 全部);捕捉不再有任何前置。语义损失:情境从必填降级为可选标签 | ✅ 已定 |
 | D-36 | 无法回退 agent 的改动 | **对话分叉 + agent 改动回滚(2026-08-13 用户定案,INV-35)**:三项菜单挂在用户消息上 —— 从这里分叉(SDK `forkSession(upToMessageId)`,纯文件操作、零 token)/ 回滚到这里(**就地截断对话** + 撤销数据)/ 分叉并回滚。**回滚就地截断对话**是用户裁决:不截断的话 agent 会基于"说做了、其实没做"的上下文继续操作。实现是**逆命令日志**而非快照(用户要求 efficient:一次 update 的逆只存被改到的键的旧值)。**回滚不可撤销**(界面无 undo),但执行前强制 diff 预览 + 冲突显式裁决 + `VACUUM INTO` 整库备份作人工救援 | ✅ 已定 |
+| D-37 | 任务无「重复」概念,循环承诺只能靠每次手动重建 | **任务循环(2026-08-13 用户诉求「加入 repeat,且支持 custom repeat」,INV-36)**:Todoist 式预设菜单 + Custom 对话框(Based on / Every N / 星期 / Ends),CLI `--repeat=` 三 flag,agent `create_task`/`update_task` 带三态 `repeat`。**完成 = 当前这次照常 done + 同一事务生成下一次**(否决就地推进:INV-28.1 已裁「完成的任务仍留在日历上」,就地推进会让过去每天的 block 凭空消失,且本仓 Completed 没有第二套事件流兜底)。规则**存 6 个结构化列**而非 RRULE(表达不了 Based on: Completed;UNTIL 是 UTC 与 INV-03 冲突;解析失败 = 静默不推进),跨列 CHECK 把「半套规则」变成响亮回滚。`repeat_anchor` 只由人写,是月末/闰日不漂移的载体(锚 1/31 → 02-28 → **03-31**)。停掉循环 = `repeat:null`/`--repeat=none`,不是 complete(完成反而生成下一次)。迁移 v18 | ✅ 已定 |
 | D-35 | 项目只能"完成",没有删除 | **项目软删除(2026-08-12 用户诉求「project 没办法删除」,INV-34)**:`ProjectStatus` 加 `'deleted'` + `deletedAt`,与 Task 的软删同规。**不硬删**的三条理由:① 外键开着时 `DELETE FROM projects` 直接被拒,要硬删就得级联硬删 tasks/waiting_for/comments/labels —— 那正是 D-01 否决过的"一次确认蒸发整张清单、无 undo";② 已完成任务保留 `projectId` 是既定设计(与 INV-26.2 同源:删除不洗完成史),硬删会让"这件事当初属于哪个项目"永久消失;③ 误删撤销是软删唯一不可替代的价值。**项目内容的去向由用户显式二选**(`contents: 'delete' \| 'toInbox'`,无默认值):活跃任务**绝不能留在已删项目里** —— 留下的话它们在任何容器视图都不显示,却照样进 Today、择事与日历。配套:⌘K 仍返回已删项目(排最后)+ 只读项目视图 + 恢复按钮,否则软删对用户等于不可见的硬删。迁移 v16 重建 projects 表 | ✅ 已定 |
 | D-34 | 账号/模型/用量只能在"用户发过消息、有了活会话"之后读取(界面上写着「先发一条消息,再回来切换模型」) | **改为零 token 探针(2026-08-12,M11-A)**:SDK 那句 "only supported when streaming input/output is used" 说的是 **prompt 必须是 AsyncIterable**,**不是**"必须先发过一条消息"。给它一个**永不 yield** 的 AsyncIterable,子进程照常起、控制通道照常可用,而模型一次都不会被调用(实测 `session.total_cost_usd === 0`、`model_usage === {}`,端到端 0.8–1.7s)。于是 `initializationResult()`(账号 + 模型列表)与 `usage_EXPERIMENTAL_…()`(订阅额度 + 消耗归因)都能在没聊过天时读到。三条硬纪律:探针用**自己的** AbortController、**绝不**调 `startSession()`/`destroySession()`、有活会话且不忙时优先蹭活会话(探针与长驻会话并存已实测安全,两个独立子进程)。附带定案:护栏(`maxTurns`/`maxBudgetUsd`)是 spawn 期 CLI flag,**没有**热改途径 —— ⚠ `applyFlagSettings({maxTurns})` 会返回成功但什么都不做,是静默陷阱;改完只能显式重起会话(resume 保留上下文) | ✅ 已定 |
 | D-33 | 权限放行按 Claude Code 的原生机制:读工具进 `allowedTools` 自动放行、Bypass 用 `permissionMode: 'bypassPermissions'` | **改为「一切放行都经 `canUseTool`」(2026-08-11,M9 实现时定案)**:`allowedTools` 与 `bypassPermissions` 都会让调用**绕过** `canUseTool`,那条调用因此不进 `agent_audit` —— 审计缺了自动放行的那一半就等于没有审计(排查"它到底改了什么"时,恰恰是自动放行的那批最需要看)。改为工具面只由 `tools` + `mcpServers` 决定,放行一律在 `canUseTool` 里按策略表判定;"全部放行"实现为该函数一律返回 allow,于是连 `allowDangerouslySkipPermissions` 都不需要。代价:每次工具调用多一次进程内函数调用(可忽略)。另外两处随之调整:① **只读模式下写工具根本不注册**(纵深防御:审批逻辑写错了工具也不存在);② `complete_task` 是**动态**破坏性 —— 目标有活跃子任务时才升级,因为级联数量只在返回值里、事后才知道 | ✅ 已定 |

@@ -42,6 +42,8 @@ export function buildFollowUpTask(
     pushedEventId: null,
     pushedFingerprint: null,
     timeZone: null,
+    repeat: null, // 跟进任务是一次性的
+    seriesId: null,
   };
   const commands: Command[] = [{ kind: 'createTask', task }];
   // 原模板固定落 @phone context;D-30 后没有 context,存在同名标签就带上,没有就不带

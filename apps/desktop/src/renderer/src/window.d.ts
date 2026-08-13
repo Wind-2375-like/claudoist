@@ -28,6 +28,9 @@ import type {
   TaskVM,
   TodayVM,
   WriteResultVM,
+  RepeatInputVM,
+  RepeatPresetVM,
+  RepeatPreviewVM,
 } from '../../shared/viewModels';
 
 declare global {
@@ -62,6 +65,8 @@ declare global {
       labelsList: () => Promise<LabelListItemVM[]>;
       filtersList: () => Promise<FilterListItemVM[]>;
       filterRun: (query: string) => Promise<FilterRunVM>;
+      repeatPresets: (anchor: string) => Promise<RepeatPresetVM[]>;
+      repeatPreview: (input: RepeatInputVM, anchor: string) => Promise<RepeatPreviewVM>;
       filterAdd: (name: string, query: string) => Promise<WriteResultVM>;
       filterUpdate: (
         id: string,
