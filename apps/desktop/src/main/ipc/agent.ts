@@ -26,6 +26,7 @@ import {
 } from '../agent/skills';
 import { agentStore, rawDb, settingsStore } from '../db';
 import { chainFrom, executeRewind, previewRewind } from '../agent/rewind';
+import type { RewindAnchor } from '../agent/rewind';
 import {
   attachmentsDir,
   currentConversationId,
@@ -100,14 +101,14 @@ let currentTurn: { conversationId: string; turnId: string; anchorUuid: string | 
  * (行为等价但语义含糊)。所以这里返回 null 时,调用方**整个键都不放进 options**。
  */
 function readGuardrail(
-  s: { get<T>(k: string): T | null },
+  s: { get<T>(k: string): T | null; has(k: string): boolean },
   key: string,
   fallback: number,
 ): number | null {
-  const v = s.get<number | null>(key);
-  // 从没设过 → 用默认值;显式设成 null → 不限
-  if (v === undefined) return fallback;
-  return v === null ? null : v;
+  // ⚠ 必须用 has() 区分「没设过」与「显式设成 null(不限)」——
+  // `get(k) ?? fallback` 会把两者混为一谈,用户选的"不限"每次都被打回默认值
+  if (!s.has(key)) return fallback;
+  return s.get<number | null>(key);
 }
 
 export function registerAgentIpc(store: GtdStore, clock: Clock): void {
@@ -184,8 +185,8 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
   const guardrails = (): GuardrailsVM => {
     const s = settingsStore();
     return {
-      maxTurns: s.get<number>(MAX_TURNS_KEY) ?? DEFAULT_MAX_TURNS,
-      maxBudgetUsd: s.get<number>(MAX_BUDGET_KEY) ?? DEFAULT_MAX_BUDGET,
+      maxTurns: readGuardrail(s, MAX_TURNS_KEY, DEFAULT_MAX_TURNS),
+      maxBudgetUsd: readGuardrail(s, MAX_BUDGET_KEY, DEFAULT_MAX_BUDGET),
       sessionAlive: sessionAlive(),
       sessionBusy: sessionBusy(),
     };
@@ -385,8 +386,8 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
       memoryPath: ensureUserMemory().path,
       alive: sessionAlive(),
       busy: sessionBusy(),
-      maxTurns: s.get<number>(MAX_TURNS_KEY) ?? DEFAULT_MAX_TURNS,
-      maxBudgetUsd: s.get<number>(MAX_BUDGET_KEY) ?? DEFAULT_MAX_BUDGET,
+      maxTurns: readGuardrail(s, MAX_TURNS_KEY, DEFAULT_MAX_TURNS),
+      maxBudgetUsd: readGuardrail(s, MAX_BUDGET_KEY, DEFAULT_MAX_BUDGET),
       lastConversationId: s.get<string>(LAST_CONV_KEY),
       conversationId: convId,
       model: s.get<string>(MODEL_KEY),
@@ -508,16 +509,16 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
 
   // ------------------------------------------------------------ 回滚(INV-35)
 
-  ipcMain.handle('agent:rewind.preview', (_e, p: { conversationId: string; turnIds: string[] }) => {
-    const rows = chainFrom(rawDb(), p.conversationId, p.turnIds);
+  ipcMain.handle('agent:rewind.preview', (_e, a: RewindAnchor) => {
+    const rows = chainFrom(rawDb(), a);
     if (rows.length === 0)
       return { entryCount: 0, tools: [], hardDeleteCount: 0, conflicts: [], foreignEntryCount: 0 };
-    return previewRewind(store.snapshot(), rows, p.conversationId);
+    return previewRewind(store.snapshot(), rows, a.conversationId);
   });
 
-  ipcMain.handle('agent:rewind.apply', (_e, p: { conversationId: string; turnIds: string[] }) => {
+  ipcMain.handle('agent:rewind.apply', (_e, a: RewindAnchor) => {
     if (sessionBusy()) return { error: '正在回复中,等这一轮结束再回滚' };
-    const rows = chainFrom(rawDb(), p.conversationId, p.turnIds);
+    const rows = chainFrom(rawDb(), a);
     if (rows.length === 0) return { error: '这一轮之后没有可撤销的改动' };
     try {
       const r = executeRewind(

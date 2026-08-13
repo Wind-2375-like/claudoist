@@ -463,3 +463,10 @@ export interface RewindPreviewVM {
   /** 链里混进的其它会话的条目数 */
   foreignEntryCount: number;
 }
+
+/** 回滚/分叉的锚点。本次会话的消息有 turnId,历史会话的只有 uuid(INV-35) */
+export interface RewindAnchorVM {
+  conversationId: string;
+  turnId?: string | undefined;
+  anchorUuid?: string | undefined;
+}

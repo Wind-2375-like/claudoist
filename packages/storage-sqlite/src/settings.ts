@@ -10,6 +10,14 @@ import type { DatabaseSync } from 'node:sqlite';
  */
 export interface SettingsStore {
   get<T>(key: string): T | null;
+  /**
+   * 键存不存在。
+   *
+   * **必要性**:`get` 缺键返回 `null`,而 `null` 本身也可能是一个**有意义的值**
+   * (护栏的"不限"就是 null)。只有 `get` 的话,`get(k) ?? 默认值` 会把用户显式选的
+   * "不限"当成"没设过"打回默认 —— 2026-08-13 用户实测踩到:护栏怎么调、关掉窗口都变回原样。
+   */
+  has(key: string): boolean;
   set(key: string, value: unknown): void;
   delete(key: string): void;
 }
@@ -26,6 +34,9 @@ export function createSettingsStore(db: DatabaseSync): SettingsStore {
         // 手改坏了的值不该让应用起不来
         return null;
       }
+    },
+    has(key: string): boolean {
+      return db.prepare('SELECT 1 FROM settings WHERE key = ?').get(key) !== undefined;
     },
     set(key: string, value: unknown): void {
       db.prepare(

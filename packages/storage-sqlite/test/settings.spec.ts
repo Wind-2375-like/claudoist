@@ -31,3 +31,36 @@ describe('settings KV 存储', () => {
     expect(s.get('broken')).toBeNull();
   });
 });
+
+describe('has():区分「没设过」与「显式设成 null」', () => {
+  /**
+   * 2026-08-13 用户实测踩到的 bug:护栏怎么调、关掉窗口都变回默认值。
+   * 根因是 `get(k) ?? 默认值` —— `get` 缺键返回 `null`,而 `null` 本身也是一个**有意义的值**
+   * (护栏的"不限"就是 null),两者被 `??` 混为一谈。只有 `has()` 能把它们分开。
+   */
+  it('缺键 has=false;存了 null 之后 has=true 而 get 仍是 null', () => {
+    const db = openDb(':memory:');
+    const s = createSettingsStore(db);
+    expect(s.has('k')).toBe(false);
+    expect(s.get('k')).toBeNull();
+
+    s.set('k', null);
+    expect(s.has('k')).toBe(true);
+    expect(s.get('k')).toBeNull();
+
+    // 这正是修复前会出错的地方:两种情况 get 都给 null
+    const readWithFallback = (key: string, fallback: number): number | null =>
+      s.has(key) ? s.get<number | null>(key) : fallback;
+    expect(readWithFallback('k', 40)).toBeNull(); // 用户选的"不限"被保住
+    expect(readWithFallback('never-set', 40)).toBe(40); // 没设过才用默认
+  });
+
+  it('delete 之后 has 回到 false', () => {
+    const db = openDb(':memory:');
+    const s = createSettingsStore(db);
+    s.set('k', 1);
+    expect(s.has('k')).toBe(true);
+    s.delete('k');
+    expect(s.has('k')).toBe(false);
+  });
+});

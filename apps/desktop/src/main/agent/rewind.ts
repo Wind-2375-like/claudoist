@@ -70,15 +70,34 @@ const parseRow = (r: Record<string, unknown>): RewindLogRow => ({
  * 起点取 `MIN(seq)`:菜单挂在某一轮上,「回滚到这里」= 撤销**这一轮及其之后**的一切。
  * 链必须连续 —— 跳号会让后面的逆基于错误的中间态。
  */
-export function chainFrom(db: Db, conversationId: string, turnIds: string[]): RewindLogRow[] {
-  if (turnIds.length === 0) return [];
-  const marks = turnIds.map(() => '?').join(',');
+export interface RewindAnchor {
+  conversationId: string;
+  /** 本次会话里新发的消息有它 */
+  turnId?: string | undefined;
+  /** 历史会话里只有它(我们塞给 SDK 的用户消息 uuid,transcript 里读得到) */
+  anchorUuid?: string | undefined;
+}
+
+/**
+ * 锚点解析放在**主进程**而不是渲染层:历史会话渲染出来的消息只有 uuid、没有 turnId,
+ * 渲染层没法自己算出"这一轮及之后"的 turnId 列表。服务端按 `MIN(seq)` 一次搞定,
+ * 两种锚点走同一条路。
+ */
+export function chainFrom(db: Db, a: RewindAnchor): RewindLogRow[] {
+  const where: string[] = ['conversation_id = ?', 'rewound_at IS NULL'];
+  const args: unknown[] = [a.conversationId];
+  if (a.turnId !== undefined) {
+    where.push('turn_id = ?');
+    args.push(a.turnId);
+  } else if (a.anchorUuid !== undefined) {
+    where.push('anchor_uuid = ?');
+    args.push(a.anchorUuid);
+  } else {
+    return [];
+  }
   const min = db
-    .prepare(
-      `SELECT MIN(seq) AS s FROM agent_rewind_log
-        WHERE conversation_id = ? AND turn_id IN (${marks}) AND rewound_at IS NULL`,
-    )
-    .get(conversationId, ...turnIds) as { s: number | null };
+    .prepare(`SELECT MIN(seq) AS s FROM agent_rewind_log WHERE ${where.join(' AND ')}`)
+    .get(...args) as { s: number | null };
   if (min.s === null) return [];
   // ⚠ 不按 conversation_id 过滤:链是**全局**的。别的会话在这期间写过同一行时,
   // 只回滚本会话的条目会停在中间态 —— 那些条目要么一并撤销,要么在预览里点名。

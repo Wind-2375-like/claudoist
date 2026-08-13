@@ -3,6 +3,7 @@ import type {
   AccountUsageVM,
   GuardrailsVM,
   AuditRowVM,
+  RewindAnchorVM,
   RewindPreviewVM,
   ConversationVM,
   ModelInfoVM,
@@ -195,13 +196,12 @@ const agentApi = {
     ipcRenderer.invoke('agent:send', { text, images, attachments }),
   interrupt: (): Promise<unknown> => ipcRenderer.invoke('agent:interrupt'),
   // ── 分叉 / 回滚(INV-35)──
-  rewindPreview: (conversationId: string, turnIds: string[]): Promise<RewindPreviewVM> =>
-    ipcRenderer.invoke('agent:rewind.preview', { conversationId, turnIds }),
+  rewindPreview: (anchor: RewindAnchorVM): Promise<RewindPreviewVM> =>
+    ipcRenderer.invoke('agent:rewind.preview', anchor),
   rewindApply: (
-    conversationId: string,
-    turnIds: string[],
+    anchor: RewindAnchorVM,
   ): Promise<{ ok?: boolean; entryCount?: number; backupPath?: string | null; error?: string }> =>
-    ipcRenderer.invoke('agent:rewind.apply', { conversationId, turnIds }),
+    ipcRenderer.invoke('agent:rewind.apply', anchor),
   forkAt: (
     conversationId: string,
     messageUuid: string,
@@ -233,8 +233,9 @@ const agentApi = {
   conversations: (): Promise<ConversationVM[]> => ipcRenderer.invoke('agent:conversations.list'),
   transcript: (
     id: string,
-  ): Promise<{ items: { role: 'user' | 'assistant'; text: string; tools: string[] }[] }> =>
-    ipcRenderer.invoke('agent:conversations.transcript', { id }),
+  ): Promise<{
+    items: { role: 'user' | 'assistant'; uuid: string | null; text: string; tools: string[] }[];
+  }> => ipcRenderer.invoke('agent:conversations.transcript', { id }),
   deleteConversation: (id: string): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:conversations.delete', { id }),
   usageTotals: (): Promise<{

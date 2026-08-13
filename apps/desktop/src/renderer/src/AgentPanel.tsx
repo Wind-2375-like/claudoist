@@ -5,7 +5,7 @@ import { ConversationList } from './ConversationList';
 import { PermissionPrompt } from './PermissionPrompt';
 import { ErrorBoundary } from './ErrorBoundary';
 import { toast } from './toast';
-import type { PermissionRequestVM } from '../../shared/viewModels';
+import type { PermissionRequestVM, RewindAnchorVM } from '../../shared/viewModels';
 import { isSubmitEnter } from './keys';
 import { renderMarkdown, selectionToMarkdown } from './markdown';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
@@ -42,7 +42,7 @@ type Item =
       /** 本地临时键:锚点要等主进程返回才回填,靠它找回这一条 */
       localKey?: string;
     }
-  | { kind: 'assistant'; text: string }
+  | { kind: 'assistant'; text: string; anchorUuid?: string }
   | { kind: 'thinking'; text: string }
   | {
       kind: 'tool';
@@ -154,7 +154,11 @@ export function AgentPanel(): React.JSX.Element {
   const [permQueue, setPermQueue] = useState<PermissionRequestVM[]>([]);
   /** 某条用户消息上的「分叉 / 回滚」菜单 */
   const [turnMenu, setTurnMenu] = useState<{ x: number; y: number; index: number } | null>(null);
-  const [rewind, setRewind] = useState<{ turnIds: string[]; alsoFork: boolean } | null>(null);
+  const [rewind, setRewind] = useState<{
+    anchor: RewindAnchorVM;
+    alsoFork: boolean;
+    index: number;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textBuf = useRef('');
   const thinkBuf = useRef('');
@@ -449,7 +453,13 @@ export function AgentPanel(): React.JSX.Element {
       setItems(
         t.items.map((x) =>
           x.role === 'user'
-            ? { kind: 'user' as const, text: x.text, imageCount: 0, attachments: [] }
+            ? {
+                kind: 'user' as const,
+                text: x.text,
+                imageCount: 0,
+                attachments: [],
+                ...(x.uuid !== null ? { messageUuid: x.uuid } : {}),
+              }
             : {
                 kind: 'assistant' as const,
                 text:
@@ -553,7 +563,6 @@ export function AgentPanel(): React.JSX.Element {
                 key={i}
                 className="group flex justify-end"
                 onContextMenu={(e) => {
-                  if (it.turnId === undefined) return;
                   e.preventDefault();
                   setTurnMenu({ x: e.clientX, y: e.clientY, index: i });
                 }}
@@ -574,13 +583,20 @@ export function AgentPanel(): React.JSX.Element {
           }
           if (it.kind === 'assistant') {
             return (
-              <AssistantBubble
+              <div
                 key={i}
-                text={it.text}
-                register={(el, src) => {
-                  if (el !== null) mdSources.current.set(el, src);
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setTurnMenu({ x: e.clientX, y: e.clientY, index: i });
                 }}
-              />
+              >
+                <AssistantBubble
+                  text={it.text}
+                  register={(el, src) => {
+                    if (el !== null) mdSources.current.set(el, src);
+                  }}
+                />
+              </div>
             );
           }
           if (it.kind === 'thinking') {
@@ -754,43 +770,80 @@ export function AgentPanel(): React.JSX.Element {
 
       {turnMenu !== null &&
         (() => {
-          const anchor = items[turnMenu.index];
-          if (anchor === undefined || anchor.kind !== 'user') return null;
-          // 「到这里」= 这一轮及其之后的**全部**回合
-          const turnIds = items
-            .slice(turnMenu.index)
-            .filter((x): x is Extract<Item, { kind: 'user' }> => x.kind === 'user')
-            .map((x) => x.turnId)
-            .filter((x): x is string => x !== undefined);
           const convId = status?.conversationId ?? null;
           const close = (): void => setTurnMenu(null);
-          const fork = (): void => {
-            close();
-            if (convId === null || anchor.messageUuid === undefined) return;
-            void window.agent.forkAt(convId, anchor.messageUuid).then((r) => {
-              if (r.error !== undefined) return toast(`分叉失败:${r.error}`);
-              toast('已从这里分叉 —— 原对话保留在历史里');
-              setItems((p) => p.slice(0, turnMenu.index));
-              void refreshStatus();
-            });
-          };
+          // 锚点:从点中的位置往前找最近一条**带锚点**的消息。
+          // 助手气泡上右键 = 锚到它对应的那条用户消息(回滚的语义是"回到我发那句之前")。
+          let anchor: { turnId?: string | undefined; anchorUuid?: string | undefined } | null =
+            null;
+          for (let k = turnMenu.index; k >= 0; k -= 1) {
+            const m = items[k];
+            if (m === undefined) continue;
+            if (m.kind === 'user' && (m.turnId !== undefined || m.messageUuid !== undefined)) {
+              anchor = { turnId: m.turnId, anchorUuid: m.messageUuid };
+              break;
+            }
+            if (m.kind === 'assistant' && m.anchorUuid !== undefined) {
+              anchor = { anchorUuid: m.anchorUuid };
+              break;
+            }
+          }
+          const why =
+            convId === null
+              ? '还没有会话'
+              : anchor === null
+                ? '这条消息定位不到轮次(可能来自更早的版本)'
+                : null;
+          const canFork = why === null && anchor?.anchorUuid !== undefined;
           return (
             <ContextMenu x={turnMenu.x} y={turnMenu.y} onClose={close}>
-              <ContextMenuItem onClick={fork}>⑂ 从这里分叉对话</ContextMenuItem>
+              {why !== null && (
+                <div className="px-3 py-1.5 text-[11px] text-neutral-400">{why}</div>
+              )}
               <ContextMenuItem
-                danger
+                disabled={!canFork}
+                title={canFork ? undefined : '这条消息没有可用于分叉的标识'}
                 onClick={() => {
                   close();
-                  if (convId !== null) setRewind({ turnIds, alsoFork: false });
+                  if (convId === null || anchor?.anchorUuid === undefined) return;
+                  void window.agent.forkAt(convId, anchor.anchorUuid).then((r) => {
+                    if (r.error !== undefined) return toast(`分叉失败:${r.error}`);
+                    toast('已从这里分叉 —— 原对话保留在历史里');
+                    setItems((p) => p.slice(0, turnMenu.index));
+                    void refreshStatus();
+                  });
+                }}
+              >
+                ⑂ 从这里分叉对话
+              </ContextMenuItem>
+              <ContextMenuItem
+                danger
+                disabled={why !== null}
+                onClick={() => {
+                  close();
+                  if (convId !== null && anchor !== null) {
+                    setRewind({
+                      anchor: { conversationId: convId, ...anchor },
+                      alsoFork: false,
+                      index: turnMenu.index,
+                    });
+                  }
                 }}
               >
                 ↺ 回滚到这里(撤销 agent 的改动)
               </ContextMenuItem>
               <ContextMenuItem
                 danger
+                disabled={why !== null || !canFork}
                 onClick={() => {
                   close();
-                  if (convId !== null) setRewind({ turnIds, alsoFork: true });
+                  if (convId !== null && anchor !== null) {
+                    setRewind({
+                      anchor: { conversationId: convId, ...anchor },
+                      alsoFork: true,
+                      index: turnMenu.index,
+                    });
+                  }
                 }}
               >
                 ⑂↺ 分叉并回滚
@@ -799,14 +852,13 @@ export function AgentPanel(): React.JSX.Element {
           );
         })()}
 
-      {rewind !== null && status?.conversationId != null && (
+      {rewind !== null && (
         <RewindDialog
-          conversationId={status.conversationId}
-          turnIds={rewind.turnIds}
+          anchor={rewind.anchor}
           alsoFork={rewind.alsoFork}
           onClose={() => setRewind(null)}
           onDone={() => {
-            const anchorIdx = turnMenu?.index ?? items.length;
+            const anchorIdx = rewind.index;
             setRewind(null);
             // 回滚就地截断对话(用户定案):不截断的话 agent 会基于"说做了、其实没做"的
             // 上下文继续操作

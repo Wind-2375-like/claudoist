@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from './toast';
-import type { RewindPreviewVM } from '../../shared/viewModels';
+import type { RewindAnchorVM, RewindPreviewVM } from '../../shared/viewModels';
 
 /**
  * 回滚确认框(INV-35)。
@@ -15,15 +15,13 @@ import type { RewindPreviewVM } from '../../shared/viewModels';
  *    回滚会把那些改动一起抹掉。有冲突时**默认按钮是取消**。
  */
 export function RewindDialog({
-  conversationId,
-  turnIds,
+  anchor,
   alsoFork,
   onClose,
   onDone,
 }: {
-  conversationId: string;
-  /** 锚点轮到最后一轮的全部 turnId */
-  turnIds: string[];
+  /** 锚点由主进程解析成 seq 区间 —— 历史消息只有 uuid,渲染层算不出轮次列表 */
+  anchor: RewindAnchorVM;
   /** 第三项:分叉 + 回滚 */
   alsoFork: boolean;
   onClose: () => void;
@@ -33,8 +31,8 @@ export function RewindDialog({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void window.agent.rewindPreview(conversationId, turnIds).then(setPv);
-  }, [conversationId, turnIds]);
+    void window.agent.rewindPreview(anchor).then(setPv);
+  }, [anchor]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -47,7 +45,7 @@ export function RewindDialog({
   const run = (): void => {
     if (busy) return;
     setBusy(true);
-    void window.agent.rewindApply(conversationId, turnIds).then((r) => {
+    void window.agent.rewindApply(anchor).then((r) => {
       setBusy(false);
       if (r.error !== undefined) return toast(`回滚失败:${r.error}`);
       toast(`已撤销 ${String(r.entryCount ?? 0)} 次改动${alsoFork ? ',并从这里分叉' : ''}`);

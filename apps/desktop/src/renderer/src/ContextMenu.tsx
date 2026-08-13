@@ -83,16 +83,23 @@ export function ContextMenu({
 export function ContextMenuItem({
   onClick,
   danger = false,
+  disabled = false,
+  title,
   children,
 }: {
   onClick: () => void;
   danger?: boolean;
+  /** 不可用时**灰掉并给出理由**,而不是让菜单项消失 —— 消失了用户只会以为功能坏了 */
+  disabled?: boolean;
+  title?: string | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <button
       type="button"
-      className={`block w-full px-3 py-1.5 text-left text-sm whitespace-nowrap ${
+      disabled={disabled}
+      title={title}
+      className={`block w-full px-3 py-1.5 text-left text-sm whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40 ${
         danger ? 'text-red-600 hover:bg-red-50' : 'hover:bg-neutral-50'
       }`}
       onClick={onClick}

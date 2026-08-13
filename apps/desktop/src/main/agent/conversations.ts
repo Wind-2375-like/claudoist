@@ -89,6 +89,8 @@ export async function removeConversation(id: string): Promise<{ error?: string }
 
 export interface TranscriptItem {
   role: 'user' | 'assistant';
+  /** 消息 uuid —— 历史会话里回滚/分叉的唯一锚点(丢了它,历史消息上的菜单就全是灰的) */
+  uuid: string | null;
   text: string;
   /** 该条里出现的工具名(用来在历史里也显示 chip) */
   tools: string[];
@@ -103,7 +105,11 @@ export interface TranscriptItem {
 export async function transcript(sdkSessionId: string): Promise<TranscriptItem[]> {
   const msgs = await getSessionMessages(sdkSessionId, { dir: projectDir() });
   const out: TranscriptItem[] = [];
-  for (const m of msgs as { type?: string; message?: { role?: string; content?: unknown } }[]) {
+  for (const m of msgs as {
+    type?: string;
+    uuid?: string;
+    message?: { role?: string; content?: unknown };
+  }[]) {
     const role = m.message?.role;
     if (role !== 'user' && role !== 'assistant') continue;
     const content = m.message?.content;
@@ -119,7 +125,7 @@ export async function transcript(sdkSessionId: string): Promise<TranscriptItem[]
     // 我们给每条用户消息前置的 [此刻 …] 时间戳块不该出现在历史气泡里
     text = text.replace(/^\[此刻[^\]]*\]\s*/, '').trim();
     if (text === '' && tools.length === 0) continue;
-    out.push({ role, text, tools });
+    out.push({ role, uuid: m.uuid ?? null, text, tools });
   }
   return out;
 }
