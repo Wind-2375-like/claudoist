@@ -449,7 +449,7 @@ export function CalendarView(): React.JSX.Element {
               ref={(el) => {
                 colRefs.current[di] = el;
               }}
-              className="relative min-w-0 flex-1 border-l border-neutral-100"
+              className="relative min-w-0 flex-1 border-l border-neutral-100 select-none"
               onMouseDown={(e) => {
                 if (e.button !== 0) return;
                 // 通常只在"落在列本身"时起手,免得在块上按下也开始拖选。

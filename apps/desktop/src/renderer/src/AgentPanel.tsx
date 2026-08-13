@@ -7,6 +7,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { toast } from './toast';
 import type { PermissionRequestVM } from '../../shared/viewModels';
 import { isSubmitEnter } from './keys';
+import { renderMarkdown, selectionToMarkdown } from './markdown';
 
 /**
  * Agent 面板。M8 只读版 → M9 加审批与权限模式 → M10 加历史会话、附件、effort/thinking。
@@ -70,6 +71,42 @@ const SUGGESTIONS: { label: string; prompt: string; needsWrite?: boolean }[] = [
 
 const shortName = (n: string): string => n.replace(/^mcp__gtd__/, '');
 
+/** 单条助手回复:渲染 Markdown + 一颗"复制原文"按钮。 */
+function AssistantBubble({
+  text,
+  register,
+}: {
+  text: string;
+  register?: (el: Element | null, src: string) => void;
+}): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="group relative max-w-[92%] rounded-2xl bg-neutral-800 px-3 py-2 text-sm">
+      <div
+        data-md-bubble=""
+        ref={(el) => {
+          register?.(el, text);
+        }}
+      >
+        {renderMarkdown(text)}
+      </div>
+      <button
+        type="button"
+        title="复制 Markdown 原文"
+        className="absolute top-1 right-1 rounded border border-neutral-700 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-500 opacity-60 group-hover:opacity-100 hover:text-neutral-100"
+        onClick={() => {
+          void navigator.clipboard.writeText(text).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          });
+        }}
+      >
+        {copied ? '已复制' : '复制'}
+      </button>
+    </div>
+  );
+}
+
 /**
  * 给审批中的工具 chip 打「等待你批准…」。
  *
@@ -107,6 +144,8 @@ export function AgentPanel(): React.JSX.Element {
   const thinkBuf = useRef('');
   /** content_block index → tool chip id(input_json_delta 靠 index 找回 chip) */
   const blockTool = useRef<Map<number, string>>(new Map());
+  /** 气泡 DOM → 它的 Markdown 原文(复制时按选区切片) */
+  const mdSources = useRef<WeakMap<Element, string>>(new WeakMap());
 
   const refreshStatus = useCallback(async () => {
     setStatus((await window.agent.status()) as AgentStatusVM);
@@ -445,7 +484,20 @@ export function AgentPanel(): React.JSX.Element {
         </div>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3 select-text"
+        onCopy={(e) => {
+          // 渲染成 HTML 之后,浏览器默认复制的是**看得见的文字**(`**粗体**` 变成 `粗体`)。
+          // 用户要的是能粘回去仍然成立的 Markdown 原文,所以自己接管 copy。
+          const sel = window.getSelection();
+          if (sel === null) return;
+          const md = selectionToMarkdown(sel, (el) => mdSources.current.get(el) ?? null);
+          if (md === null) return; // 选区不在气泡里 → 交回浏览器默认行为
+          e.clipboardData.setData('text/plain', md);
+          e.preventDefault();
+        }}
+      >
         {status !== null && !status.loggedIn && (
           <div className="rounded-lg bg-amber-950/60 px-3 py-2 text-xs text-amber-200">
             没检测到本机 Claude Code 登录。请在终端执行 <code>claude</code> 完成登录,然后点下面的
@@ -466,7 +518,7 @@ export function AgentPanel(): React.JSX.Element {
           if (it.kind === 'user') {
             return (
               <div key={i} className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl bg-blue-600 px-3 py-1.5 text-sm whitespace-pre-wrap">
+                <div className="max-w-[85%] rounded-2xl bg-blue-600 px-3 py-1.5 text-sm whitespace-pre-wrap select-text">
                   {it.text}
                   {it.imageCount > 0 && (
                     <span className="ml-1 text-[11px] opacity-80">+{it.imageCount} 图</span>
@@ -482,12 +534,13 @@ export function AgentPanel(): React.JSX.Element {
           }
           if (it.kind === 'assistant') {
             return (
-              <div
+              <AssistantBubble
                 key={i}
-                className="max-w-[92%] rounded-2xl bg-neutral-800 px-3 py-1.5 text-sm whitespace-pre-wrap"
-              >
-                {it.text}
-              </div>
+                text={it.text}
+                register={(el, src) => {
+                  if (el !== null) mdSources.current.set(el, src);
+                }}
+              />
             );
           }
           if (it.kind === 'thinking') {

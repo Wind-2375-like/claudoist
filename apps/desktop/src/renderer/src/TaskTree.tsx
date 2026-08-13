@@ -319,6 +319,10 @@ export function TaskTree({
                 else rowRefs.current.delete(id);
               }}
               draggable
+              // 只在**可拖拽的行**上禁选:选中文本会跟 HTML5 拖拽打架。
+              // 早先是整个应用根节点 select-none,代价是对话、任务标题全都复制不了
+              // (2026-08-12 用户反馈)。
+              className="select-none"
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = 'move';
                 e.dataTransfer.setData('text/plain', id);

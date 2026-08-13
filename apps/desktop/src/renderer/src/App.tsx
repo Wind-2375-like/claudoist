@@ -352,7 +352,7 @@ export function App(): React.JSX.Element {
   );
 
   return (
-    <div className="flex h-screen select-none bg-white text-neutral-800">
+    <div className="flex h-screen bg-white text-neutral-800">
       {/* 左栏:menu */}
       <aside
         style={{ width: left.width }}

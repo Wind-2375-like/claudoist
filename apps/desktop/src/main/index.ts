@@ -30,6 +30,9 @@ const screenshotTypeArg = process.argv.find((a) => a.startsWith('--screenshot-ty
 const screenshotSubmit = process.argv.includes('--screenshot-submit');
 // 拍摄前额外等待,用于等异步界面(agent 一次往返十几秒)
 const screenshotDelayArg = process.argv.find((a) => a.startsWith('--screenshot-delay='));
+// 在渲染层求值并打印结果(dev 专用)。用来验那些**没法单测的 DOM 行为** ——
+// 比如"选中一段渲染后的 Markdown、复制出来的是不是原文"。
+const screenshotEvalArg = process.argv.find((a) => a.startsWith('--screenshot-eval='));
 // 滚动某个容器再拍(长面板的下半截):--screenshot-scroll=<选择器>|<top px>
 const screenshotScrollArg = process.argv.find((a) => a.startsWith('--screenshot-scroll='));
 // 等待之后再点(用来点异步才出现的东西,比如审批弹窗上的按钮)
@@ -232,6 +235,15 @@ if (agentSmokeArg) {
                 return true;
               })()`);
               await new Promise((r) => setTimeout(r, 400));
+            }
+            if (screenshotEvalArg) {
+              const js = screenshotEvalArg.slice('--screenshot-eval='.length);
+              try {
+                const out: unknown = await win.webContents.executeJavaScript(js);
+                process.stdout.write(`[EVAL] ${JSON.stringify(out)}\n`);
+              } catch (e) {
+                process.stdout.write(`[EVAL_ERROR] ${String(e)}\n`);
+              }
             }
             const img = await win.webContents.capturePage();
             writeFileSync(path, img.toPNG());
