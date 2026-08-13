@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import type { Clock, GtdStore, RewindStore } from '@gtd/domain';
 import type { AccountUsageVM, GuardrailsVM } from '../../shared/viewModels';
 import { toolManual } from '@gtd/agent-tools';
+import type { WriteToolDeps } from '@gtd/agent-tools';
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import { authStatus, localSnapshot } from '../agent/auth';
@@ -430,13 +431,21 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
     s.set(LAST_CONV_KEY, conversationId);
 
     // plan 模式**根本不注册写工具**:纵深防御 —— 即使审批逻辑写错了,工具也不存在
-    const writeDeps =
+    // ⚠ 这里的**显式类型标注是必要的**,不是啰嗦:下面用的
+    // `...(writeDeps !== undefined ? { write: writeDeps } : {})` 条件展开会让 TS
+    // **不再检查缺字段**。`rewindContext` 当初就是这么漏掉的 —— 编译通过、agent 照常写数据、
+    // 回滚日志一行不记,功能整个是死的却没有任何报错。
+    const writeDeps: WriteToolDeps | undefined =
       mode === 'plan'
         ? undefined
         : {
             store,
             deps: { clock, idGen: { next: (): string => crypto.randomUUID() } },
             onChanged: (): void => broadcastChanged('agent'),
+            // 只有聊天 agent 的写入记逆命令日志(INV-35);Google 同步走 ipc/google.ts,
+            // 拿不到这个上下文,天然不会被卷进回滚
+            rewindContext: () =>
+              currentTurn === null ? null : { ...currentTurn, toolUseId: null },
           };
 
     startSession(

@@ -39,6 +39,7 @@ function harness(initial: Partial<GtdSnapshot> = {}): Harness {
     onChanged: () => {
       changedCalls += 1;
     },
+    rewindContext: () => null,
     applies,
     get changedCalls() {
       return changedCalls;
@@ -224,3 +225,63 @@ function base(): GtdSnapshot['tasks'][number] {
     timeZone: null,
   };
 }
+
+describe('INV-35 逆命令日志:必须真的被记下来', () => {
+  /**
+   * 这一组存在的理由很具体:`rewindContext` 曾经是**可选**字段,而它在主进程的构造点上
+   * 被一次静默失败的字符串替换漏掉了 —— 编译通过、agent 照常写数据、回滚日志一行不记,
+   * 功能整个是死的却没有任何报错(2026-08-13 从用户库里查出来的)。
+   * 字段已改为必填;这里再从行为上钉一遍:给了上下文就**必须**产出 meta。
+   */
+  const spy = (ctx: WriteToolDeps['rewindContext']): { h: Harness; metas: unknown[] } => {
+    const h = harness();
+    const metas: unknown[] = [];
+    const store: GtdStore = {
+      snapshot: h.store.snapshot.bind(h.store),
+      apply: (cmds, actor, meta) => {
+        metas.push(meta);
+        h.store.apply(cmds, actor);
+      },
+    };
+    return { h: { ...h, store, rewindContext: ctx }, metas };
+  };
+
+  it('有回合上下文 → apply 带上逆命令批', () => {
+    const { h, metas } = spy(() => ({
+      conversationId: 'c1',
+      turnId: 't1',
+      anchorUuid: 'u1',
+      toolUseId: null,
+    }));
+    expect(W.createTask(h, { title: '买牛奶' }).ok).toBe(true);
+    expect(metas).toHaveLength(1);
+    const log = (metas[0] as { rewindLog?: Record<string, unknown> }).rewindLog!;
+    expect(log['conversationId']).toBe('c1');
+    expect(log['turnId']).toBe('t1');
+    expect(log['toolName']).toBe('create_task');
+    // createTask 的逆是硬删 —— 回滚要让这行整个消失
+    const batch = log['batch'] as { inverse: { kind: string }[] };
+    expect(batch.inverse[0]!.kind).toBe('hardDeleteTask');
+  });
+
+  it('没有回合上下文(Google 同步 / CLI / 冒烟)→ 不记日志', () => {
+    const { h, metas } = spy(() => null);
+    expect(W.createTask(h, { title: 'x' }).ok).toBe(true);
+    expect(metas[0]).toBeUndefined();
+  });
+
+  it('工具名如实记录 —— 预览界面靠它告诉用户会撤销什么', () => {
+    const { h, metas } = spy(() => ({
+      conversationId: 'c1',
+      turnId: 't1',
+      anchorUuid: null,
+      toolUseId: null,
+    }));
+    W.createTask(h, { title: 'a' });
+    W.capture(h, ['b']);
+    const names = metas.map(
+      (m) => ((m as { rewindLog?: { toolName?: string } }).rewindLog ?? {}).toolName,
+    );
+    expect(names).toEqual(['create_task', 'capture']);
+  });
+});

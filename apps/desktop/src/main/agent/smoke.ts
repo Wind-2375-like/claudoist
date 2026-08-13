@@ -51,6 +51,8 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
         store,
         deps: { clock, idGen: { next: (): string => crypto.randomUUID() } },
         onChanged: (): void => undefined,
+        // 冒烟不记逆命令日志 —— 这是**声明**,不是遗忘(字段必填正是为了逼出这个选择)
+        rewindContext: () => null,
       }
     : undefined;
 

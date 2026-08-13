@@ -63,8 +63,13 @@ export interface WriteToolDeps {
    * **刻意做成显式回调,而不是按 `actor === 'agent'` 判断** —— Google 日历同步也用
    * `'agent'` 这个 actor,按 actor 挂钩会把日历同步一起卷进回滚,还会硬删镜像任务。
    * 只有聊天 agent 的写入才经过这里。
+   *
+   * ⚠ **必填,不是可选**。做成可选的那一版被我漏在了 ipc/agent.ts 的构造点上
+   * (一次静默失败的字符串替换),结果 agent 照常写数据、回滚日志一行不记 ——
+   * 功能整个是死的,但没有任何报错。必填能让这种遗漏在编译期就炸出来。
+   * 确实不需要记日志的调用方(冒烟、测试)显式写 `() => null`,那是**声明**,不是遗忘。
    */
-  rewindContext?: () => {
+  rewindContext: () => {
     conversationId: string;
     turnId: string;
     anchorUuid: string | null;
