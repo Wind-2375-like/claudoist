@@ -406,16 +406,40 @@ export function AgentPanel(): React.JSX.Element {
     [busy, ensureSession, images, attachments],
   );
 
+  /**
+   * 粘贴图片。
+   *
+   * 两个坑,都在 2026-08-13 用户反馈后实测确认:
+   *
+   * 1. **原来的 `btoa(String.fromCharCode(...new Uint8Array(buf)))` 会爆栈**。展开一个
+   *    1MB 的 Uint8Array 等于给函数传一百万个参数 —— 实测 200KB 就 `RangeError:
+   *    Maximum call stack size exceeded`,而截图基本都超这个量级。更糟的是它在 `.then`
+   *    里抛,没人接,**静默失败**:用户按了 Cmd+V,什么都没发生,也没有任何提示。
+   *    改用原生 `FileReader.readAsDataURL`,没有大小限制,base64 由浏览器做。
+   * 2. **原来只挂在 textarea 上**,焦点不在输入框时粘贴无效。改挂到整个面板 ——
+   *    用户的心智是"随时都能粘",不该要求他先点一下输入框。
+   */
+  const readImage = (file: File): void => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result);
+      const comma = url.indexOf(',');
+      if (comma < 0) return void toast('这张图片读不出来');
+      setImages((p) => [...p, { data: url.slice(comma + 1), mediaType: file.type }]);
+    };
+    reader.onerror = () => toast(`图片读取失败:${reader.error?.message ?? '未知错误'}`);
+    reader.readAsDataURL(file);
+  };
+
   const onPaste = (e: React.ClipboardEvent): void => {
-    for (const item of e.clipboardData.items) {
-      if (!item.type.startsWith('image/')) continue;
-      const file = item.getAsFile();
-      if (!file) continue;
-      void file.arrayBuffer().then((buf) => {
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        setImages((p) => [...p, { data: b64, mediaType: file.type }]);
-      });
-    }
+    const files = [...e.clipboardData.items]
+      .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+      .map((i) => i.getAsFile())
+      .filter((f): f is File => f !== null);
+    if (files.length === 0) return;
+    // 有图就别让浏览器再把剪贴板里的文本塞进输入框
+    e.preventDefault();
+    for (const f of files) readImage(f);
   };
 
   /**
@@ -485,6 +509,7 @@ export function AgentPanel(): React.JSX.Element {
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={onDrop}
+      onPaste={onPaste}
     >
       <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-3">
         <span className="text-sm font-semibold">Agent</span>
@@ -726,7 +751,6 @@ export function AgentPanel(): React.JSX.Element {
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onPaste={onPaste}
           onKeyDown={(e) => {
             if (isSubmitEnter(e) && !e.shiftKey) {
               e.preventDefault();
@@ -734,7 +758,7 @@ export function AgentPanel(): React.JSX.Element {
             }
           }}
           rows={3}
-          placeholder="给 Claude 发消息…(Enter 发送,可粘贴图片、拖入文件)"
+          placeholder="给 Claude 发消息…(Enter 发送;图片随时可粘贴,文件可拖入)"
           className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none placeholder:text-neutral-500 focus:border-neutral-500"
         />
         <div className="mt-1 flex min-h-[18px] items-center gap-2 text-[11px] text-neutral-500">
