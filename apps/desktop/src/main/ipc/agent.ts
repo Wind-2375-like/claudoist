@@ -1,10 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { Clock, GtdStore } from '@gtd/domain';
+import type { Clock, GtdStore, RewindStore } from '@gtd/domain';
 import type { AccountUsageVM, GuardrailsVM } from '../../shared/viewModels';
 import { toolManual } from '@gtd/agent-tools';
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
+import { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import { authStatus, localSnapshot } from '../agent/auth';
 import { invalidateSnapshot, readModels, readSnapshot } from '../agent/probe';
 import {
@@ -23,7 +24,8 @@ import {
   syncBuiltinSkills,
   writeSkill,
 } from '../agent/skills';
-import { agentStore, settingsStore } from '../db';
+import { agentStore, rawDb, settingsStore } from '../db';
+import { chainFrom, executeRewind, previewRewind } from '../agent/rewind';
 import {
   attachmentsDir,
   currentConversationId,
@@ -83,6 +85,14 @@ const EFFORT_KEY = 'agent.effort';
 const THINKING_KEY = 'agent.thinking';
 
 type ThinkingMode = 'off' | 'hidden' | 'shown';
+
+/**
+ * 当前回合(INV-35)。`agent:send` 时置位,写工具靠它决定要不要记逆命令日志。
+ * **只有聊天 agent 的写入经过这里** —— Google 同步走 ipc/google.ts,拿不到这个上下文,
+ * 因此天然不会被卷进回滚。
+ */
+let currentTurn: { conversationId: string; turnId: string; anchorUuid: string | null } | null =
+  null;
 
 /**
  * 读护栏值。**`null` 表示"不限",要翻译成"不传这个选项"** ——
@@ -482,7 +492,68 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
     (_e, p: { text: string; images?: AgentImage[]; attachments?: string[] }) => {
       const convId = currentConversationId();
       if (convId !== null) titleFromFirstMessage(convId, p.text);
-      return send(p.text, p.images ?? [], p.attachments ?? []);
+      const r = send(p.text, p.images ?? [], p.attachments ?? []);
+      // 每条用户消息开一个新回合。turnId 本地生成(不依赖 SDK 的任何未公开行为),
+      // anchorUuid 是我们自己塞给 SDK 的那个 uuid —— 它同时是 forkSession 的 upToMessageId。
+      if (convId !== null && r.error === undefined) {
+        currentTurn = {
+          conversationId: convId,
+          turnId: crypto.randomUUID(),
+          anchorUuid: r.messageUuid ?? null,
+        };
+      }
+      return { ...r, turnId: currentTurn?.turnId };
+    },
+  );
+
+  // ------------------------------------------------------------ 回滚(INV-35)
+
+  ipcMain.handle('agent:rewind.preview', (_e, p: { conversationId: string; turnIds: string[] }) => {
+    const rows = chainFrom(rawDb(), p.conversationId, p.turnIds);
+    if (rows.length === 0)
+      return { entryCount: 0, tools: [], hardDeleteCount: 0, conflicts: [], foreignEntryCount: 0 };
+    return previewRewind(store.snapshot(), rows, p.conversationId);
+  });
+
+  ipcMain.handle('agent:rewind.apply', (_e, p: { conversationId: string; turnIds: string[] }) => {
+    if (sessionBusy()) return { error: '正在回复中,等这一轮结束再回滚' };
+    const rows = chainFrom(rawDb(), p.conversationId, p.turnIds);
+    if (rows.length === 0) return { error: '这一轮之后没有可撤销的改动' };
+    try {
+      const r = executeRewind(
+        rawDb(),
+        store as unknown as RewindStore,
+        rows,
+        new Date().toISOString(),
+        join(app.getPath('userData'), 'rewind-backups'),
+      );
+      broadcastChanged('user');
+      return { ok: true, entryCount: rows.length, backupPath: r.backupPath };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  /** 从某条消息分叉:forkSession 是纯文件操作,零 token */
+  ipcMain.handle(
+    'agent:conversations.forkAt',
+    async (e, p: { conversationId: string; messageUuid: string }) => {
+      const row = agentStore().getConversation(p.conversationId);
+      if (!row || row.sdkSessionId === null) return { error: '这条会话还没有可分叉的记录' };
+      try {
+        const { sessionId } = await forkSession(row.sdkSessionId, {
+          dir: app.getPath('userData'),
+          upToMessageId: p.messageUuid,
+        });
+        const newId = createConversation(row.model, p.conversationId);
+        agentStore().setSdkSessionId(newId, sessionId);
+        destroySession();
+        settingsStore().set(LAST_CONV_KEY, newId);
+        startHandler(e, { conversationId: newId });
+        return { ok: true, conversationId: newId };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
     },
   );
 

@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import type { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -12,12 +13,14 @@ import {
 
 let settings: SettingsStore | null = null;
 let agent: AgentStore | null = null;
+let raw: DatabaseSync | null = null;
 
 /** 在 userData/data 开库并迁移(dev 后缀已在 index.ts 顶部生效)。 */
 export function initStore(): SqliteGtdStore {
   const dir = join(app.getPath('userData'), 'data');
   mkdirSync(dir, { recursive: true });
   const db = openDb(join(dir, 'gtd.sqlite3'));
+  raw = db;
   settings = createSettingsStore(db);
   agent = createAgentStore(db);
   return new SqliteGtdStore(db);
@@ -27,6 +30,12 @@ export function initStore(): SqliteGtdStore {
 export function settingsStore(): SettingsStore {
   if (settings === null) throw new Error('settingsStore() 须在 initStore() 之后调用');
   return settings;
+}
+
+/** 原始连接。回滚(INV-35)要直接跑 agent_rewind_log 的查询与 VACUUM INTO。 */
+export function rawDb(): DatabaseSync {
+  if (raw === null) throw new Error('rawDb() 须在 initStore() 之后调用');
+  return raw;
 }
 
 /** 会话索引 + 工具审计(M9/M10);须在 initStore 之后调用。 */

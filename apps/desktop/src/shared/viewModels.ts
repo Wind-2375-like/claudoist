@@ -452,3 +452,14 @@ export interface GuardrailsVM {
   sessionAlive: boolean;
   sessionBusy: boolean;
 }
+
+/** 回滚预检(INV-35):确认框上的数字与执行结果同源 */
+export interface RewindPreviewVM {
+  entryCount: number;
+  tools: { name: string; count: number }[];
+  /** 会被**硬删除**的行数 —— 整套机制里唯一真正不可逆的部分 */
+  hardDeleteCount: number;
+  conflicts: { seq: number; toolName: string; detail: string }[];
+  /** 链里混进的其它会话的条目数 */
+  foreignEntryCount: number;
+}

@@ -501,4 +501,36 @@ DROP TABLE projects;
 ALTER TABLE projects_v16 RENAME TO projects;
 `,
   },
+  {
+    version: 17,
+    name: 'agent-rewind-log',
+    // INV-35:agent 改动的逆命令日志。一次 store.apply(带 rewind meta)写一行。
+    //
+    // 三个刻意的设计:
+    // 1. **conversation_id 不加外键**。删会话时若连带删日志行,会在全局逆序链上打洞 ——
+    //    后面的逆就会基于错误的中间态。宁可留下锚点不可达的孤儿行。
+    // 2. **seq 是全局单调的**,回滚严格按它降序、不跳号(见 domain/ports/rewind.ts 的链序引理)。
+    // 3. **存 after 而不存 forward**。forward 在 agent_audit.input_json 里已有近似物;
+    //    after 是冲突检测唯一的依据 —— 没有它,回滚就是静默覆盖用户自己的改动。
+    sql: `
+CREATE TABLE agent_rewind_log (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL,
+  anchor_uuid TEXT,
+  tool_name TEXT NOT NULL,
+  tool_use_id TEXT,
+  inverse_json TEXT NOT NULL,
+  after_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  rewound_at TEXT
+);
+CREATE INDEX idx_rewind_conv ON agent_rewind_log(conversation_id, seq);
+CREATE INDEX idx_rewind_turn ON agent_rewind_log(turn_id);
+
+ALTER TABLE agent_audit ADD COLUMN tool_use_id TEXT;
+ALTER TABLE agent_audit ADD COLUMN rewound_at TEXT;
+ALTER TABLE conversations ADD COLUMN forked_at_message_uuid TEXT;
+`,
+  },
 ];

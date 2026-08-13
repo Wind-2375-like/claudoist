@@ -511,6 +511,37 @@ tasks/waiting_for/comments/labels —— 那是 D-01 否决过的"一次确认�
 未解决等待项数出现在 consequences;已删项目不能被完成/编辑/挂等待项;完成其下任务不再
 触发项目追问;⌘K 搜得到且排最后;`restoreContents` 只捞同批。
 
+
+#### INV-35 agent 改动的回滚(rewind,2026-08-13,D-36)
+
+**规则**:聊天 agent 的每一次写入,在其**唯一汇聚点**(`writeTools.apply`)上按 apply
+**之前**的快照算出逆命令批,与改动本身在**同一个事务**里写进 `agent_rewind_log`。
+回滚 = 从最新一条起、按 `seq` **严格降序、不跳号**地把逆命令贴回去,直到锚点那一轮。
+
+1. **锚点是用户消息**。`turnId` 本地生成(不依赖 SDK 任何未公开行为);`anchorUuid` 是我们
+   自己塞给 `SDKUserMessage.uuid` 的值,同时充当 `forkSession` 的 `upToMessageId`。
+2. **不按 `actor === 'agent'` 挂钩**。Google 日历同步也用这个 actor —— 按 actor 判断会把
+   日历同步一起卷进回滚,还会硬删镜像任务。必须靠显式的回合上下文。
+3. **硬删不进 `Command` 联合**。`Command` 是"用户意图"的词汇表,而删除 = 软删(INV-22/D-01)。
+   另立 `RewindCommand`,只有回滚执行器认得。
+4. **`create*` 的逆是硬删,且 refuse 不 cascade**:有入向引用时报冲突交用户裁决 ——
+   那些引用只可能是用户自己加的,级联删等于悄悄吞掉用户的改动。
+5. **副作用不回滚**:`updateReminder` 的逆剔除 `dispatched`,否则提醒会再响一次。
+6. **幂等命令的逆也必须幂等**:`assignLabel` 只在 before 里不存在该 pair 时才逆成 unassign,
+   否则会摘掉用户原本就有的标签。
+7. **冲突检测靠 `after`**:按降序走时某字段的当前值应当恒等于该条目记录的 after,不等即冲突。
+   这个判据天然覆盖用户手改、Google 回同步、另一条会话 —— 所以**不需要**给行加 `updated_at`。
+8. **回滚不可撤销**(不进日志、界面无 undo),但:执行前强制 diff 预览(条数/工具/硬删数/
+   冲突逐条)、冲突必须显式裁决、事务前 `VACUUM INTO` 一份整库备份留作人工救援。
+9. **回滚就地截断对话**(D-36):不截断的话 agent 会基于与现实不符的上下文继续操作。
+
+**链序引理**(实现的地基,写在 `packages/domain/src/ports/rewind.ts`):按 seq 降序应用时,
+外部写入造成的冲突对每个字段**至多被检出一次**,即在触及它的最新那条上;全链走完后该字段
+= 触及它的最早那条的 before 值。
+
+**验收**:apply 后逆 apply 回到原快照(往返性质);两轮改同一字段、倒序回滚回到最初值;
+用户插一手后预检报出字段级冲突;`create` 的逆让行整个消失;标签幂等;提醒不重响。
+
 ---
 
 ## 4. 流程规格
@@ -847,6 +878,7 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-18 | 理清 = 强制逐题问答(§4.3 交互形态) | **理清双路径(2026-08-08 用户定案)**:① 手动 specify —— Inbox 条目展开为 Todoist 式卡片,直接补属性转为 Task,或转为 Project,或归档 Someday/Reference/Trash;② 交给 Claude 对话理清(M8/M9 经 MCP 工具)。分步问答状态机**保留为内部机制**(agent 驱动与 Weekly Review 内嵌用),UI 无独立入口 | 逐题问答对日常理清过重;§4.3 的**去向语义**(六种去向、deadline 继承、逐项一次事务 = 一次确认)全部保留,变的只是交互载体 |
 | D-19 | Action 无"计划哪天做"概念(日程只能是 CalendarItem) | Task 新增 `scheduledDate`(与 deadline 并存)。(后续 D-23/M6a:CalendarItem 并入 Task,时间即 `startTime`) | Todoist 式 today/tomorrow 快速安排是用户核心工作流;时刻与最迟完成日的语义区分保留(§2.5) |
 | D-30 | context 是必填单值实体,与 label 并存 | **context 并入 label(2026-08-11 用户定案,INV-24 退役)**:与 Todoist 一致只保留一种自由多值标签;label 名不含 `@`(`@` 是语法/显示前缀)。迁移 v11 把 context 变同名标签并补关联,**撞名直接合并**;tasks.context_id 与 contexts 表删除。engage 的"选情境"变成"选标签"(可不选 = 全部);捕捉不再有任何前置。语义损失:情境从必填降级为可选标签 | ✅ 已定 |
+| D-36 | 无法回退 agent 的改动 | **对话分叉 + agent 改动回滚(2026-08-13 用户定案,INV-35)**:三项菜单挂在用户消息上 —— 从这里分叉(SDK `forkSession(upToMessageId)`,纯文件操作、零 token)/ 回滚到这里(**就地截断对话** + 撤销数据)/ 分叉并回滚。**回滚就地截断对话**是用户裁决:不截断的话 agent 会基于"说做了、其实没做"的上下文继续操作。实现是**逆命令日志**而非快照(用户要求 efficient:一次 update 的逆只存被改到的键的旧值)。**回滚不可撤销**(界面无 undo),但执行前强制 diff 预览 + 冲突显式裁决 + `VACUUM INTO` 整库备份作人工救援 | ✅ 已定 |
 | D-35 | 项目只能"完成",没有删除 | **项目软删除(2026-08-12 用户诉求「project 没办法删除」,INV-34)**:`ProjectStatus` 加 `'deleted'` + `deletedAt`,与 Task 的软删同规。**不硬删**的三条理由:① 外键开着时 `DELETE FROM projects` 直接被拒,要硬删就得级联硬删 tasks/waiting_for/comments/labels —— 那正是 D-01 否决过的"一次确认蒸发整张清单、无 undo";② 已完成任务保留 `projectId` 是既定设计(与 INV-26.2 同源:删除不洗完成史),硬删会让"这件事当初属于哪个项目"永久消失;③ 误删撤销是软删唯一不可替代的价值。**项目内容的去向由用户显式二选**(`contents: 'delete' \| 'toInbox'`,无默认值):活跃任务**绝不能留在已删项目里** —— 留下的话它们在任何容器视图都不显示,却照样进 Today、择事与日历。配套:⌘K 仍返回已删项目(排最后)+ 只读项目视图 + 恢复按钮,否则软删对用户等于不可见的硬删。迁移 v16 重建 projects 表 | ✅ 已定 |
 | D-34 | 账号/模型/用量只能在"用户发过消息、有了活会话"之后读取(界面上写着「先发一条消息,再回来切换模型」) | **改为零 token 探针(2026-08-12,M11-A)**:SDK 那句 "only supported when streaming input/output is used" 说的是 **prompt 必须是 AsyncIterable**,**不是**"必须先发过一条消息"。给它一个**永不 yield** 的 AsyncIterable,子进程照常起、控制通道照常可用,而模型一次都不会被调用(实测 `session.total_cost_usd === 0`、`model_usage === {}`,端到端 0.8–1.7s)。于是 `initializationResult()`(账号 + 模型列表)与 `usage_EXPERIMENTAL_…()`(订阅额度 + 消耗归因)都能在没聊过天时读到。三条硬纪律:探针用**自己的** AbortController、**绝不**调 `startSession()`/`destroySession()`、有活会话且不忙时优先蹭活会话(探针与长驻会话并存已实测安全,两个独立子进程)。附带定案:护栏(`maxTurns`/`maxBudgetUsd`)是 spawn 期 CLI flag,**没有**热改途径 —— ⚠ `applyFlagSettings({maxTurns})` 会返回成功但什么都不做,是静默陷阱;改完只能显式重起会话(resume 保留上下文) | ✅ 已定 |
 | D-33 | 权限放行按 Claude Code 的原生机制:读工具进 `allowedTools` 自动放行、Bypass 用 `permissionMode: 'bypassPermissions'` | **改为「一切放行都经 `canUseTool`」(2026-08-11,M9 实现时定案)**:`allowedTools` 与 `bypassPermissions` 都会让调用**绕过** `canUseTool`,那条调用因此不进 `agent_audit` —— 审计缺了自动放行的那一半就等于没有审计(排查"它到底改了什么"时,恰恰是自动放行的那批最需要看)。改为工具面只由 `tools` + `mcpServers` 决定,放行一律在 `canUseTool` 里按策略表判定;"全部放行"实现为该函数一律返回 allow,于是连 `allowDangerouslySkipPermissions` 都不需要。代价:每次工具调用多一次进程内函数调用(可忽略)。另外两处随之调整:① **只读模式下写工具根本不注册**(纵深防御:审批逻辑写错了工具也不存在);② `complete_task` 是**动态**破坏性 —— 目标有活跃子任务时才升级,因为级联数量只在返回值里、事后才知道 | ✅ 已定 |

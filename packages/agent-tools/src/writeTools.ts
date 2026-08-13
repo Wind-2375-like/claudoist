@@ -20,7 +20,9 @@ import {
   updateProject,
   updateTask,
 } from '@gtd/domain';
+import { invertCommands } from '@gtd/domain';
 import type {
+  ApplyMeta,
   Command,
   FlowDeps,
   GtdSnapshot,
@@ -55,6 +57,19 @@ export interface WriteToolDeps {
   deps: FlowDeps;
   /** 写入后通知宿主刷新(actor='agent';渲染层据此高亮 + toast) */
   onChanged: () => void;
+  /**
+   * 当前回合的上下文(INV-35)。返回非 null 才记逆命令日志。
+   *
+   * **刻意做成显式回调,而不是按 `actor === 'agent'` 判断** —— Google 日历同步也用
+   * `'agent'` 这个 actor,按 actor 挂钩会把日历同步一起卷进回滚,还会硬删镜像任务。
+   * 只有聊天 agent 的写入才经过这里。
+   */
+  rewindContext?: () => {
+    conversationId: string;
+    turnId: string;
+    anchorUuid: string | null;
+    toolUseId: string | null;
+  } | null;
 }
 
 export interface WriteResult {
@@ -65,16 +80,39 @@ export interface WriteResult {
   [k: string]: unknown;
 }
 
-/** 统一应用路径:跑 usecase → 整批提交 → 通知刷新 → consequences 原样回传。 */
+/**
+ * 统一应用路径:跑 usecase → 整批提交 → 通知刷新 → consequences 原样回传。
+ *
+ * 顺带在这里算**逆命令**(INV-35):这是聊天 agent 写入的唯一汇聚点,而算逆需要
+ * apply **之前**的快照 —— 正好就在手上。逆命令与改动本身写在同一个事务里,
+ * 崩在中间不会留下"改了却回滚不了"的记录。
+ */
 function apply<C extends object>(
   d: WriteToolDeps,
+  toolName: string,
   run: (snap: GtdSnapshot) => UsecaseResult<C>,
 ): WriteResult {
-  const r = run(d.store.snapshot());
+  const before = d.store.snapshot();
+  const r = run(before);
   if (isUsecaseError(r)) return { ok: false, error: r.error };
   const commands: Command[] = r.commands;
   if (commands.length > 0) {
-    d.store.apply(commands, 'agent');
+    const ctx = d.rewindContext?.() ?? null;
+    const meta: ApplyMeta | undefined =
+      ctx === null
+        ? undefined
+        : {
+            rewindLog: {
+              conversationId: ctx.conversationId,
+              turnId: ctx.turnId,
+              anchorUuid: ctx.anchorUuid,
+              toolName,
+              toolUseId: ctx.toolUseId,
+              batch: invertCommands(before, commands),
+              createdAt: d.deps.clock.now(),
+            },
+          };
+    d.store.apply(commands, 'agent', meta);
     d.onChanged();
   }
   return { ok: true, changed: commands.length > 0, ...r.consequences };
@@ -119,7 +157,7 @@ function resolveLabels(snap: GtdSnapshot, names: string[]): { ids: Id[] } | { er
 // ------------------------------------------------------------------ 创建
 
 export function capture(d: WriteToolDeps, texts: string[]): WriteResult {
-  return apply(d, (s) => captureToInbox(s, d.deps, { texts }));
+  return apply(d, 'capture', (s) => captureToInbox(s, d.deps, { texts }));
 }
 
 /**
@@ -181,7 +219,7 @@ function taskFields(
 export function createTask(d: WriteToolDeps, a: CreateTaskArgs): WriteResult {
   const f = taskFields(d.store.snapshot(), a);
   if ('error' in f) return { ok: false, error: f.error };
-  return apply(d, (s) => quickAddTask(s, d.deps, f.fields as never));
+  return apply(d, 'create_task', (s) => quickAddTask(s, d.deps, f.fields as never));
 }
 
 export function addSubtaskTool(
@@ -193,14 +231,14 @@ export function addSubtaskTool(
   // 子任务的容器由父任务决定(INV-25),project 参数在这里无意义
   delete f.fields['projectId'];
   const fields = { ...f.fields, parentTaskId: a.parentTaskId };
-  return apply(d, (s) => addSubtask(s, d.deps, fields as never));
+  return apply(d, 'add_subtask', (s) => addSubtask(s, d.deps, fields as never));
 }
 
 export function createProject(
   d: WriteToolDeps,
   a: { outcome: string; deadline?: string | undefined },
 ): WriteResult {
-  return apply(d, (s) =>
+  return apply(d, 'create_project', (s) =>
     createProjectDirect(s, d.deps, {
       outcome: a.outcome,
       ...(a.deadline !== undefined ? { deadline: a.deadline } : {}),
@@ -222,7 +260,7 @@ export function updateTaskTool(d: WriteToolDeps, a: UpdateTaskArgs): WriteResult
   if (Object.keys(patch).length === 0) {
     return { ok: false, error: '没给任何要改的字段' };
   }
-  return apply(d, (s) => updateTask(s, d.deps, { id: taskId, patch }));
+  return apply(d, 'update_task', (s) => updateTask(s, d.deps, { id: taskId, patch }));
 }
 
 export function moveTaskTool(
@@ -235,12 +273,12 @@ export function moveTaskTool(
 ): WriteResult {
   const bucket = a.to;
   if (bucket !== 'project') {
-    return apply(d, (s) => moveTask(s, d.deps, { id: a.taskId, to: { bucket } }));
+    return apply(d, 'move_task', (s) => moveTask(s, d.deps, { id: a.taskId, to: { bucket } }));
   }
   if (a.project === undefined) return { ok: false, error: 'to=project 时必须给 project' };
   const p = resolveProject(d.store.snapshot(), a.project);
   if ('error' in p) return { ok: false, error: p.error };
-  return apply(d, (s) =>
+  return apply(d, 'move_task', (s) =>
     moveTask(s, d.deps, { id: a.taskId, to: { bucket: 'project', projectId: p.id } }),
   );
 }
@@ -249,7 +287,9 @@ export function moveTaskTool(
 export function setLabels(d: WriteToolDeps, a: { taskId: string; labels: string[] }): WriteResult {
   const l = resolveLabels(d.store.snapshot(), a.labels);
   if ('error' in l) return { ok: false, error: l.error };
-  return apply(d, (s) => setTaskLabels(s, d.deps, { taskId: a.taskId, labelIds: l.ids }));
+  return apply(d, 'set_task_labels', (s) =>
+    setTaskLabels(s, d.deps, { taskId: a.taskId, labelIds: l.ids }),
+  );
 }
 
 export function updateProjectTool(
@@ -266,7 +306,7 @@ export function updateProjectTool(
   if (a.outcome !== undefined) patch.outcome = a.outcome;
   if (a.deadline !== undefined) patch.deadline = a.deadline;
   if (Object.keys(patch).length === 0) return { ok: false, error: '没给任何要改的字段' };
-  return apply(d, (s) =>
+  return apply(d, 'update_project', (s) =>
     updateProject(s, d.deps, {
       id: p.id,
       patch,
@@ -278,25 +318,25 @@ export function updateProjectTool(
 // ------------------------------------------------------------------ 完成 / 删除
 
 export function completeTaskTool(d: WriteToolDeps, taskId: string): WriteResult {
-  return apply(d, (s) => completeTask(s, d.deps, { id: taskId }));
+  return apply(d, 'complete_task', (s) => completeTask(s, d.deps, { id: taskId }));
 }
 
 export function reopenTaskTool(d: WriteToolDeps, taskId: string): WriteResult {
-  return apply(d, (s) => reopenTask(s, d.deps, { id: taskId }));
+  return apply(d, 'reopen_task', (s) => reopenTask(s, d.deps, { id: taskId }));
 }
 
 export function completeProjectTool(d: WriteToolDeps, project: string): WriteResult {
   const p = resolveProject(d.store.snapshot(), project);
   if ('error' in p) return { ok: false, error: p.error };
-  return apply(d, (s) => completeProject(s, d.deps, { id: p.id }));
+  return apply(d, 'complete_project', (s) => completeProject(s, d.deps, { id: p.id }));
 }
 
 export function deleteTaskTool(d: WriteToolDeps, taskId: string): WriteResult {
-  return apply(d, (s) => deleteTask(s, d.deps, { id: taskId }));
+  return apply(d, 'delete_task', (s) => deleteTask(s, d.deps, { id: taskId }));
 }
 
 export function restoreTaskTool(d: WriteToolDeps, taskId: string): WriteResult {
-  return apply(d, (s) => restoreTask(s, d.deps, { id: taskId }));
+  return apply(d, 'restore_task', (s) => restoreTask(s, d.deps, { id: taskId }));
 }
 
 // ------------------------------------------------------------------ 等待项
@@ -311,7 +351,7 @@ export function createWaitingFor(
     if ('error' in p) return { ok: false, error: p.error };
     projectId = p.id;
   }
-  return apply(d, (s) =>
+  return apply(d, 'create_waiting_for', (s) =>
     createWaitingForDirect(s, d.deps, {
       description: a.description,
       ...(a.delegatedTo !== undefined ? { delegatedTo: a.delegatedTo } : {}),
@@ -321,26 +361,28 @@ export function createWaitingFor(
 }
 
 export function resolveWaiting(d: WriteToolDeps, id: string): WriteResult {
-  return apply(d, (s) => resolveWaitingFor(s, d.deps, { id }));
+  return apply(d, 'resolve_waiting_for', (s) => resolveWaitingFor(s, d.deps, { id }));
 }
 
 export function followUp(d: WriteToolDeps, waitingForId: string): WriteResult {
-  return apply(d, (s) => createFollowUp(s, d.deps, { waitingForId }));
+  return apply(d, 'create_follow_up', (s) => createFollowUp(s, d.deps, { waitingForId }));
 }
 
 // ------------------------------------------------------------------ 其它
 
 export function comment(d: WriteToolDeps, a: { taskId: string; body: string }): WriteResult {
-  return apply(d, (s) => addComment(s, d.deps, { taskId: a.taskId, body: a.body }));
+  return apply(d, 'add_comment', (s) => addComment(s, d.deps, { taskId: a.taskId, body: a.body }));
 }
 
 export function createLabelTool(d: WriteToolDeps, name: string): WriteResult {
-  return apply(d, (s) => createLabel(s, d.deps, { name }));
+  return apply(d, 'create_label', (s) => createLabel(s, d.deps, { name }));
 }
 
 export function createFilterTool(
   d: WriteToolDeps,
   a: { name: string; query: string },
 ): WriteResult {
-  return apply(d, (s) => createFilter(s, d.deps, { name: a.name, query: a.query }));
+  return apply(d, 'create_filter', (s) =>
+    createFilter(s, d.deps, { name: a.name, query: a.query }),
+  );
 }

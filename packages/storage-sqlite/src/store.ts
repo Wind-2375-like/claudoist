@@ -1,7 +1,9 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type {
   Actor,
+  ApplyMeta,
   Command,
+  RewindCommand,
   GtdSnapshot,
   GtdStore,
   InboxItem,
@@ -226,10 +228,66 @@ export class SqliteGtdStore implements GtdStore {
     };
   }
 
-  apply(commands: Command[], _actor: Actor): void {
+  apply(commands: Command[], _actor: Actor, meta?: ApplyMeta): void {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       for (const c of commands) this.applyOne(c);
+      // 日志必须写在**同一个事务里**:apply 第一句就 BEGIN,外面再包一层会报
+      // "cannot start a transaction within a transaction"(嵌套 BEGIN 不允许)。
+      // 写在里面还顺带保证了「改动落库」与「逆命令入账」原子同生共死 ——
+      // 少了这条,崩在中间就会出现改了却回滚不了的记录。
+      const log = meta?.rewindLog;
+      if (log !== undefined) {
+        this.db
+          .prepare(
+            `INSERT INTO agent_rewind_log
+               (conversation_id, turn_id, anchor_uuid, tool_name, tool_use_id,
+                inverse_json, after_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            log.conversationId,
+            log.turnId,
+            log.anchorUuid,
+            log.toolName,
+            log.toolUseId,
+            JSON.stringify({ v: 1, cmds: log.batch.inverse }),
+            JSON.stringify(log.batch.after),
+            log.createdAt,
+          );
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  /**
+   * 回滚执行口(INV-35)。**不记日志** —— 回滚本身不可撤销,这是用户明确接受的语义。
+   *
+   * `defer_foreign_keys` 让批内乱序删除成立(逆命令是整批倒序的,先删父后删子很正常)。
+   * ⚠ 外键违规要到 COMMIT 才报,**而且事务仍然开着** —— catch 分支必须显式 ROLLBACK。
+   */
+  applyRewind(cmds: RewindCommand[]): void {
+    this.db.exec('BEGIN IMMEDIATE');
+    this.db.exec('PRAGMA defer_foreign_keys = ON');
+    try {
+      for (const c of cmds) {
+        switch (c.kind) {
+          case 'hardDeleteTask':
+            this.db.prepare('DELETE FROM tasks WHERE id = ?').run(c.id);
+            break;
+          case 'hardDeleteProject':
+            this.db.prepare('DELETE FROM projects WHERE id = ?').run(c.id);
+            break;
+          case 'hardDeleteWaitingFor':
+            this.db.prepare('DELETE FROM waiting_for WHERE id = ?').run(c.id);
+            break;
+          default:
+            this.applyOne(c);
+        }
+      }
       this.db.exec('COMMIT');
     } catch (err) {
       this.db.exec('ROLLBACK');

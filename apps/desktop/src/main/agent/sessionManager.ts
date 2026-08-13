@@ -78,7 +78,12 @@ export interface AgentImage {
  *
  * 附件(M10)以绝对路径附在末尾:文件已复制进 userData/attachments,内置 Read 可直接读。
  */
-function userMessage(text: string, images: AgentImage[], attachments: string[]): SDKUserMessage {
+function userMessage(
+  text: string,
+  images: AgentImage[],
+  attachments: string[],
+  uuid: string,
+): SDKUserMessage {
   const content: unknown[] = [{ type: 'text', text: nowLine() }];
   content.push(
     ...images.map((img) => ({
@@ -93,6 +98,10 @@ function userMessage(text: string, images: AgentImage[], attachments: string[]):
   content.push({ type: 'text', text: body });
   return {
     type: 'user',
+    // **我们自己生成 uuid 并透传**(SDKUserMessage.uuid 是可选字段,CLI 侧是
+    // `uuid: t.uuid ?? randomUUID()` —— 给了就用我们的,已实测原样落进 transcript)。
+    // 这个 uuid 同时是两件事的锚点:forkSession 的 upToMessageId,以及回滚日志的 anchor。
+    uuid,
     message: { role: 'user', content },
     parent_tool_use_id: null,
   } as SDKUserMessage;
@@ -306,12 +315,13 @@ export function send(
   text: string,
   images: AgentImage[],
   attachments: string[] = [],
-): { error?: string } {
+): { error?: string; messageUuid?: string } {
   if (!live) return { error: '会话未启动' };
   if (live.busy) return { error: '上一条消息还在处理中' };
   live.busy = true;
-  live.push(userMessage(text, images, attachments));
-  return {};
+  const messageUuid = crypto.randomUUID();
+  live.push(userMessage(text, images, attachments, messageUuid));
+  return { messageUuid };
 }
 
 /** 只停当前 turn —— 会话继续存活,可以接着聊。 */

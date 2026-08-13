@@ -17,6 +17,7 @@ export * from './entities/taskComment';
 export * from './ports/clock';
 export * from './ports/idGen';
 export * from './ports/gtdStore';
+export * from './ports/rewind';
 
 export * from './rules/calendarGrid';
 export * from './rules/dates';

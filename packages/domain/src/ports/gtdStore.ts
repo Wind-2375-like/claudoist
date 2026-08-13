@@ -8,6 +8,7 @@ import type { Label, TaskLabel } from '../entities/label';
 import type { SavedFilter } from '../entities/filter';
 import type { Reminder } from '../entities/reminder';
 import type { TaskComment } from '../entities/taskComment';
+import type { ApplyMeta } from './rewind';
 
 /**
  * 全量数据快照:规则与流程一律是快照上的纯函数(个人规模数据,整取无压力)。
@@ -57,8 +58,14 @@ export type Actor = 'user' | 'agent';
 /** 存储 port。实现必须通过 domain 提供的 store-contract 测试套件(M3)。 */
 export interface GtdStore {
   snapshot(): GtdSnapshot;
-  /** 原子应用(全部成功或全部失败);actor 用于变更事件标记 */
-  apply(commands: Command[], actor: Actor): void;
+  /**
+   * 原子应用(全部成功或全部失败);actor 用于变更事件标记。
+   *
+   * `meta` 可选:**带 `rewindLog` 才记逆命令日志**。刻意做成显式开关而不是按
+   * `actor === 'agent'` 判断 —— Google 日历同步也用 `'agent'`(见 ipc/google.ts),
+   * 按 actor 挂钩会把日历同步一起卷进回滚,还会硬删镜像任务(INV-35)。
+   */
+  apply(commands: Command[], actor: Actor, meta?: ApplyMeta): void;
 }
 
 /** 纯函数:在内存快照上应用命令(测试与 contract 套件的参照实现)。 */

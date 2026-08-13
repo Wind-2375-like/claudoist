@@ -8,6 +8,8 @@ import { toast } from './toast';
 import type { PermissionRequestVM } from '../../shared/viewModels';
 import { isSubmitEnter } from './keys';
 import { renderMarkdown, selectionToMarkdown } from './markdown';
+import { ContextMenu, ContextMenuItem } from './ContextMenu';
+import { RewindDialog } from './RewindDialog';
 
 /**
  * Agent 面板。M8 只读版 → M9 加审批与权限模式 → M10 加历史会话、附件、effort/thinking。
@@ -28,7 +30,18 @@ interface Attachment {
 }
 
 type Item =
-  | { kind: 'user'; text: string; imageCount: number; attachments: string[] }
+  | {
+      kind: 'user';
+      text: string;
+      imageCount: number;
+      attachments: string[];
+      /** INV-35 回滚锚点(本地生成,一回合一个) */
+      turnId?: string;
+      /** forkSession 的 upToMessageId(我们自己塞给 SDK 的那个 uuid) */
+      messageUuid?: string;
+      /** 本地临时键:锚点要等主进程返回才回填,靠它找回这一条 */
+      localKey?: string;
+    }
   | { kind: 'assistant'; text: string }
   | { kind: 'thinking'; text: string }
   | {
@@ -139,6 +152,9 @@ export function AgentPanel(): React.JSX.Element {
   const [dragOver, setDragOver] = useState(false);
   /** 审批请求队列 —— 一轮里可能连来两个,不能后来的把前一个挤掉 */
   const [permQueue, setPermQueue] = useState<PermissionRequestVM[]>([]);
+  /** 某条用户消息上的「分叉 / 回滚」菜单 */
+  const [turnMenu, setTurnMenu] = useState<{ x: number; y: number; index: number } | null>(null);
+  const [rewind, setRewind] = useState<{ turnIds: string[]; alsoFork: boolean } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textBuf = useRef('');
   const thinkBuf = useRef('');
@@ -343,6 +359,7 @@ export function AgentPanel(): React.JSX.Element {
       const t = text.trim();
       if (t === '' || busy) return;
       await ensureSession();
+      const localKey = crypto.randomUUID();
       setItems((p) => [
         ...p,
         {
@@ -350,16 +367,31 @@ export function AgentPanel(): React.JSX.Element {
           text: t,
           imageCount: images.length,
           attachments: attachments.map((a) => a.name),
-        },
+          localKey,
+        } as Item,
       ]);
       setDraft('');
       textBuf.current = '';
       setBusy(true);
-      const r = (await window.agent.send(
+      const r = await window.agent.send(
         t,
         images,
         attachments.map((a) => a.path),
-      )) as { error?: string };
+      );
+      // 锚点要等主进程回来才知道 —— 回填到刚插入的那条
+      if (r.turnId !== undefined || r.messageUuid !== undefined) {
+        setItems((p) =>
+          p.map((it) =>
+            it.kind === 'user' && (it as { localKey?: string }).localKey === localKey
+              ? ({
+                  ...it,
+                  ...(r.turnId !== undefined ? { turnId: r.turnId } : {}),
+                  ...(r.messageUuid !== undefined ? { messageUuid: r.messageUuid } : {}),
+                } as Item)
+              : it,
+          ),
+        );
+      }
       setImages([]);
       setAttachments([]);
       if (r.error !== undefined) {
@@ -517,7 +549,15 @@ export function AgentPanel(): React.JSX.Element {
         {items.map((it, i) => {
           if (it.kind === 'user') {
             return (
-              <div key={i} className="flex justify-end">
+              <div
+                key={i}
+                className="group flex justify-end"
+                onContextMenu={(e) => {
+                  if (it.turnId === undefined) return;
+                  e.preventDefault();
+                  setTurnMenu({ x: e.clientX, y: e.clientY, index: i });
+                }}
+              >
                 <div className="max-w-[85%] rounded-2xl bg-blue-600 px-3 py-1.5 text-sm whitespace-pre-wrap select-text">
                   {it.text}
                   {it.imageCount > 0 && (
@@ -710,6 +750,70 @@ export function AgentPanel(): React.JSX.Element {
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border-2 border-dashed border-blue-500 bg-blue-950/30 text-sm text-blue-200">
           松手添加附件
         </div>
+      )}
+
+      {turnMenu !== null &&
+        (() => {
+          const anchor = items[turnMenu.index];
+          if (anchor === undefined || anchor.kind !== 'user') return null;
+          // 「到这里」= 这一轮及其之后的**全部**回合
+          const turnIds = items
+            .slice(turnMenu.index)
+            .filter((x): x is Extract<Item, { kind: 'user' }> => x.kind === 'user')
+            .map((x) => x.turnId)
+            .filter((x): x is string => x !== undefined);
+          const convId = status?.conversationId ?? null;
+          const close = (): void => setTurnMenu(null);
+          const fork = (): void => {
+            close();
+            if (convId === null || anchor.messageUuid === undefined) return;
+            void window.agent.forkAt(convId, anchor.messageUuid).then((r) => {
+              if (r.error !== undefined) return toast(`分叉失败:${r.error}`);
+              toast('已从这里分叉 —— 原对话保留在历史里');
+              setItems((p) => p.slice(0, turnMenu.index));
+              void refreshStatus();
+            });
+          };
+          return (
+            <ContextMenu x={turnMenu.x} y={turnMenu.y} onClose={close}>
+              <ContextMenuItem onClick={fork}>⑂ 从这里分叉对话</ContextMenuItem>
+              <ContextMenuItem
+                danger
+                onClick={() => {
+                  close();
+                  if (convId !== null) setRewind({ turnIds, alsoFork: false });
+                }}
+              >
+                ↺ 回滚到这里(撤销 agent 的改动)
+              </ContextMenuItem>
+              <ContextMenuItem
+                danger
+                onClick={() => {
+                  close();
+                  if (convId !== null) setRewind({ turnIds, alsoFork: true });
+                }}
+              >
+                ⑂↺ 分叉并回滚
+              </ContextMenuItem>
+            </ContextMenu>
+          );
+        })()}
+
+      {rewind !== null && status?.conversationId != null && (
+        <RewindDialog
+          conversationId={status.conversationId}
+          turnIds={rewind.turnIds}
+          alsoFork={rewind.alsoFork}
+          onClose={() => setRewind(null)}
+          onDone={() => {
+            const anchorIdx = turnMenu?.index ?? items.length;
+            setRewind(null);
+            // 回滚就地截断对话(用户定案):不截断的话 agent 会基于"说做了、其实没做"的
+            // 上下文继续操作
+            setItems((p) => p.slice(0, anchorIdx));
+            void refreshStatus();
+          }}
+        />
       )}
 
       {permQueue[0] !== undefined && (

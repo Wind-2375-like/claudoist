@@ -3,6 +3,7 @@ import type {
   AccountUsageVM,
   GuardrailsVM,
   AuditRowVM,
+  RewindPreviewVM,
   ConversationVM,
   ModelInfoVM,
   PermissionRequestVM,
@@ -190,8 +191,22 @@ const agentApi = {
     text: string,
     images: { data: string; mediaType: string }[],
     attachments: string[] = [],
-  ): Promise<unknown> => ipcRenderer.invoke('agent:send', { text, images, attachments }),
+  ): Promise<{ error?: string; messageUuid?: string; turnId?: string }> =>
+    ipcRenderer.invoke('agent:send', { text, images, attachments }),
   interrupt: (): Promise<unknown> => ipcRenderer.invoke('agent:interrupt'),
+  // ── 分叉 / 回滚(INV-35)──
+  rewindPreview: (conversationId: string, turnIds: string[]): Promise<RewindPreviewVM> =>
+    ipcRenderer.invoke('agent:rewind.preview', { conversationId, turnIds }),
+  rewindApply: (
+    conversationId: string,
+    turnIds: string[],
+  ): Promise<{ ok?: boolean; entryCount?: number; backupPath?: string | null; error?: string }> =>
+    ipcRenderer.invoke('agent:rewind.apply', { conversationId, turnIds }),
+  forkAt: (
+    conversationId: string,
+    messageUuid: string,
+  ): Promise<{ ok?: boolean; conversationId?: string; error?: string }> =>
+    ipcRenderer.invoke('agent:conversations.forkAt', { conversationId, messageUuid }),
   // ── 权限(M9)──
   permissionModes: (): Promise<{
     modes: { id: string; label: string; hint: string }[];

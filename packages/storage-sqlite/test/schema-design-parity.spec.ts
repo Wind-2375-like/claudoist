@@ -18,6 +18,9 @@ describe('schema 与 DESIGN §5.1 对齐', () => {
       'decision',
       'result_summary',
       'created_at',
+      // v17(INV-35):把审计行关联到工具调用,并标记它是否已被回滚撤销
+      'tool_use_id',
+      'rewound_at',
     ]);
   });
 

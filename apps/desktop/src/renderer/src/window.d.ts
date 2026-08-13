@@ -2,6 +2,7 @@ import type {
   AccountUsageVM,
   GuardrailsVM,
   AuditRowVM,
+  RewindPreviewVM,
   ConversationVM,
   ModelInfoVM,
   PermissionRequestVM,
@@ -142,7 +143,21 @@ declare global {
         text: string,
         images: { data: string; mediaType: string }[],
         attachments?: string[],
-      ) => Promise<unknown>;
+      ) => Promise<{ error?: string; messageUuid?: string; turnId?: string }>;
+      rewindPreview: (conversationId: string, turnIds: string[]) => Promise<RewindPreviewVM>;
+      rewindApply: (
+        conversationId: string,
+        turnIds: string[],
+      ) => Promise<{
+        ok?: boolean;
+        entryCount?: number;
+        backupPath?: string | null;
+        error?: string;
+      }>;
+      forkAt: (
+        conversationId: string,
+        messageUuid: string,
+      ) => Promise<{ ok?: boolean; conversationId?: string; error?: string }>;
       interrupt: () => Promise<unknown>;
       permissionModes: () => Promise<{
         modes: { id: string; label: string; hint: string }[];
