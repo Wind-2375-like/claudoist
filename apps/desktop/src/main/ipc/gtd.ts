@@ -28,6 +28,7 @@ import {
   projectStats,
   quickAddTask,
   formatRepeat,
+  foldDoneTasks,
   nextOccurrences,
   normalizeRepeat,
   repeatPresets,
@@ -66,6 +67,7 @@ import type {
   RepeatInputVM,
   RepeatPresetVM,
   RepeatPreviewVM,
+  CompletedItemVM,
 } from '../../shared/viewModels';
 
 /**
@@ -81,7 +83,7 @@ export interface GtdViews {
   inbox(): TaskTreeVM[];
   bucketList(kind: 'someday' | 'reference'): TaskTreeVM[];
   bucketCounts(): BucketCountsVM;
-  completed(): TaskVM[];
+  completed(): CompletedItemVM[];
   projectsList(): ProjectListItemVM[];
   projectView(id: string): ProjectViewVM | null;
   /** 删除项目前的预检(INV-34):确认框的数字与 usecase 的 consequences 同源 */
@@ -229,12 +231,14 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
     completed() {
       const snap = store.snapshot();
       const today = clock.today();
-      // 最近完成优先;上限 200(增长归档策略见 ROADMAP)
-      return snap.tasks
+      // 最近完成优先;循环系列折叠成最近一次 + 次数(INV-36.14,否则一个每日循环把
+      // 这页刷屏);上限 200 在**折叠后**取(增长归档策略见 ROADMAP)
+      const done = snap.tasks
         .filter((t) => t.status === 'done')
-        .sort((a, b) => ((a.completedAt ?? '') > (b.completedAt ?? '') ? -1 : 1))
+        .sort((a, b) => ((a.completedAt ?? '') > (b.completedAt ?? '') ? -1 : 1));
+      return foldDoneTasks(snap, done)
         .slice(0, 200)
-        .map((t) => taskVM(snap, t, today));
+        .map((f) => ({ task: taskVM(snap, f.task, today), occurrenceCount: f.occurrenceCount }));
     },
     projectsList() {
       const snap = store.snapshot();
@@ -376,8 +380,15 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
                     ? 'Reference'
                     : 'Inbox';
           const bits = [where];
-          if (done) bits.push(`已完成 ${(t.completedAt ?? '').slice(0, 10)}`);
-          else if (t.scheduledDate !== null) bits.push(`📅 ${t.scheduledDate}`);
+          // ⚠ fold 必须待在 done 分支**里面**:曾把它插在 if/else if 之间,else if 被
+          // 静默重绑到 fold 判断上,所有普通已完成任务重新带上了 📅(对抗审查抓到的回归)
+          if (done) {
+            bits.push(`已完成 ${(t.completedAt ?? '').slice(0, 10)}`);
+            const fold = r.consequences.doneFoldCounts[t.id];
+            if (fold !== undefined) bits.push(`共 ${fold} 次`);
+          } else if (t.scheduledDate !== null) {
+            bits.push(`📅 ${t.scheduledDate}`);
+          }
           return {
             kind: 'task',
             id: t.id,

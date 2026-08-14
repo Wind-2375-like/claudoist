@@ -4,6 +4,7 @@ import type { WaitingFor } from '../entities/waitingFor';
 import type { GtdSnapshot } from '../ports/gtdStore';
 import type { FlowDeps } from '../flows/framework';
 import type { UsecaseResult } from './types';
+import { foldDoneTasks } from '../rules/seriesFold';
 
 /** 跨实体搜索(⌘K 与 CLI `search` 的唯一数据源)。 */
 
@@ -21,8 +22,13 @@ export interface SearchAllConsequences {
   /** 含已完成的项目 */
   projects: Project[];
   waiting: WaitingFor[];
-  /** 截断前的命中总数(三类之和),用于"还有 N 条未列出" */
+  /** 截断前的命中总数(三类之和,**按系列折叠后**,INV-36.14),用于"还有 N 条未列出" */
   totalMatched: number;
+  /**
+   * INV-36.14:done 段按系列折叠 —— 代表任务 id → 折进来的次数(仅 >1 的组出现)。
+   * 调用方在该行追加「共 N 次」;active 任务永不折叠。
+   */
+  doneFoldCounts: Record<string, number>;
 }
 
 /**
@@ -71,13 +77,28 @@ export function searchAll(
     .sort((a, b) => projectRank(a) - projectRank(b));
   const waiting = snap.waiting.filter((w) => hit(w.description) || hit(w.delegatedTo));
 
+  // INV-36.14:done 段按系列折叠(一个每日循环会在这里刷出几百条同标题结果,把别的
+  // 东西挤没)。折叠只作用于 done —— active 的那一次是"要动的东西",永远单独成行。
+  // totalMatched 报**折叠后**:用户心里那是一件事。
+  const activeTasks = tasks.filter((t) => t.status === 'active');
+  const foldedDone = foldDoneTasks(
+    snap,
+    tasks.filter((t) => t.status !== 'active'),
+  );
+  const doneFoldCounts: Record<string, number> = {};
+  for (const f of foldedDone) {
+    if (f.occurrenceCount > 1) doneFoldCounts[f.task.id] = f.occurrenceCount;
+  }
+  const foldedTasks = [...activeTasks, ...foldedDone.map((f) => f.task)];
+
   return {
     commands: [],
     consequences: {
-      tasks: tasks.slice(0, limit),
+      tasks: foldedTasks.slice(0, limit),
       projects: projects.slice(0, limit),
       waiting: waiting.slice(0, limit),
-      totalMatched: tasks.length + projects.length + waiting.length,
+      totalMatched: foldedTasks.length + projects.length + waiting.length,
+      doneFoldCounts,
     },
   };
 }

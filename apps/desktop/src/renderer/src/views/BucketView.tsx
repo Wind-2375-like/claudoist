@@ -38,9 +38,16 @@ export function CompletedView(): React.JSX.Element {
       {isLoading && <p className="text-sm text-neutral-400">加载中…</p>}
       {data && data.length === 0 && <p className="text-sm text-neutral-400">还没有完成记录。</p>}
       <ul className="space-y-0.5">
-        {data?.map((t) => (
-          <li key={t.id}>
-            <TaskRow task={t} showCompletedAt onDetail={() => setDetailId(t.id)} />
+        {data?.map((it) => (
+          <li key={it.task.id}>
+            {/* INV-36.14:折叠次数走 TaskRow 行内徽章 —— 绝对定位叠加会压住行尾的完成日期,
+                且 pointer-events-none 让 tooltip 永不显示(对抗审查抓到) */}
+            <TaskRow
+              task={it.task}
+              showCompletedAt
+              occurrenceCount={it.occurrenceCount}
+              onDetail={() => setDetailId(it.task.id)}
+            />
           </li>
         ))}
       </ul>

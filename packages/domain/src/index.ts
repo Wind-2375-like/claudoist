@@ -32,6 +32,7 @@ export * from './rules/projectStats';
 export * from './rules/subtasks';
 export * from './rules/taskView';
 export * from './rules/repeat';
+export * from './rules/seriesFold';
 export * from './rules/deadlineInheritance';
 export * from './rules/engageRanking';
 export * from './rules/followUpTemplate';

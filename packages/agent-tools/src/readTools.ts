@@ -267,7 +267,11 @@ export function search(
   limit?: number,
 ):
   | { error: string }
-  | { tasks: TimedTaskView[]; projects: { id: string; name: string }[]; totalMatched: number } {
+  | {
+      tasks: (TimedTaskView & { occurrenceCount?: number })[];
+      projects: { id: string; name: string }[];
+      totalMatched: number;
+    } {
   const { snap, today } = snapAnd(d);
   const r = searchAll(
     snap,
@@ -278,8 +282,13 @@ export function search(
     },
   );
   if (isUsecaseError(r)) return { error: r.error };
+  // INV-36.14:done 段已按系列折叠成最近一次 —— 不带上次数的话,30 条完成记录在 agent
+  // 眼里静默变成 1 条,"我做过几次"会答错(对抗审查抓到)
+  const fold = r.consequences.doneFoldCounts;
   return {
-    tasks: views(snap, r.consequences.tasks, today),
+    tasks: views(snap, r.consequences.tasks, today).map((v) =>
+      fold[v.id] !== undefined ? { ...v, occurrenceCount: fold[v.id]! } : v,
+    ),
     projects: r.consequences.projects.map((p) => ({ id: p.id, name: p.outcome })),
     totalMatched: r.consequences.totalMatched,
   };

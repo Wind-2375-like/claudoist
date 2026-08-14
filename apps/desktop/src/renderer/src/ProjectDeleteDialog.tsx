@@ -90,13 +90,22 @@ export function ProjectDeleteDialog({
               )}
             </p>
 
-            {(pv.doneTaskCount > 0 || pv.unresolvedWaitingCount > 0 || pv.mirrorTaskCount > 0) && (
+            {(pv.doneTaskCount > 0 ||
+              pv.unresolvedWaitingCount > 0 ||
+              pv.mirrorTaskCount > 0 ||
+              pv.recurringTaskCount > 0) && (
               <ul className="mt-2 space-y-0.5 rounded bg-neutral-50 px-2.5 py-2 text-[11px] text-neutral-500">
                 {pv.doneTaskCount > 0 && (
                   <li>· {pv.doneTaskCount} 条已完成的任务留在项目里(完成记录不会被抹掉)</li>
                 )}
                 {pv.mirrorTaskCount > 0 && (
                   <li>· 其中 {pv.mirrorTaskCount} 条来自 Google 日历,时间仍归日历那边</li>
+                )}
+                {pv.recurringTaskCount > 0 && (
+                  <li className="text-amber-700">
+                    · ⚠ 其中 {pv.recurringTaskCount} 条是循环任务的当前一次 —— 删除会
+                    <strong>结束这些循环</strong>(INV-36.11)
+                  </li>
                 )}
                 {pv.unresolvedWaitingCount > 0 && (
                   <li className="text-amber-700">

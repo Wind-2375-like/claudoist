@@ -22,6 +22,8 @@ export interface ProjectDeletionPreview {
   mirrorTaskCount: number;
   /** 仍指向本项目的未解决等待项:本次**不动**,但必须向用户点明(INV-05) */
   unresolvedWaitingCount: number;
+  /** 活跃任务里循环任务的当前一次(INV-36.11:软删 = 结束系列,确认文案必须点明) */
+  recurringTaskCount: number;
 }
 
 export function projectDeletionPreview(snap: GtdSnapshot, projectId: Id): ProjectDeletionPreview {
@@ -32,6 +34,7 @@ export function projectDeletionPreview(snap: GtdSnapshot, projectId: Id): Projec
     doneTaskCount: mine.filter((t) => t.status === 'done').length,
     alreadyDeletedTaskCount: mine.filter((t) => t.status === 'deleted').length,
     mirrorTaskCount: active.filter((t) => t.externalId !== null).length,
+    recurringTaskCount: active.filter((t) => t.repeat !== null).length,
     unresolvedWaitingCount: snap.waiting.filter((w) => w.projectId === projectId && !w.resolved)
       .length,
   };

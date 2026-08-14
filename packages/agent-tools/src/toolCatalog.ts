@@ -198,7 +198,7 @@ const SPECS: ToolSpec[] = [
     name: 'search',
     kind: 'read',
     description:
-      '按关键词搜任务标题/描述与项目名。大小写不敏感子串。**软删除的任务搜不到** —— 搜不到不等于不存在,必要时提醒用户可能在回收站',
+      '按关键词搜任务标题/描述与项目名。大小写不敏感子串。**软删除的任务搜不到** —— 搜不到不等于不存在,必要时提醒用户可能在回收站。已完成的循环任务按系列折叠成**最近一次**,行上的 occurrenceCount = 历史完成次数 —— 回答"做过几次"直接用它,**不要数行数**(行数恒为 1)',
     schema: {
       query: z.string().describe('关键词'),
       limit: z.number().int().min(1).max(200).optional().describe('每类上限,默认 50'),

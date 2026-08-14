@@ -35,6 +35,7 @@ import {
   reorderTask,
   createFilter,
   parseFilterQuery,
+  foldDoneTasks,
   parseRepeatShorthand,
   weekdayMaskOf,
   runFilterQuery,
@@ -205,7 +206,7 @@ function resolveLabelIds(snap: GtdSnapshot, csv: string): Id[] {
 
 // ------------------------------------------------------------------ 输出
 
-function taskLine(j: TaskView): string {
+function taskLine(j: TaskView & { occurrenceCount?: number }): string {
   const bits = [j.id.slice(0, 8), `${j.parentTaskId !== null ? '↳ ' : ''}${j.title}`];
   // search 会把 done 与 active 混在一张表里,不标就分不出来(其余命令只列 active)
   if (j.status === 'done') bits.push('✓已完成');
@@ -222,7 +223,17 @@ function taskLine(j: TaskView): string {
   if (j.priority !== 3) bits.push(`优先级:${j.priorityLabel}`); // 非默认才展示(D-14 文字)
   // 标签在界面与过滤器语法里都写作 @名字(D-30 起情境即标签)
   if (j.labels.length > 0) bits.push(j.labels.map((l) => `@${l}`).join(' '));
+  // INV-36.14:done 段按系列折叠成最近一次;×N 让"这是一摞"可见
+  if ((j.occurrenceCount ?? 1) > 1) bits.push(`×${j.occurrenceCount} 次`);
   return bits.join('  ');
+}
+
+function taskSectionFolded(
+  title: string,
+  rows: (TaskView & { occurrenceCount?: number })[],
+): string {
+  const body = rows.length === 0 ? '(空)' : rows.map((r) => `- ${taskLine(r)}`).join('\n');
+  return `${title}(${rows.length})\n${body}`;
 }
 
 function taskSection(title: string, rows: TaskView[]): string {
@@ -425,12 +436,18 @@ const list: Handler = (store, deps, args) => {
     if (!Number.isInteger(limit) || limit < 1) {
       throw new CliError(`--limit 需为正整数,得到 "${limitRaw}"`);
     }
-    rows = snap.tasks
-      .filter((t) => t.status === 'done')
-      .sort((a, b) => ((a.completedAt ?? '') > (b.completedAt ?? '') ? -1 : 1))
-      .slice(0, limit)
-      .map((t) => taskView(snap, t, today));
-    return { data: rows, text: taskSection(kind, rows) };
+    // INV-36.14:循环系列折叠成最近一次 + 次数(与桌面 Completed 同口径);limit 在折叠后取
+    const foldedDone = foldDoneTasks(
+      snap,
+      snap.tasks
+        .filter((t) => t.status === 'done')
+        .sort((a, b) => ((a.completedAt ?? '') > (b.completedAt ?? '') ? -1 : 1)),
+    ).slice(0, limit);
+    const doneRows = foldedDone.map((f) => ({
+      ...taskView(snap, f.task, today),
+      occurrenceCount: f.occurrenceCount,
+    }));
+    return { data: doneRows, text: taskSectionFolded(kind, doneRows) };
   }
   if (kind === 'all') {
     // 跨所有容器/同级组:sortOrder 是组内相对序,跨组无意义 → 以 createdAt 展示,避免撞值乱序
@@ -631,8 +648,12 @@ const search: Handler = (store, deps, args) => {
   const today = deps.clock.today();
   const r = searchAll(snap, deps, { query: q, limit });
   if (isUsecaseError(r)) throw new CliError(r.error);
-  const { tasks, projects: hitProjects, waiting, totalMatched } = r.consequences;
-  const taskRows = tasks.map((t) => taskView(snap, t, today));
+  const { tasks, projects: hitProjects, waiting, totalMatched, doneFoldCounts } = r.consequences;
+  const taskRows = tasks.map((t) => ({
+    ...taskView(snap, t, today),
+    // INV-36.14:done 段按系列折叠,这里只带次数,展示层加「×N 次」
+    ...(doneFoldCounts[t.id] !== undefined ? { occurrenceCount: doneFoldCounts[t.id] } : {}),
+  }));
   const projectRows = hitProjects.map((p) => ({
     id: p.id,
     name: p.outcome,
@@ -648,7 +669,7 @@ const search: Handler = (store, deps, args) => {
   const shown = taskRows.length + projectRows.length + waitingRows.length;
   const lines = [
     `搜索「${q}」`,
-    taskSection('任务', taskRows),
+    taskSectionFolded('任务', taskRows),
     `项目(${projectRows.length})\n${
       projectRows.length === 0
         ? '(空)'

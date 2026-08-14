@@ -559,10 +559,11 @@ tasks/waiting_for/comments/labels —— 那是 D-01 否决过的"一次确认�
 11. **软删 = 结束系列**(规则活在行上);`restoreTask` 现有逻辑对循环天然正确,零改动。
 12. **过滤器**:`recurring` = `repeat !== null`,受 INV-33.6 隐式活跃作用域约束。
 13. **单一口径**:解析(`normalizeRepeat`/`parseRepeatShorthand`)、格式化(`formatRepeat`)、预设(`repeatPresets`)、预览(`nextOccurrences`)全部只在 domain 一份;渲染层经 `gtd:repeat.presets`/`gtd:repeat.preview` 取结果(DESIGN §4.1),**禁止**在渲染层算任何日期。
+14. **统计与列表按系列折叠(2026-08-13 用户拍板)**:归组键在 `rules/seriesFold.ts` **一份**(系列根按 `seriesId`;occurrence 子树副本沿 parent 链上溯按「系列 + 标题」归组;其余任务不折叠 = 零回归)。(a) `projectStats`:折叠组有 active → 计 1 active,全 done → 计 1 done —— 项目进度回答的是"这摊**有限的**活干了多少",循环不是有限的活,每次计入是范畴错误;(b) `searchAll` 与 Completed(桌面 + CLI):done 段折叠成**最近一次 + 次数**,active 的那一次永远单独成行,`totalMatched` 与 200 条上限都按**折叠后**算;(c) 各展示层只带 `occurrenceCount`/`doneFoldCounts`,不自己归组;(d) `projectDeletionPreview` 报 `recurringTaskCount`,确认文案点明"删除会结束这些循环"(36.11)。
 
 **为什么(存结构化列而不是 RRULE)**:RRULE 表达不了 "Based on: Completed date";其 `UNTIL` 是 UTC DATETIME,与 INV-03 本地 naive 日期、INV-31 浮动时间正面冲突;且解析失败的后果是任务**静默不推进** —— 承诺不能挂在运行时解析上。完成语义走"生成新行"而不是"就地推进":INV-28.1(D-23 用户定案)要求完成的任务仍留在日历上,就地推进会让过去每一天的 block 凭空消失,且本仓 Completed 就是 `status='done'` 的 Task,没有第二套事件流可兜底。
 
-**边界备注**:INV-14 —— 项目里有未结束的循环任务时 `hasActiveNextAction` 恒真,系统不会提示"项目可以完成了"(语义正确:项目里放着每周例会,项目当然没完)。INV-27.1 —— 下一次追加到列表末尾,不继承用户手排位置(不开特例)。projectStats/searchAll 的按系列折叠属 Phase 3,**需用户拍板**(见 ROADMAP)。
+**边界备注**:INV-14 —— 项目里有未结束的循环任务时 `hasActiveNextAction` 恒真,系统不会提示"项目可以完成了"(语义正确:项目里放着每周例会,项目当然没完)。INV-27.1 —— 下一次追加到列表末尾,不继承用户手排位置(不开特例)。逾期补齐「跳到未来第一个符合日」与统计/列表折叠(36.14)均已由用户拍板(2026-08-13)。
 
 **验收**:`INV-36-repeat.spec.ts`(51 条推进用例:月末夹取、闰日回归、工作日、完成日推进、Ends 含当日、相位保持)+ `INV-36-complete-generates-next.spec.ts`(字段口径逐项、子树/标签/提醒复制、评论不复制、G1–G4、reopen 征询);完成带 startTime 的循环任务后旧日期的 block 仍在日历上(INV-28)。
 

@@ -25,10 +25,10 @@ import type {
   QuickAddTaskInputVM,
   TaskDetailVM,
   TaskTreeVM,
-  TaskVM,
   TodayVM,
   WriteResultVM,
   RepeatInputVM,
+  CompletedItemVM,
   RepeatPresetVM,
   RepeatPreviewVM,
 } from '../../shared/viewModels';
@@ -45,7 +45,7 @@ declare global {
       inboxList: () => Promise<TaskTreeVM[]>;
       bucketList: (kind: 'someday' | 'reference') => Promise<TaskTreeVM[]>;
       bucketCounts: () => Promise<BucketCountsVM>;
-      completedList: () => Promise<TaskVM[]>;
+      completedList: () => Promise<CompletedItemVM[]>;
       projectsList: () => Promise<ProjectListItemVM[]>;
       projectView: (id: string) => Promise<ProjectViewVM | null>;
       projectInheritCount: (id: string) => Promise<number>;

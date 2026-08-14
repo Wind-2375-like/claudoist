@@ -26,10 +26,10 @@ import type {
   QuickAddTaskInputVM,
   TaskDetailVM,
   TaskTreeVM,
-  TaskVM,
   TodayVM,
   WriteResultVM,
   RepeatInputVM,
+  CompletedItemVM,
   RepeatPresetVM,
   RepeatPreviewVM,
 } from '../shared/viewModels';
@@ -46,7 +46,7 @@ const gtdApi = {
   bucketList: (kind: 'someday' | 'reference'): Promise<TaskTreeVM[]> =>
     ipcRenderer.invoke('gtd:bucket.list', { kind }),
   bucketCounts: (): Promise<BucketCountsVM> => ipcRenderer.invoke('gtd:bucket.counts'),
-  completedList: (): Promise<TaskVM[]> => ipcRenderer.invoke('gtd:completed.list'),
+  completedList: (): Promise<CompletedItemVM[]> => ipcRenderer.invoke('gtd:completed.list'),
   projectsList: (): Promise<ProjectListItemVM[]> => ipcRenderer.invoke('gtd:projects.list'),
   projectView: (id: string): Promise<ProjectViewVM | null> =>
     ipcRenderer.invoke('gtd:project.view', { id }),

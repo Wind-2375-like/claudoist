@@ -120,6 +120,15 @@ export interface ProjectDeletionPreviewVM {
   alreadyDeletedTaskCount: number;
   mirrorTaskCount: number;
   unresolvedWaitingCount: number;
+  /** 活跃任务里循环任务的当前一次(INV-36.11:删除会结束这些循环) */
+  recurringTaskCount: number;
+}
+
+/** Completed 视图条目(INV-36.14):循环系列折叠成最近一次 + 次数。 */
+export interface CompletedItemVM {
+  task: TaskVM;
+  /** 折进这一行的完成次数(≥1;1 = 普通任务) */
+  occurrenceCount: number;
 }
 
 export interface CommentVM {

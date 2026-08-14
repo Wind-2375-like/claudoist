@@ -13,6 +13,7 @@ export function TaskRow({
   onDetail,
   onEdit,
   showCompletedAt = false,
+  occurrenceCount,
   depth = 0,
   leading,
   progress,
@@ -21,6 +22,8 @@ export function TaskRow({
   onDetail?: () => void;
   onEdit?: () => void;
   showCompletedAt?: boolean;
+  /** INV-36.14:循环系列折进这一行的完成次数(>1 才显示徽章) */
+  occurrenceCount?: number | undefined;
   /** 树缩进层级(M5R5) */
   depth?: number;
   /** 完成圈前的引导元素(展开/折叠箭头或占位) */
@@ -135,6 +138,14 @@ export function TaskRow({
             </span>
           ))}
           {showCompletedAt && task.completedAt && <span>{task.completedAt.slice(0, 10)} 完成</span>}
+          {(occurrenceCount ?? 1) > 1 && (
+            <span
+              className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-600"
+              title="循环任务的历史完成次数(只显示最近一次)"
+            >
+              共 {occurrenceCount} 次
+            </span>
+          )}
         </span>
       </div>
       {menu && (
