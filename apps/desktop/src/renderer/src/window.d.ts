@@ -32,6 +32,7 @@ import type {
   RepeatPresetVM,
   RepeatPreviewVM,
 } from '../../shared/viewModels';
+import type { AppearanceVM } from '../../shared/appearance';
 
 declare global {
   interface Window {
@@ -190,6 +191,12 @@ declare global {
       pickAttachments: () => Promise<{ paths: string[] }>;
       pathForFile: (file: File) => string;
       onStream: (cb: (msg: unknown) => void) => () => void;
+    };
+    appearance: {
+      get: () => Promise<AppearanceVM>;
+      set: (v: AppearanceVM) => Promise<void>;
+      openLogs: () => Promise<void>;
+      logError: (source: string, message: string) => void;
     };
   }
 }

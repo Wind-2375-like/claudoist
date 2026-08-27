@@ -106,8 +106,8 @@ export function FiltersLabelsView({
       <tbody>
         {SYNTAX_HELP.map(([syntax, desc]) => (
           <tr key={syntax} className="align-top">
-            <td className="w-[46%] py-0.5 pr-3 font-mono text-neutral-700">{syntax}</td>
-            <td className="py-0.5 text-neutral-500">{desc}</td>
+            <td className="w-[46%] py-0.5 pr-3 font-mono text-ink">{syntax}</td>
+            <td className="py-0.5 text-mut">{desc}</td>
           </tr>
         ))}
       </tbody>
@@ -121,10 +121,10 @@ export function FiltersLabelsView({
   ): React.JSX.Element => (
     <div className="mb-1 flex items-center gap-2">
       <h2 className="text-sm font-semibold">{title}</h2>
-      {count !== undefined && <span className="text-xs text-neutral-400">{count}</span>}
+      {count !== undefined && <span className="text-xs text-fnt">{count}</span>}
       <button
         type="button"
-        className="ml-auto rounded px-1.5 text-lg leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+        className="ml-auto rounded px-1.5 text-lg leading-none text-fnt hover:bg-hov hover:text-ink"
         title={kind === 'filter' ? '新建过滤器' : '新建标签'}
         onClick={() => {
           setAdding(adding === kind ? null : kind);
@@ -145,12 +145,12 @@ export function FiltersLabelsView({
       <section className="mb-8">
         {sectionHead('My Filters', filters.data?.length, 'filter')}
         {adding === 'filter' && (
-          <div className="mb-2 rounded-lg border border-neutral-200 p-3">
+          <div className="mb-2 rounded-lg border border-line p-3">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="过滤器名称"
-              className="mb-2 w-full rounded border border-neutral-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+              className="mb-2 w-full rounded border border-line px-2 py-1 text-sm outline-none focus:border-acc"
             />
             <input
               value={query}
@@ -160,26 +160,22 @@ export function FiltersLabelsView({
                 if (e.key === 'Escape') reset();
               }}
               placeholder="查询,例如:deadline before: +7 days & no date"
-              className="w-full rounded border border-neutral-200 px-2 py-1 font-mono text-sm outline-none focus:border-blue-400"
+              className="w-full rounded border border-line px-2 py-1 font-mono text-sm outline-none focus:border-acc"
             />
             <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"
-                className="rounded-md bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
+                className="rounded-md bg-acc px-2.5 py-1 text-xs text-on-acc hover:bg-acc-strong"
                 onClick={() => void addFilter()}
               >
                 保存
               </button>
-              <button
-                type="button"
-                className="text-xs text-neutral-400 hover:text-neutral-700"
-                onClick={reset}
-              >
+              <button type="button" className="text-xs text-fnt hover:text-ink" onClick={reset}>
                 取消
               </button>
               <button
                 type="button"
-                className="ml-auto text-xs text-neutral-400 underline hover:text-neutral-700"
+                className="ml-auto text-xs text-fnt underline hover:text-ink"
                 onClick={() => setShowHelp(!showHelp)}
               >
                 {showHelp ? '收起语法' : '查询语法'}
@@ -190,13 +186,13 @@ export function FiltersLabelsView({
         )}
         <ul>
           {(filters.data ?? []).map((f) => (
-            <li key={f.id} className="border-b border-neutral-100">
+            <li key={f.id} className="border-b border-line-soft">
               {editFilter?.id === f.id ? (
                 <div className="px-1 py-2">
                   <input
                     value={editFilter.name}
                     onChange={(e) => setEditFilter({ ...editFilter, name: e.target.value })}
-                    className="mb-1 w-full rounded border border-neutral-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                    className="mb-1 w-full rounded border border-line px-2 py-1 text-sm outline-none focus:border-acc"
                   />
                   <input
                     value={editFilter.query}
@@ -205,26 +201,26 @@ export function FiltersLabelsView({
                       if (isSubmitEnter(e)) void saveFilter();
                       if (e.key === 'Escape') setEditFilter(null);
                     }}
-                    className="w-full rounded border border-neutral-200 px-2 py-1 font-mono text-sm outline-none focus:border-blue-400"
+                    className="w-full rounded border border-line px-2 py-1 font-mono text-sm outline-none focus:border-acc"
                   />
                   <div className="mt-1.5 flex items-center gap-2">
                     <button
                       type="button"
-                      className="rounded-md bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
+                      className="rounded-md bg-acc px-2.5 py-1 text-xs text-on-acc hover:bg-acc-strong"
                       onClick={() => void saveFilter()}
                     >
                       保存
                     </button>
                     <button
                       type="button"
-                      className="text-xs text-neutral-400 hover:text-neutral-700"
+                      className="text-xs text-fnt hover:text-ink"
                       onClick={() => setEditFilter(null)}
                     >
                       取消
                     </button>
                     <button
                       type="button"
-                      className="ml-auto text-xs text-neutral-400 underline hover:text-neutral-700"
+                      className="ml-auto text-xs text-fnt underline hover:text-ink"
                       onClick={() => setShowHelp(!showHelp)}
                     >
                       {showHelp ? '收起语法' : '查询语法'}
@@ -234,7 +230,7 @@ export function FiltersLabelsView({
                 </div>
               ) : (
                 <div className="group flex items-center gap-2 px-1 py-2">
-                  <span className="text-neutral-400">◍</span>
+                  <span className="text-fnt">◍</span>
                   <button
                     type="button"
                     className="min-w-0 flex-1 text-left"
@@ -243,18 +239,18 @@ export function FiltersLabelsView({
                     <span className="block truncate text-sm">{f.name}</span>
                     <span
                       className={`block truncate font-mono text-[11px] ${
-                        f.error !== null ? 'text-red-600' : 'text-neutral-400'
+                        f.error !== null ? 'text-danger-ink' : 'text-fnt'
                       }`}
                     >
                       {f.error !== null ? `语法错误:${f.error}` : f.query}
                     </span>
                   </button>
                   {f.matchCount !== null && (
-                    <span className="shrink-0 text-xs text-neutral-400">{f.matchCount}</span>
+                    <span className="shrink-0 text-xs text-fnt">{f.matchCount}</span>
                   )}
                   <button
                     type="button"
-                    className="shrink-0 text-xs text-neutral-300 opacity-0 group-hover:opacity-100 hover:text-neutral-700"
+                    className="shrink-0 text-xs text-fnt opacity-0 group-hover:opacity-100 hover:text-ink"
                     onClick={() => {
                       setEditFilter({ id: f.id, name: f.name, query: f.query });
                       setAdding(null);
@@ -264,7 +260,7 @@ export function FiltersLabelsView({
                   </button>
                   <button
                     type="button"
-                    className="shrink-0 text-xs text-neutral-300 opacity-0 group-hover:opacity-100 hover:text-red-600"
+                    className="shrink-0 text-xs text-fnt opacity-0 group-hover:opacity-100 hover:text-danger-ink"
                     onClick={() => void removeFilter(f)}
                   >
                     删除
@@ -274,7 +270,7 @@ export function FiltersLabelsView({
             </li>
           ))}
           {filters.data?.length === 0 && (
-            <li className="py-2 text-xs text-neutral-400">还没有过滤器 —— 点右上角 ＋ 建一个。</li>
+            <li className="py-2 text-xs text-fnt">还没有过滤器 —— 点右上角 ＋ 建一个。</li>
           )}
         </ul>
       </section>
@@ -292,20 +288,16 @@ export function FiltersLabelsView({
                 if (e.key === 'Escape') reset();
               }}
               placeholder="标签名(不用打 @)"
-              className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+              className="flex-1 rounded border border-line px-2 py-1 text-sm outline-none focus:border-acc"
             />
             <button
               type="button"
-              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
+              className="rounded-md bg-acc px-2.5 py-1 text-xs text-on-acc hover:bg-acc-strong"
               onClick={() => void addLabel()}
             >
               新建
             </button>
-            <button
-              type="button"
-              className="text-xs text-neutral-400 hover:text-neutral-700"
-              onClick={reset}
-            >
+            <button type="button" className="text-xs text-fnt hover:text-ink" onClick={reset}>
               取消
             </button>
           </div>
@@ -314,9 +306,9 @@ export function FiltersLabelsView({
           {(labels.data ?? []).map((l) => (
             <li
               key={l.id}
-              className="group flex items-center gap-2 border-b border-neutral-100 px-1 py-2"
+              className="group flex items-center gap-2 border-b border-line-soft px-1 py-2"
             >
-              <span className="text-neutral-400">🏷</span>
+              <span className="text-fnt">🏷</span>
               {editing === l.id ? (
                 <input
                   value={draft}
@@ -327,7 +319,7 @@ export function FiltersLabelsView({
                     if (e.key === 'Escape') setEditing(null);
                   }}
                   onBlur={() => void renameLabel(l)}
-                  className="min-w-0 flex-1 rounded border border-blue-400 px-1 py-0.5 text-sm outline-none"
+                  className="min-w-0 flex-1 rounded border border-acc px-1 py-0.5 text-sm outline-none"
                 />
               ) : (
                 <button
@@ -338,10 +330,10 @@ export function FiltersLabelsView({
                   @{l.name}
                 </button>
               )}
-              <span className="shrink-0 text-xs text-neutral-400">{l.activeTaskCount}</span>
+              <span className="shrink-0 text-xs text-fnt">{l.activeTaskCount}</span>
               <button
                 type="button"
-                className="shrink-0 text-xs text-neutral-300 opacity-0 group-hover:opacity-100 hover:text-neutral-700"
+                className="shrink-0 text-xs text-fnt opacity-0 group-hover:opacity-100 hover:text-ink"
                 onClick={() => {
                   setDraft(l.name);
                   setEditing(l.id);
@@ -351,16 +343,14 @@ export function FiltersLabelsView({
               </button>
               <button
                 type="button"
-                className="shrink-0 text-xs text-neutral-300 opacity-0 group-hover:opacity-100 hover:text-red-600"
+                className="shrink-0 text-xs text-fnt opacity-0 group-hover:opacity-100 hover:text-danger-ink"
                 onClick={() => void removeLabel(l)}
               >
                 删除
               </button>
             </li>
           ))}
-          {labels.data?.length === 0 && (
-            <li className="py-2 text-xs text-neutral-400">还没有标签。</li>
-          )}
+          {labels.data?.length === 0 && <li className="py-2 text-xs text-fnt">还没有标签。</li>}
         </ul>
       </section>
     </div>

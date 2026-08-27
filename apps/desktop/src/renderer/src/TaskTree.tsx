@@ -290,7 +290,7 @@ export function TaskTree({
         const chevron = f.hasChildren ? (
           <button
             type="button"
-            className="text-xs text-neutral-400 hover:text-neutral-700"
+            className="text-xs text-fnt hover:text-ink"
             title={f.collapsed ? '展开' : '折叠'}
             onClick={() => toggleCollapse(id)}
           >
@@ -374,13 +374,13 @@ export function TaskTree({
       {list}
       {projection && (
         <div
-          className="pointer-events-none absolute right-2 z-10 h-0.5 rounded bg-blue-500"
+          className="pointer-events-none absolute right-2 z-10 h-0.5 rounded bg-acc"
           style={{
             top: projection.indicatorTop - 1,
             left: projection.depth * INDENT + BASE_PAD + ROW_LEAD,
           }}
         >
-          <span className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-blue-500" />
+          <span className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-acc" />
         </div>
       )}
     </div>

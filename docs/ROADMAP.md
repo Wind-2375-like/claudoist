@@ -50,7 +50,7 @@
 | M8 | Agent 只读版 | SDK 会话 + 认证引导 + 流式聊天与工具 chip + 13 个只读工具 + 护栏 + engage skill | 🔄 |
 | M9 | Agent 写入 + 权限 | 写工具 + canUseTool 审批 + 权限模式 + agent_audit + 实时刷新 | 🔄 待验收 |
 | M10 | Agent 面板补全 | 会话管理/fork、图片粘贴、附件、模型与 effort 切换、用量账本、coaching evals | 🔄 待验收 |
-| M11 | 打包加固与打磨 | 无 Node 机器全流程复验、notarization、主题、错误上报面 | 🔄 M11-A(账号与用量 + 可调护栏)已完成待验收 |
+| M11 | 打包加固与打磨 | 无 Node 机器全流程复验、notarization、主题、错误上报面 | 🔄 M11-A(账号与用量 + 可调护栏)+ M11-B(外观系统 + 错误面 + 签名配置落位)已完成待验收;notarization 实跑与无 Node 复验**需用户侧前置**(Developer ID 证书 / 另一台机器) |
 
 ---
 
@@ -699,6 +699,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-08-13 | **M11-B 外观系统(D-38,用户三点诉求:Solarized 主题 / 对话框对比度 / 分部位分中英文字体)+ 错误面 + 签名配置**。渲染层 29 个文件全部从硬编码调色板类换成语义 token 类(bg-surface/text-ink/…),四套内置主题(claudoist/solarized × light/dark);`.theme-panel` 作用域让 agent 面板同一套类名自动换面板色;AgentSettings/RewindDialog portal 到 body 脱离面板作用域 —— 全窗弹层从此永远吃主题主色(对比度失衡根治)。自定义 = token 差量 + 三部位×中英文字体栈,设置页所见即所得(400ms 防抖持久化),存取两侧 sanitize 白名单。错误面:主进程 uncaught + 渲染层 ErrorBoundary 统一落 logs/errors.log,设置页有入口。签名:electron-builder.signed.yml + entitlements 落位(**独立配置不 extends** —— extends 深合并会继承基础版的 `identity: null` 把签名变摆设),`pnpm dist:signed` 一键(待用户 Developer ID 证书与 APPLE_* 环境变量)。用户实测反馈两修:solarized-light 的 agent 面板由深青对撞改为 base2 浅色同族(诉求即低对比);原生标题栏随主题(nativeTheme.themeSource + 窗口底色,此前浅主题顶着系统深色黑条)。对抗审查(28 agent)修 5:深色主题 hover 与 raised 同值致悬停无反馈(四主题双作用域逐一拉开);默认主题聊天气泡白字压 #60a5fa 仅 2.54:1 → on-acc 改深字;两处进度条轨道与底同色 → 专用 --t-track token;自定义颜色实时预览绕过 sanitize 致 live/落库分叉 → 同源清洗 + CSS.supports 红框提示;COLOR_RE 修 hex 长度并放行命名色 |
 | 2026-08-13 | **INV-36.14 系列折叠(Phase 3,用户三项拍板落地)**。① projectStats:折叠组有 active 计 1 active、全 done 计 1 done(每日循环一年灌 365 条 done 的进度条失真消除);② searchAll 与 Completed(桌面 + CLI)done 段折叠成最近一次 + 次数,totalMatched 与 200 上限按折叠后算,active 那次永远单独成行;③ 逾期补齐维持「跳到未来第一个符合日」。归组键单一口径(rules/seriesFold.ts):系列根按 seriesId,occurrence 子树副本沿 parent 链按「系列+标题」归组,普通任务不折叠(零回归,spec 有专测)。另:ProjectDeleteDialog 报「其中 N 条是循环任务的当前一次,删除会结束循环」 |
 | 2026-08-13 | **INV-36/D-37 任务循环(repeat + custom repeat)Phase 1+2 完成待验收**。三个入口一次交齐:UI(日期弹层内预设菜单 + Custom 对话框 + 行内 🔁 chip + 完成 toast 报下一次)、CLI(`--repeat=`/`--repeat-basis=`/`--repeat-until=` 三 flag、complete 输出 ↻、show 下三次、过滤器 `recurring`)、agent(`create_task`/`update_task` 三态 `repeat`,工具说明写明「停掉循环 = `update_task {repeat:null}` 不是 complete」)。完成 = 这一次照常 done + 同一事务生成下一次(子树复制全 active、标签复制、提醒平移、评论不带走);推进引擎零 `Date` 构造,51 条用例钉死月末夹取/闰日回归/工作日/完成日推进/Ends 含当日/逾期补齐相位保持。迁移 v18(6 列 + series_id + 跨列 CHECK,用户库副本实测)。**Phase 3 需用户拍板**:① projectStats 按 seriesId 折叠(否则每日循环一年灌 365 条 done,项目进度条失真);② searchAll/Completed 按系列折叠;③ ProjectDeleteDialog 报「其中 N 个是循环任务」。已知欠账:`previewRewind` 入向引用检查、`rowHash` guard 版本化(INV-35 自己的修订,循环会提高其触发频率);Google RRULE 导出明确不做(路线 A 下会双重生成) |
 | 2026-08-13 | **INV-35/D-36 对话分叉 + agent 改动回滚**。三项菜单挂在用户消息上:从这里分叉(`forkSession(upToMessageId)`,纯文件操作零 token)/ 回滚到这里(就地截断对话 + 撤销数据)/ 分叉并回滚。回滚用**逆命令日志**而非快照(一次 update 的逆只存被改到的键的旧值)。关键裁决:①**不按 actor 挂钩**(Google 同步也用 'agent',按 actor 会把日历同步卷进回滚并硬删镜像任务);②硬删**不进 `Command` 联合**(那是用户意图的词汇表,进去就让 usecase/agent 够得着,软删的纵深防御失效);③冲突检测靠 `after` + 链序引理,**不需要**给行加 updated_at;④回滚不可撤销但强制 diff 预览 + `VACUUM INTO` 备份。离线 e2e(库副本,零配额):建任务→记日志→预检→回滚回到起点;两轮改同一字段倒序回滚回到最初值;用户插一手后预检报出字段级冲突 |

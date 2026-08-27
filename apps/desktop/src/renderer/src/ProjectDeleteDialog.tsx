@@ -69,15 +69,15 @@ export function ProjectDeleteDialog({
   const n = pv?.activeTaskCount ?? 0;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/30 pt-28">
-      <div className="w-[480px] max-w-[92vw] rounded-xl border border-neutral-200 bg-white p-4 shadow-2xl">
+    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-scrim pt-28">
+      <div className="w-[480px] max-w-[92vw] rounded-xl border border-line bg-raised p-4 shadow-2xl">
         <h2 className="text-sm font-semibold">删除项目「{projectName}」</h2>
 
         {pv === null ? (
-          <p className="mt-3 text-xs text-neutral-400">读取中…</p>
+          <p className="mt-3 text-xs text-fnt">读取中…</p>
         ) : (
           <>
-            <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+            <p className="mt-2 text-xs leading-relaxed text-mut">
               项目会进回收站(可以恢复)。
               {n > 0 ? (
                 <>
@@ -94,7 +94,7 @@ export function ProjectDeleteDialog({
               pv.unresolvedWaitingCount > 0 ||
               pv.mirrorTaskCount > 0 ||
               pv.recurringTaskCount > 0) && (
-              <ul className="mt-2 space-y-0.5 rounded bg-neutral-50 px-2.5 py-2 text-[11px] text-neutral-500">
+              <ul className="mt-2 space-y-0.5 rounded bg-inset px-2.5 py-2 text-[11px] text-mut">
                 {pv.doneTaskCount > 0 && (
                   <li>· {pv.doneTaskCount} 条已完成的任务留在项目里(完成记录不会被抹掉)</li>
                 )}
@@ -102,13 +102,13 @@ export function ProjectDeleteDialog({
                   <li>· 其中 {pv.mirrorTaskCount} 条来自 Google 日历,时间仍归日历那边</li>
                 )}
                 {pv.recurringTaskCount > 0 && (
-                  <li className="text-amber-700">
+                  <li className="text-warn-ink">
                     · ⚠ 其中 {pv.recurringTaskCount} 条是循环任务的当前一次 —— 删除会
                     <strong>结束这些循环</strong>(INV-36.11)
                   </li>
                 )}
                 {pv.unresolvedWaitingCount > 0 && (
-                  <li className="text-amber-700">
+                  <li className="text-warn-ink">
                     · ⚠ {pv.unresolvedWaitingCount} 条未解决的等待项仍指向它,本次不动
                   </li>
                 )}
@@ -119,7 +119,7 @@ export function ProjectDeleteDialog({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+                className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hov"
               >
                 取消
               </button>
@@ -128,7 +128,7 @@ export function ProjectDeleteDialog({
                   type="button"
                   disabled={busy}
                   onClick={() => run('toInbox')}
-                  className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:opacity-40"
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hov disabled:opacity-40"
                   title="项目归类错了,但这些事还要做"
                 >
                   把 {n} 个任务退回 Inbox
@@ -138,7 +138,7 @@ export function ProjectDeleteDialog({
                 type="button"
                 disabled={busy}
                 onClick={() => run('delete')}
-                className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-40"
+                className="rounded-lg bg-danger px-3 py-1.5 text-sm text-on-danger hover:bg-danger-strong disabled:opacity-40"
                 title="项目取消了,里面的事也不做了"
               >
                 {n > 0 ? `连同 ${n} 个任务一起删` : '删除项目'}

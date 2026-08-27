@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
+import { applyAppearance } from './appearance';
 import { toast } from './toast';
 import './styles.css';
 
@@ -29,10 +30,17 @@ window.gtd.onChanged((ev) => {
 
 const container = document.getElementById('root');
 if (!container) throw new Error('#root not found');
-createRoot(container).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </React.StrictMode>,
-);
+// 外观先于首帧应用,否则每次启动都先闪一下默认主题再切过去
+void window.appearance
+  .get()
+  .then(applyAppearance)
+  .catch(() => undefined)
+  .finally(() => {
+    createRoot(container).render(
+      <React.StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </React.StrictMode>,
+    );
+  });

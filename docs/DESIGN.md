@@ -846,6 +846,33 @@ INV-32.6 / INV-33.9 点名 **agent skill 也在约束内** —— 择事必须�
 
 ---
 
+### 6.16 外观系统:主题 / 自定义颜色 / 分部位字体(D-38,2026-08-13,M11-B)
+
+**分层**:`styles.css` 定义语义 token(`--t-*`)+ Tailwind `@theme inline` 映射(组件类名
+`bg-surface` / `text-ink` / `border-line` / `text-acc` / `bg-brand` …);四套内置主题 =
+四组 `:root[data-theme=…]` 的 token 赋值(claudoist-light 默认 / claudoist-dark /
+solarized-light / solarized-dark)。**渲染层禁止再写调色板类**(bg-white / text-neutral-500
+之类是死值,换主题不动)。
+
+**面板作用域**:`.theme-panel`(挂在 AgentPanel 根上)把同一批 `--t-*` 重指到 `--p-*`
+(面板专用值)—— 同一个语义类在面板内自动换色,组件不写第二套类名。全窗弹层
+(AgentSettings / RewindDialog)`createPortal` 到 body,天然脱离面板作用域,永远用主题主色
+—— 这就是"对话框与主题对比度失衡"的根治(此前 RewindDialog 写死深色浮在浅色主区上)。
+
+**自定义**:`AppearanceVM = { theme, overrides, fonts }` 存 settings 表(key='appearance');
+overrides 是「token 变量名 → CSS 颜色」差量,内联写在 `<html>` 上(优先级高于预设),
+所以自定义天然是"基于当前预设改几个色"。存取两侧都过 `sanitizeAppearance`
+(token 名 / 颜色值 / 字体名均白名单正则,手改坏的值静默丢弃、不崩窗口)。
+
+**字体**:三部位(界面 `--font-ui` / 聊天 `--font-chat` / 等宽 `--font-mono`),每部位
+英文 + 中文两栏 —— 组装成「"英文字体", "中文字体", 系统兜底」栈,拉丁字形命中英文字体、
+CJK 字符落到中文字体,即"中英文分开设"。`main.tsx` 在首帧渲染**之前** `applyAppearance`,
+避免每次启动闪默认主题。
+
+**错误面**:主进程 `uncaughtException` / `unhandledRejection` 与渲染层 ErrorBoundary
+统一 JSONL 追加到 `<userData>/logs/errors.log`(记日志失败静默 —— 上报路径不许反过来
+把应用炸了);设置 → 外观页有「打开错误日志目录」。
+
 ## 7. Agent 面板功能 → SDK API 映射
 
 | 功能 | 实现 |

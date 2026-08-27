@@ -65,12 +65,12 @@ export function ProjectModal({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 pt-28">
-      <div className="w-[440px] max-w-[92vw] rounded-xl border border-neutral-200 bg-white p-4 shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-scrim pt-28">
+      <div className="w-[440px] max-w-[92vw] rounded-xl border border-line bg-raised p-4 shadow-2xl">
         <h2 className="mb-3 text-sm font-semibold">{project ? '编辑项目' : '新建项目'}</h2>
         <input
           autoFocus
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-blue-400"
+          className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-acc"
           placeholder="项目名(期望成果)"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -82,39 +82,33 @@ export function ProjectModal({
           }}
         />
         <div className="mt-2 flex items-center gap-2">
-          <label className="text-xs text-neutral-500">Deadline</label>
+          <label className="text-xs text-mut">Deadline</label>
           <input
             type="date"
-            className="w-36 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            className="w-36 rounded border border-line px-2 py-1 text-xs outline-none focus:border-acc"
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
           />
           {deadline && (
-            <button
-              type="button"
-              className="text-xs text-neutral-400"
-              onClick={() => setDeadline('')}
-            >
+            <button type="button" className="text-xs text-fnt" onClick={() => setDeadline('')}>
               清除
             </button>
           )}
-          <span className="text-[11px] text-neutral-400">
-            项目 deadline 会流向其中的行动(INV-10)
-          </span>
+          <span className="text-[11px] text-fnt">项目 deadline 会流向其中的行动(INV-10)</span>
         </div>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-danger-ink">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hov"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => void submit()}
-            className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700"
+            className="rounded-lg bg-brand px-3 py-1.5 text-sm text-on-brand hover:bg-brand-strong"
           >
             {project ? '保存' : '创建'}
           </button>

@@ -113,14 +113,14 @@ export function TaskDetailModal({
   ): React.JSX.Element => {
     const toggle = (): void => setEditing(editing === key ? null : key);
     return (
-      <div className="border-b border-neutral-100 py-2">
+      <div className="border-b border-line-soft py-2">
         <div className="flex w-full items-center justify-between">
-          <span className="text-xs font-medium text-neutral-500">{label}</span>
+          <span className="text-xs font-medium text-mut">{label}</span>
           {/* 无值 → ＋ 新增;编辑中 → × 收起;有值且未编辑 → 不显示 ＋(点值即可改) */}
           {!hasValue || editing === key ? (
             <button
               type="button"
-              className="text-lg leading-none text-neutral-300 hover:text-neutral-600"
+              className="text-lg leading-none text-fnt hover:text-mut"
               title={editing === key ? '收起' : '添加'}
               onClick={toggle}
             >
@@ -134,7 +134,7 @@ export function TaskDetailModal({
           ) : (
             <button
               type="button"
-              className="mt-1 w-full cursor-pointer rounded px-1 py-0.5 text-left text-sm hover:bg-neutral-200/60"
+              className="mt-1 w-full cursor-pointer rounded px-1 py-0.5 text-left text-sm hover:bg-hov"
               title="点击修改"
               onClick={toggle}
             >
@@ -147,31 +147,31 @@ export function TaskDetailModal({
   };
 
   const chip = (active: boolean): string =>
-    `rounded-md border px-2 py-1 text-xs ${active ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'}`;
+    `rounded-md border px-2 py-1 text-xs ${active ? 'border-acc bg-acc-soft text-acc' : 'border-line text-mut hover:bg-hov'}`;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 pt-16">
-      <div className="flex max-h-[82vh] w-[820px] max-w-[95vw] flex-col rounded-xl border border-neutral-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-scrim pt-16">
+      <div className="flex max-h-[82vh] w-[820px] max-w-[95vw] flex-col rounded-xl border border-line bg-raised shadow-2xl">
         {/* 顶栏 */}
-        <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-2 text-xs text-neutral-500">
+        <div className="flex items-center gap-2 border-b border-line-soft px-4 py-2 text-xs text-mut">
           {backTarget && (
-            <button type="button" className="hover:text-neutral-800" onClick={back}>
+            <button type="button" className="hover:text-ink" onClick={back}>
               ← {backTarget.title ?? '返回'}
             </button>
           )}
           <span className="truncate">📍 {data?.locationLabel ?? ''}</span>
           <button
             type="button"
-            className="ml-auto text-lg leading-none text-neutral-400 hover:text-neutral-700"
+            className="ml-auto text-lg leading-none text-fnt hover:text-ink"
             onClick={onClose}
           >
             ×
           </button>
         </div>
 
-        {isLoading && <p className="px-5 py-6 text-sm text-neutral-400">加载中…</p>}
+        {isLoading && <p className="px-5 py-6 text-sm text-fnt">加载中…</p>}
         {!isLoading && !data && (
-          <p className="px-5 py-6 text-sm text-neutral-400">任务不存在(可能已删除)。</p>
+          <p className="px-5 py-6 text-sm text-fnt">任务不存在(可能已删除)。</p>
         )}
         {data && t && (
           <div className="flex min-h-0 flex-1">
@@ -181,7 +181,7 @@ export function TaskDetailModal({
                 {done ? (
                   <button
                     type="button"
-                    className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500 text-xs text-white hover:bg-green-600"
+                    className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok text-xs text-on-acc hover:bg-ok/90"
                     title="已完成 — 点击撤销"
                     onClick={() => void reopenTask(t.id)}
                   >
@@ -190,26 +190,22 @@ export function TaskDetailModal({
                 ) : (
                   <button
                     type="button"
-                    className="mt-1 h-5 w-5 shrink-0 rounded-full border-2 border-neutral-300 hover:border-green-500 hover:bg-green-50"
+                    className="mt-1 h-5 w-5 shrink-0 rounded-full border-2 border-line hover:border-ok hover:bg-ok-soft"
                     title={completeTitle(t.subtaskCount)}
                     onClick={() => void completeWithFeedback(t.title, t.id)}
                   />
                 )}
                 <div className="min-w-0 flex-1">
-                  <h2
-                    className={`text-lg font-semibold ${done ? 'text-neutral-400 line-through' : ''}`}
-                  >
+                  <h2 className={`text-lg font-semibold ${done ? 'text-fnt line-through' : ''}`}>
                     {t.title}
                   </h2>
                   {t.description && (
-                    <p className="mt-1 text-sm whitespace-pre-wrap text-neutral-600">
-                      {t.description}
-                    </p>
+                    <p className="mt-1 text-sm whitespace-pre-wrap text-mut">{t.description}</p>
                   )}
                 </div>
               </div>
 
-              <h3 className="mt-5 mb-1 text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              <h3 className="mt-5 mb-1 text-xs font-semibold tracking-wide text-mut uppercase">
                 子任务
               </h3>
               {/* 弹窗内 depth-0 是本任务的子任务而非容器顶层 → 禁用拖拽避免误摘父子关系 */}
@@ -233,32 +229,30 @@ export function TaskDetailModal({
                 ) : (
                   <button
                     type="button"
-                    className="mt-1 flex items-center gap-2 px-2 py-1.5 text-sm text-neutral-400 hover:text-red-600"
+                    className="mt-1 flex items-center gap-2 px-2 py-1.5 text-sm text-fnt hover:text-brand"
                     onClick={() => setAddingSub(true)}
                   >
                     <span className="text-lg leading-none">＋</span> Add sub-task
                   </button>
                 )
               ) : (
-                <p className="mt-1 px-2 text-xs text-neutral-400">已到第 5 层,不能再嵌套(INV-25)</p>
+                <p className="mt-1 px-2 text-xs text-fnt">已到第 5 层,不能再嵌套(INV-25)</p>
               )}
 
-              <h3 className="mt-5 mb-1 text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              <h3 className="mt-5 mb-1 text-xs font-semibold tracking-wide text-mut uppercase">
                 评论
               </h3>
               <ul className="space-y-2">
                 {data.comments.map((c) => (
-                  <li key={c.id} className="rounded-md bg-neutral-50 px-3 py-2">
+                  <li key={c.id} className="rounded-md bg-inset px-3 py-2">
                     <p className="text-sm whitespace-pre-wrap">{c.body}</p>
-                    <p className="mt-0.5 text-[11px] text-neutral-400">
-                      {c.createdAt.replace('T', ' ')}
-                    </p>
+                    <p className="mt-0.5 text-[11px] text-fnt">{c.createdAt.replace('T', ' ')}</p>
                   </li>
                 ))}
               </ul>
               <div className="mt-2 flex items-center gap-2">
                 <input
-                  className="flex-1 rounded-md border border-neutral-200 px-3 py-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-blue-400"
+                  className="flex-1 rounded-md border border-line px-3 py-1.5 text-sm outline-none placeholder:text-fnt focus:border-acc"
                   placeholder="Comment(回车发送)"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
@@ -273,7 +267,7 @@ export function TaskDetailModal({
             </div>
 
             {/* 右栏:属性面板 */}
-            <div className="w-64 shrink-0 overflow-y-auto border-l border-neutral-100 bg-neutral-50/60 px-4 py-3">
+            <div className="w-64 shrink-0 overflow-y-auto border-l border-line-soft bg-inset/60 px-4 py-3">
               {attrRow(
                 'loc',
                 'Project / 位置',
@@ -307,9 +301,7 @@ export function TaskDetailModal({
                     </button>
                   ))}
                   {t.parentTaskId !== null && (
-                    <span className="text-[11px] text-neutral-400">
-                      移动子任务会先脱离父任务(INV-25)
-                    </span>
+                    <span className="text-[11px] text-fnt">移动子任务会先脱离父任务(INV-25)</span>
                   )}
                 </div>,
               )}
@@ -320,7 +312,7 @@ export function TaskDetailModal({
                 <span>
                   {t.scheduledDate}
                   {t.repeatShort !== null && (
-                    <span className="ml-1.5 text-blue-600" title={t.repeatLong ?? undefined}>
+                    <span className="ml-1.5 text-acc" title={t.repeatLong ?? undefined}>
                       🔁 {t.repeatShort}
                     </span>
                   )}
@@ -359,7 +351,7 @@ export function TaskDetailModal({
                     {t.scheduledDate && (
                       <button
                         type="button"
-                        className="text-xs text-neutral-400"
+                        className="text-xs text-fnt"
                         onMouseDown={() => void patch({ scheduledDate: null })}
                       >
                         清除
@@ -383,9 +375,7 @@ export function TaskDetailModal({
                 t.startTime !== null,
                 <span>
                   🕐 {t.startTime}·{t.durationMinutes ?? t.estimatedMinutes}m
-                  <span className="ml-1.5 text-[11px] text-neutral-400">
-                    {t.timeZone ?? '浮动时间'}
-                  </span>
+                  <span className="ml-1.5 text-[11px] text-fnt">{t.timeZone ?? '浮动时间'}</span>
                 </span>,
                 t.externalId !== null ? (
                   <ExternalOwnedHint />
@@ -407,7 +397,7 @@ export function TaskDetailModal({
                 'deadline',
                 'Deadline',
                 t.deadline !== null,
-                <span className={t.overdue ? 'text-red-600' : ''}>{t.deadline}</span>,
+                <span className={t.overdue ? 'text-danger-ink' : ''}>{t.deadline}</span>,
                 <div className="flex items-center gap-2">
                   <DraftField
                     initial={t.deadline ?? ''}
@@ -425,7 +415,7 @@ export function TaskDetailModal({
                   {t.deadline && (
                     <button
                       type="button"
-                      className="text-xs text-neutral-400"
+                      className="text-xs text-fnt"
                       onMouseDown={() => void patch({ deadline: null })}
                     >
                       清除
@@ -468,7 +458,7 @@ export function TaskDetailModal({
                     </button>
                   ))}
                   {(labels.data?.length ?? 0) === 0 && (
-                    <span className="text-[11px] text-neutral-400">还没有 label</span>
+                    <span className="text-[11px] text-fnt">还没有 label</span>
                   )}
                 </div>,
               )}
@@ -483,7 +473,7 @@ export function TaskDetailModal({
                       <span>{r.remindAt.replace('T', ' ')}</span>
                       <button
                         type="button"
-                        className="text-neutral-400 hover:text-red-600"
+                        className="text-fnt hover:text-danger-ink"
                         onClick={() => void delRem(r.id)}
                       >
                         删除
@@ -493,7 +483,7 @@ export function TaskDetailModal({
                   <div className="flex items-center gap-1.5">
                     <input
                       type="datetime-local"
-                      className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                      className="rounded border border-line px-2 py-1 text-xs"
                       value={newReminder}
                       onChange={(e) => setNewReminder(e.target.value)}
                     />
@@ -501,7 +491,7 @@ export function TaskDetailModal({
                       添加
                     </button>
                   </div>
-                  <span className="text-[11px] text-neutral-400">落库即存;响铃 M6 上线</span>
+                  <span className="text-[11px] text-fnt">落库即存;响铃 M6 上线</span>
                 </div>,
               )}
             </div>
@@ -553,7 +543,7 @@ function DraftField({
       type={type}
       {...(placeholder !== undefined ? { placeholder } : {})}
       title="回车保存,Esc 取消"
-      className={`rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400 ${className}`}
+      className={`rounded border border-line px-2 py-1 text-xs outline-none focus:border-acc ${className}`}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
         if (isSubmitEnter(e)) {
@@ -639,7 +629,7 @@ function TimeEditor({
         value={time}
         placeholder="HH:MM"
         title="回车保存,Esc 取消"
-        className="w-20 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+        className="w-20 rounded border border-line px-2 py-1 text-xs outline-none focus:border-acc"
         onChange={(e) => setTime(e.target.value)}
         onKeyDown={onKey}
       />
@@ -647,13 +637,13 @@ function TimeEditor({
         value={dur}
         placeholder="分钟"
         title="回车保存,Esc 取消"
-        className="w-16 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+        className="w-16 rounded border border-line px-2 py-1 text-xs outline-none focus:border-acc"
         onChange={(e) => setDur(e.target.value)}
         onKeyDown={onKey}
       />
       {/* 时区(D-27/INV-31):浮动 = 跨时区墙上时间不变(默认,与 naive 语义一致) */}
       <select
-        className="rounded border border-neutral-300 px-1 py-1 text-xs"
+        className="rounded border border-line px-1 py-1 text-xs"
         value={zone ?? ''}
         onChange={(e) => setZone(e.target.value === '' ? null : e.target.value)}
         title="浮动时间:换时区后仍是同一个墙上时间;指定时区:跨时区自动换算"
@@ -671,9 +661,7 @@ function TimeEditor({
           清除
         </button>
       )}
-      {!hasDate && (
-        <span className="text-[11px] text-neutral-400">需先设 Date(哪天)时间才会上日历</span>
-      )}
+      {!hasDate && <span className="text-[11px] text-fnt">需先设 Date(哪天)时间才会上日历</span>}
     </div>
   );
 }
@@ -681,7 +669,7 @@ function TimeEditor({
 /** 外部镜像任务:标题与时间归 Google 拥有(D-25/INV-29),本地不可改。 */
 function ExternalOwnedHint(): React.JSX.Element {
   return (
-    <p className="rounded-md bg-neutral-100 px-2 py-1.5 text-[11px] leading-relaxed text-neutral-500">
+    <p className="rounded-md bg-inset px-2 py-1.5 text-[11px] leading-relaxed text-mut">
       该任务来自 Google 日历,<strong>时间与标题请在 Google 日历中修改</strong>。
       其余(完成、优先级、标签、子任务、评论)与普通任务一样,且不会写回 Google。
     </p>

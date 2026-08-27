@@ -94,7 +94,7 @@ function AssistantBubble({
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="group relative max-w-[92%] rounded-2xl bg-neutral-800 px-3 py-2 text-sm">
+    <div className="group relative max-w-[92%] rounded-2xl bg-surface px-3 py-2 text-sm">
       <div
         data-md-bubble=""
         ref={(el) => {
@@ -106,7 +106,7 @@ function AssistantBubble({
       <button
         type="button"
         title="复制 Markdown 原文"
-        className="absolute top-1 right-1 rounded border border-neutral-700 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-500 opacity-60 group-hover:opacity-100 hover:text-neutral-100"
+        className="absolute top-1 right-1 rounded border border-line bg-app/80 px-1.5 py-0.5 text-[10px] text-fnt opacity-60 group-hover:opacity-100 hover:text-ink"
         onClick={() => {
           void navigator.clipboard.writeText(text).then(() => {
             setCopied(true);
@@ -502,7 +502,7 @@ export function AgentPanel(): React.JSX.Element {
 
   return (
     <div
-      className="relative flex h-full flex-col bg-neutral-900 text-neutral-100"
+      className="theme-panel relative flex h-full flex-col bg-app text-ink"
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -511,18 +511,16 @@ export function AgentPanel(): React.JSX.Element {
       onDrop={onDrop}
       onPaste={onPaste}
     >
-      <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <span className="text-sm font-semibold">Agent</span>
-        <div className="flex items-center gap-2 text-neutral-400">
+        <div className="flex items-center gap-2 text-mut">
           <button
             type="button"
             title="账号与用量 · 模型 · 我的偏好 · Skills · 权限"
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 leading-none hover:bg-neutral-800 hover:text-neutral-100"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 leading-none hover:bg-hov hover:text-ink"
             onClick={() => setSettingsOpen(true)}
           >
-            <span className={status?.loggedIn === true ? 'text-emerald-500' : 'text-amber-400'}>
-              ●
-            </span>
+            <span className={status?.loggedIn === true ? 'text-ok' : 'text-warn-ink'}>●</span>
             <span className="max-w-24 truncate text-[11px]">
               {status?.email?.split('@')[0] ?? '未登录'}
             </span>
@@ -530,7 +528,7 @@ export function AgentPanel(): React.JSX.Element {
           <button
             type="button"
             title="历史会话"
-            className="leading-none hover:text-neutral-100"
+            className="leading-none hover:text-ink"
             onClick={() => setHistoryOpen(true)}
           >
             🕘
@@ -538,7 +536,7 @@ export function AgentPanel(): React.JSX.Element {
           <button
             type="button"
             title="新建会话"
-            className="leading-none hover:text-neutral-100"
+            className="leading-none hover:text-ink"
             onClick={() => {
               void window.agent.newSession().then(() => {
                 setItems([]);
@@ -566,7 +564,7 @@ export function AgentPanel(): React.JSX.Element {
         }}
       >
         {status !== null && !status.loggedIn && (
-          <div className="rounded-lg bg-amber-950/60 px-3 py-2 text-xs text-amber-200">
+          <div className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-ink">
             没检测到本机 Claude Code 登录。请在终端执行 <code>claude</code> 完成登录,然后点下面的
             重试 —— 不用重启应用。
             <button type="button" className="ml-2 underline" onClick={() => void refreshStatus()}>
@@ -575,7 +573,7 @@ export function AgentPanel(): React.JSX.Element {
           </div>
         )}
         {items.length === 0 && (
-          <p className="px-1 py-6 text-center text-xs text-neutral-500">
+          <p className="px-1 py-6 text-center text-xs text-fnt">
             {canWrite
               ? '我能查你的任务并按你的确认帮你改。每次写入都会先问你(可在设置里调权限模式)。'
               : '只读模式:我能查你的任务、项目、日历、标签与过滤器,但改不了数据。'}
@@ -592,7 +590,7 @@ export function AgentPanel(): React.JSX.Element {
                   setTurnMenu({ x: e.clientX, y: e.clientY, index: i });
                 }}
               >
-                <div className="max-w-[85%] rounded-2xl bg-blue-600 px-3 py-1.5 text-sm whitespace-pre-wrap select-text">
+                <div className="max-w-[85%] rounded-2xl bg-acc px-3 py-1.5 text-sm whitespace-pre-wrap text-on-acc select-text">
                   {it.text}
                   {it.imageCount > 0 && (
                     <span className="ml-1 text-[11px] opacity-80">+{it.imageCount} 图</span>
@@ -634,7 +632,7 @@ export function AgentPanel(): React.JSX.Element {
             return (
               <p
                 key={i}
-                className="rounded-lg border border-neutral-700 bg-neutral-850/40 px-2.5 py-1.5 text-[11px] text-neutral-400"
+                className="rounded-lg border border-line bg-surface/40 px-2.5 py-1.5 text-[11px] text-mut"
               >
                 {it.text}
               </p>
@@ -644,13 +642,13 @@ export function AgentPanel(): React.JSX.Element {
             return (
               <div
                 key={i}
-                className="rounded-lg border border-red-800 bg-red-950/50 px-2.5 py-2 text-[11px] text-red-200"
+                className="rounded-lg border border-danger bg-danger-soft px-2.5 py-2 text-[11px] text-danger-ink"
               >
                 <p className="whitespace-pre-wrap">{it.text.replace(/\*\*/g, '')}</p>
                 <div className="mt-1.5 flex gap-2">
                   <button
                     type="button"
-                    className="rounded border border-red-700 px-2 py-0.5 hover:bg-red-900"
+                    className="rounded border border-danger px-2 py-0.5 hover:bg-danger-soft"
                     onClick={() => {
                       void window.agent.restartSession().then((r) => {
                         if (r.error !== undefined) return toast(r.error);
@@ -663,7 +661,7 @@ export function AgentPanel(): React.JSX.Element {
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-red-800 px-2 py-0.5 hover:bg-red-900"
+                    className="rounded border border-danger px-2 py-0.5 hover:bg-danger-soft"
                     onClick={() => setSettingsOpen(true)}
                   >
                     去调高上限
@@ -674,22 +672,22 @@ export function AgentPanel(): React.JSX.Element {
           }
           if (it.kind === 'error') {
             return (
-              <p key={i} className="px-1 text-xs text-red-400">
+              <p key={i} className="px-1 text-xs text-danger-ink">
                 {it.text}
               </p>
             );
           }
           return (
-            <p key={i} className="px-1 text-center text-[11px] text-neutral-500">
+            <p key={i} className="px-1 text-center text-[11px] text-fnt">
               {it.text}
             </p>
           );
         })}
-        {busy && <p className="text-center text-xs text-neutral-500">思考中…</p>}
+        {busy && <p className="text-center text-xs text-fnt">思考中…</p>}
       </div>
 
       {/* 建议按钮(D-28):点击 = 发预置提示;只读期明确降级 */}
-      <div className="flex flex-wrap gap-1.5 border-t border-neutral-800 px-3 pt-2">
+      <div className="flex flex-wrap gap-1.5 border-t border-line-soft px-3 pt-2">
         {SUGGESTIONS.map((s) => (
           <button
             key={s.label}
@@ -700,13 +698,11 @@ export function AgentPanel(): React.JSX.Element {
                 ? '需要写入能力:当前是只读模式,agent 会说明能做到哪一步'
                 : undefined
             }
-            className="rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+            className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mut hover:bg-hov disabled:opacity-40"
             onClick={() => void submit(s.prompt)}
           >
             {s.label}
-            {s.needsWrite === true && !canWrite && (
-              <span className="ml-1 text-neutral-500">·只读</span>
-            )}
+            {s.needsWrite === true && !canWrite && <span className="ml-1 text-fnt">·只读</span>}
           </button>
         ))}
       </div>
@@ -719,11 +715,11 @@ export function AgentPanel(): React.JSX.Element {
                 <img
                   src={`data:${img.mediaType};base64,${img.data}`}
                   alt=""
-                  className="h-12 w-12 rounded border border-neutral-600 object-cover"
+                  className="h-12 w-12 rounded border border-line object-cover"
                 />
                 <button
                   type="button"
-                  className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-neutral-700 text-[10px] leading-none text-white"
+                  className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-sel text-[10px] leading-none text-ink"
                   onClick={() => setImages((p) => p.filter((_, j) => j !== i))}
                 >
                   ×
@@ -733,13 +729,13 @@ export function AgentPanel(): React.JSX.Element {
             {attachments.map((a, i) => (
               <span
                 key={a.path}
-                className="flex items-center gap-1 rounded border border-neutral-700 px-1.5 py-0.5 text-[11px] text-neutral-300"
+                className="flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-mut"
                 title={a.path}
               >
                 📎 {a.name}
                 <button
                   type="button"
-                  className="text-neutral-500 hover:text-neutral-200"
+                  className="text-fnt hover:text-ink"
                   onClick={() => setAttachments((p) => p.filter((_, j) => j !== i))}
                 >
                   ×
@@ -759,13 +755,13 @@ export function AgentPanel(): React.JSX.Element {
           }}
           rows={3}
           placeholder="给 Claude 发消息…(Enter 发送;图片随时可粘贴,文件可拖入)"
-          className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none placeholder:text-neutral-500 focus:border-neutral-500"
+          className="w-full resize-none rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none placeholder:text-fnt focus:border-acc"
         />
-        <div className="mt-1 flex min-h-[18px] items-center gap-2 text-[11px] text-neutral-500">
+        <div className="mt-1 flex min-h-[18px] items-center gap-2 text-[11px] text-fnt">
           <button
             type="button"
             title="添加附件(复制进应用附件目录后 agent 才能读)"
-            className="hover:text-neutral-200"
+            className="hover:text-ink"
             onClick={pickFiles}
           >
             📎
@@ -776,7 +772,7 @@ export function AgentPanel(): React.JSX.Element {
           {busy && (
             <button
               type="button"
-              className="ml-auto shrink-0 rounded border border-neutral-700 px-2 py-0.5 hover:bg-neutral-800"
+              className="ml-auto shrink-0 rounded border border-line px-2 py-0.5 hover:bg-hov"
               onClick={() => void window.agent.interrupt()}
               title="只停当前这轮,会话继续"
             >
@@ -787,7 +783,7 @@ export function AgentPanel(): React.JSX.Element {
       </div>
 
       {dragOver && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border-2 border-dashed border-blue-500 bg-blue-950/30 text-sm text-blue-200">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border-2 border-dashed border-acc bg-acc-soft text-sm text-acc">
           松手添加附件
         </div>
       )}
@@ -821,9 +817,7 @@ export function AgentPanel(): React.JSX.Element {
           const canFork = why === null && anchor?.anchorUuid !== undefined;
           return (
             <ContextMenu x={turnMenu.x} y={turnMenu.y} onClose={close}>
-              {why !== null && (
-                <div className="px-3 py-1.5 text-[11px] text-neutral-400">{why}</div>
-              )}
+              {why !== null && <div className="px-3 py-1.5 text-[11px] text-mut">{why}</div>}
               <ContextMenuItem
                 disabled={!canFork}
                 title={canFork ? undefined : '这条消息没有可用于分叉的标识'}
@@ -924,11 +918,11 @@ export function AgentPanel(): React.JSX.Element {
 }
 
 const MODE_PILL: Record<string, { text: string; cls: string }> = {
-  plan: { text: '只读', cls: 'text-neutral-400 border-neutral-700' },
-  manual: { text: '逐条确认', cls: 'text-emerald-400 border-emerald-800' },
-  acceptEdits: { text: '自动改已有', cls: 'text-amber-400 border-amber-800' },
-  auto: { text: '自动', cls: 'text-amber-400 border-amber-800' },
-  bypass: { text: '全部放行', cls: 'text-red-400 border-red-800' },
+  plan: { text: '只读', cls: 'text-mut border-line' },
+  manual: { text: '逐条确认', cls: 'text-ok border-ok' },
+  acceptEdits: { text: '自动改已有', cls: 'text-warn-ink border-warn-line' },
+  auto: { text: '自动', cls: 'text-warn-ink border-warn-line' },
+  bypass: { text: '全部放行', cls: 'text-danger-ink border-danger' },
 };
 
 /** 权限模式常驻在 composer 下方 —— 用户任何时候都该知道 agent 现在能做到什么程度。 */
@@ -950,11 +944,11 @@ function ModePill({ mode, onClick }: { mode: string; onClick: () => void }): Rea
 function ThinkingBlock({ text }: { text: string }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-2.5 py-1.5 text-[11px] text-neutral-500">
+    <div className="rounded-lg border border-line-soft bg-app/60 px-2.5 py-1.5 text-[11px] text-fnt">
       <button type="button" className="w-full text-left" onClick={() => setOpen(!open)}>
         💭 思考{open ? '' : `(${String(text.length)} 字)`}
       </button>
-      {open && <pre className="mt-1 whitespace-pre-wrap text-neutral-500">{text}</pre>}
+      {open && <pre className="mt-1 whitespace-pre-wrap text-fnt">{text}</pre>}
     </div>
   );
 }
@@ -963,18 +957,18 @@ function ThinkingBlock({ text }: { text: string }): React.JSX.Element {
 function ToolChip({ item }: { item: Extract<Item, { kind: 'tool' }> }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-850/40 px-2.5 py-1.5 text-[11px]">
+    <div className="rounded-lg border border-line-soft bg-surface/40 px-2.5 py-1.5 text-[11px]">
       <button
         type="button"
         className="flex w-full items-center gap-1.5 text-left"
         onClick={() => setOpen(!open)}
       >
         <span className={item.result === null ? 'animate-pulse' : ''}>🔧</span>
-        <span className="font-mono text-neutral-300">{shortName(item.name)}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-neutral-500">{item.input}</span>
-        <span className="shrink-0 text-neutral-600">
+        <span className="font-mono text-mut">{shortName(item.name)}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-fnt">{item.input}</span>
+        <span className="shrink-0 text-fnt">
           {item.awaiting === true ? (
-            <span className="text-amber-400">等待你批准…</span>
+            <span className="text-warn-ink">等待你批准…</span>
           ) : item.result === null ? (
             '…'
           ) : item.ok ? (
@@ -985,7 +979,7 @@ function ToolChip({ item }: { item: Extract<Item, { kind: 'tool' }> }): React.JS
         </span>
       </button>
       {open && item.result !== null && (
-        <pre className="mt-1 max-h-56 overflow-auto rounded bg-neutral-900 p-2 text-[10px] whitespace-pre-wrap text-neutral-400">
+        <pre className="mt-1 max-h-56 overflow-auto rounded bg-inset p-2 text-[10px] whitespace-pre-wrap text-mut">
           {item.result}
         </pre>
       )}

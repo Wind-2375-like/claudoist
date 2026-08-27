@@ -1,1 +1,430 @@
 @import 'tailwindcss';
+
+/**
+ * 外观系统(M11-B / D-38)。
+ *
+ * ## 结构
+ *
+ * 1. **语义 token**(`--t-*`):组件只允许用语义类(bg-surface / text-ink / border-line …),
+ *    不允许出现 bg-white / text-neutral-500 这类调色板类 —— 后者换主题时是死值。
+ * 2. **主题 = 一组 `--t-*` 赋值**,挂在 `:root[data-theme="…"]` 上;内置四套:
+ *    claudoist-light(默认,即改版前的观感)/ claudoist-dark / solarized-light / solarized-dark。
+ * 3. **`.theme-panel` 是作用域覆盖**:agent 聊天面板整体换一套 token 值(如 solarized-light
+ *    里正文是 base3 纸色、面板是 base03 深青),组件里**同一个语义类**在面板内自动换色 ——
+ *    这就是"对话框/面板与主题对比度失衡"的解法:对话框经 portal 挂 body,永远用主题主色;
+ *    面板内的东西自动用面板色,谁也不用写第二套类名。
+ * 4. **自定义主题**:设置页把用户改过的 token 以内联 CSS 变量写在 <html> 上(优先级高于
+ *    data-theme 的赋值),存 settings 表,启动时回放。
+ * 5. **字体**:--font-ui / --font-chat / --font-mono 三个部位,每个是「英文字体, 中文字体,
+ *    系统兜底」的字体栈 —— 拉丁字形先命中英文字体,CJK 字符自然落到中文字体上,
+ *    这就是"中英文分开设"的实现方式。由设置页组装后写在 <html> 内联变量上。
+ */
+
+@theme inline {
+  /* 背景 */
+  --color-app: var(--t-app); /* 窗口/中栏底色 */
+  --color-side: var(--t-side); /* 侧栏 */
+  --color-surface: var(--t-surface); /* 行/卡片/输入框 */
+  --color-raised: var(--t-raised); /* 弹窗/菜单/浮层 */
+  --color-inset: var(--t-inset); /* 凹陷:提示盒/代码底/预览条 */
+  --color-hov: var(--t-hov); /* hover */
+  --color-sel: var(--t-sel); /* 选中/激活 */
+  /* 边框 */
+  --color-line: var(--t-line);
+  --color-line-soft: var(--t-line-soft);
+  /* 文字 */
+  --color-ink: var(--t-ink); /* 主文字 */
+  --color-mut: var(--t-mut); /* 次要 */
+  --color-fnt: var(--t-fnt); /* 提示/占位 */
+  /* 强调(信息/选中/链接 —— 默认蓝) */
+  --color-acc: var(--t-acc);
+  --color-acc-strong: var(--t-acc-strong);
+  --color-acc-soft: var(--t-acc-soft);
+  --color-on-acc: var(--t-on-acc);
+  /* 品牌动作(Add task —— 默认红) */
+  --color-brand: var(--t-brand);
+  --color-brand-strong: var(--t-brand-strong);
+  --color-brand-soft: var(--t-brand-soft);
+  --color-on-brand: var(--t-on-brand);
+  /* 破坏性 */
+  --color-danger: var(--t-danger);
+  --color-danger-strong: var(--t-danger-strong);
+  --color-danger-soft: var(--t-danger-soft);
+  --color-danger-ink: var(--t-danger-ink);
+  --color-on-danger: var(--t-on-danger);
+  /* 警示(默认琥珀) */
+  --color-warn-ink: var(--t-warn-ink);
+  --color-warn-soft: var(--t-warn-soft);
+  --color-warn-line: var(--t-warn-line);
+  /* 成功(默认绿) */
+  --color-ok: var(--t-ok);
+  --color-ok-soft: var(--t-ok-soft);
+  /* 进度条轨道(审查:用 surface/sel 当轨道在浅色主题下与底同色,量程不可读) */
+  --color-track: var(--t-track);
+  /* 遮罩 */
+  --color-scrim: var(--t-scrim);
+  /* 字体部位:font-sans/font-mono 工具类直指运行时变量(名字错开避免自引用) */
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
+}
+
+/* ------------------------------------------------------------------ 主题 */
+
+/* claudoist-light:默认;即 token 化之前的观感(白底 + 蓝强调 + 红品牌 + 深色面板)。 */
+:root,
+:root[data-theme='claudoist-light'] {
+  --t-app: #ffffff;
+  --t-side: #fafafa;
+  --t-surface: #ffffff;
+  --t-raised: #ffffff;
+  --t-inset: #fafafa;
+  --t-hov: #f5f5f5;
+  --t-sel: #eff6ff;
+  --t-line: #e5e5e5;
+  --t-line-soft: #f5f5f5;
+  --t-ink: #171717;
+  --t-mut: #737373;
+  --t-fnt: #a3a3a3;
+  --t-acc: #2563eb;
+  --t-acc-strong: #1d4ed8;
+  --t-acc-soft: #eff6ff;
+  --t-on-acc: #ffffff;
+  --t-brand: #dc2626;
+  --t-brand-strong: #b91c1c;
+  --t-brand-soft: #fef2f2;
+  --t-on-brand: #ffffff;
+  --t-danger: #dc2626;
+  --t-danger-strong: #b91c1c;
+  --t-danger-soft: #fef2f2;
+  --t-danger-ink: #dc2626;
+  --t-on-danger: #ffffff;
+  --t-warn-ink: #92400e;
+  --t-warn-soft: #fffbeb;
+  --t-warn-line: #fde68a;
+  --t-ok: #16a34a;
+  --t-ok-soft: #f0fdf4;
+  --t-scrim: rgb(0 0 0 / 0.35);
+  --t-track: #e5e5e5;
+  /* 面板(agent 聊天):深色对撞是有意的设计身份 */
+  --p-app: #171717;
+  --p-side: #101010;
+  --p-surface: #262626;
+  --p-raised: #262626;
+  --p-inset: #0a0a0a;
+  --p-hov: #303030; /* 必须比 surface/raised(#262626)亮一档,否则面板内 hover 无反馈 */
+  --p-sel: #404040;
+  --p-line: #404040;
+  --p-track: #4a4a4a;
+  --p-line-soft: #262626;
+  --p-ink: #f5f5f5;
+  --p-mut: #a3a3a3;
+  --p-fnt: #737373;
+  --p-acc: #60a5fa;
+  --p-acc-strong: #3b82f6;
+  --p-acc-soft: rgb(59 130 246 / 0.18);
+  --p-on-acc: #0b1220; /* 浅蓝底必须配深字:#fff 只有 2.54:1,聊天气泡直接发虚(审查实测) */
+  --p-brand: #ef4444;
+  --p-brand-strong: #dc2626;
+  --p-brand-soft: rgb(239 68 68 / 0.15);
+  --p-on-brand: #ffffff;
+  --p-danger: #dc2626;
+  --p-danger-strong: #b91c1c;
+  --p-danger-soft: rgb(239 68 68 / 0.15);
+  --p-danger-ink: #f87171;
+  --p-on-danger: #ffffff;
+  --p-warn-ink: #fcd34d;
+  --p-warn-soft: rgb(245 158 11 / 0.12);
+  --p-warn-line: rgb(245 158 11 / 0.4);
+  --p-ok: #4ade80;
+  --p-ok-soft: rgb(74 222 128 / 0.12);
+}
+
+:root[data-theme='claudoist-dark'] {
+  --t-app: #171717;
+  --t-side: #101010;
+  --t-surface: #1f1f1f;
+  --t-raised: #262626;
+  --t-inset: #0d0d0d;
+  --t-hov: #303030; /* raised 是 #262626 —— hover 必须更亮,否则弹窗/菜单里悬停无反馈 */
+  --t-sel: #1e3a5f;
+  --t-line: #3a3a3a;
+  --t-line-soft: #262626;
+  --t-ink: #f0f0f0;
+  --t-mut: #a3a3a3;
+  --t-fnt: #6f6f6f;
+  --t-acc: #60a5fa;
+  --t-acc-strong: #93c5fd;
+  --t-acc-soft: rgb(59 130 246 / 0.18);
+  --t-on-acc: #0b1220;
+  --t-brand: #ef4444;
+  --t-brand-strong: #f87171;
+  --t-brand-soft: rgb(239 68 68 / 0.14);
+  --t-on-brand: #ffffff;
+  --t-danger: #dc2626;
+  --t-danger-strong: #ef4444;
+  --t-danger-soft: rgb(239 68 68 / 0.14);
+  --t-danger-ink: #f87171;
+  --t-on-danger: #ffffff;
+  --t-warn-ink: #fbbf24;
+  --t-warn-soft: rgb(245 158 11 / 0.12);
+  --t-warn-line: rgb(245 158 11 / 0.4);
+  --t-ok: #4ade80;
+  --t-ok-soft: rgb(74 222 128 / 0.12);
+  --t-scrim: rgb(0 0 0 / 0.55);
+  /* 深色主题下面板更深一档,保持左右分区感 */
+  --t-track: #3a3a3a;
+  --p-app: #0d0d0d;
+  --p-side: #0a0a0a;
+  --p-surface: #1c1c1c;
+  --p-raised: #232323;
+  --p-inset: #060606;
+  --p-hov: #2b2b2b; /* 高于 surface(#1c1c1c)与 raised(#232323) */
+  --p-sel: #333333;
+  --p-line: #333333;
+  --p-track: #3a3a3a;
+  --p-line-soft: #1f1f1f;
+  --p-ink: #f0f0f0;
+  --p-mut: #a3a3a3;
+  --p-fnt: #6f6f6f;
+  --p-acc: #60a5fa;
+  --p-acc-strong: #93c5fd;
+  --p-acc-soft: rgb(59 130 246 / 0.18);
+  --p-on-acc: #0b1220;
+  --p-brand: #ef4444;
+  --p-brand-strong: #f87171;
+  --p-brand-soft: rgb(239 68 68 / 0.14);
+  --p-on-brand: #ffffff;
+  --p-danger: #dc2626;
+  --p-danger-strong: #ef4444;
+  --p-danger-soft: rgb(239 68 68 / 0.14);
+  --p-danger-ink: #f87171;
+  --p-on-danger: #ffffff;
+  --p-warn-ink: #fbbf24;
+  --p-warn-soft: rgb(245 158 11 / 0.12);
+  --p-warn-line: rgb(245 158 11 / 0.4);
+  --p-ok: #4ade80;
+  --p-ok-soft: rgb(74 222 128 / 0.12);
+}
+
+/* Solarized(Ethan Schoonover 原调色板):正文纸色 base3,面板深青 base03 —— 经典明暗配对。 */
+:root[data-theme='solarized-light'] {
+  --t-app: #fdf6e3; /* base3 */
+  --t-side: #f5eeda;
+  --t-surface: #fdf6e3;
+  --t-raised: #fffcf2;
+  --t-inset: #eee8d5; /* base2 */
+  --t-hov: #f3ecd9;
+  --t-sel: #e8f1f5;
+  --t-line: #d9d2bd;
+  --t-line-soft: #eee8d5;
+  --t-ink: #586e75; /* base01 */
+  --t-mut: #657b83; /* base00 */
+  --t-fnt: #93a1a1; /* base1 */
+  --t-acc: #268bd2; /* blue */
+  --t-acc-strong: #1a6da8;
+  --t-acc-soft: rgb(38 139 210 / 0.12);
+  --t-on-acc: #fdf6e3;
+  --t-brand: #dc322f; /* red */
+  --t-brand-strong: #b2231f;
+  --t-brand-soft: rgb(220 50 47 / 0.1);
+  --t-on-brand: #fdf6e3;
+  --t-danger: #dc322f;
+  --t-danger-strong: #b2231f;
+  --t-danger-soft: rgb(220 50 47 / 0.1);
+  --t-danger-ink: #dc322f;
+  --t-on-danger: #fdf6e3;
+  --t-warn-ink: #b58900; /* yellow */
+  --t-warn-soft: rgb(181 137 0 / 0.12);
+  --t-warn-line: rgb(181 137 0 / 0.4);
+  --t-ok: #859900; /* green */
+  --t-ok-soft: rgb(133 153 0 / 0.12);
+  --t-scrim: rgb(0 43 54 / 0.4);
+  --t-track: #dcd4bc;
+  /* 面板浅色(base2 家族):用户裁决 —— 诉求就是**降对比**,浅主题里深青面板是对撞
+     (2026-08-27 用户:「solarized light 的 agent 颜色不对」) */
+  --p-app: #eee8d5; /* base2 */
+  --p-side: #e6dfc8;
+  --p-surface: #f7f0dd;
+  --p-raised: #fdf6e3;
+  --p-inset: #e2dbc4;
+  --p-hov: #e6dfc8;
+  --p-sel: #dbe6ec;
+  --p-line: #cdc5ab;
+  --p-track: #cdc5ab;
+  --p-line-soft: #e2dbc4;
+  --p-ink: #586e75; /* base01 */
+  --p-mut: #657b83; /* base00 */
+  --p-fnt: #93a1a1; /* base1 */
+  --p-acc: #268bd2;
+  --p-acc-strong: #1a6da8;
+  --p-acc-soft: rgb(38 139 210 / 0.12);
+  --p-on-acc: #fdf6e3;
+  --p-brand: #dc322f;
+  --p-brand-strong: #b2231f;
+  --p-brand-soft: rgb(220 50 47 / 0.1);
+  --p-on-brand: #fdf6e3;
+  --p-danger: #dc322f;
+  --p-danger-strong: #b2231f;
+  --p-danger-soft: rgb(220 50 47 / 0.1);
+  --p-danger-ink: #dc322f;
+  --p-on-danger: #fdf6e3;
+  --p-warn-ink: #b58900;
+  --p-warn-soft: rgb(181 137 0 / 0.12);
+  --p-warn-line: rgb(181 137 0 / 0.4);
+  --p-ok: #859900;
+  --p-ok-soft: rgb(133 153 0 / 0.12);
+}
+
+:root[data-theme='solarized-dark'] {
+  --t-app: #002b36; /* base03 */
+  --t-side: #00212b;
+  --t-surface: #073642; /* base02 */
+  --t-raised: #0a3d4a;
+  --t-inset: #00212b;
+  --t-hov: #10485a; /* 必须比 raised(#0a3d4a)亮 —— 曾配成更暗,hover 形同没有 */
+  --t-sel: #0f4a59;
+  --t-line: #12505e;
+  --t-line-soft: #073642;
+  --t-ink: #93a1a1; /* base1 */
+  --t-mut: #839496; /* base0 */
+  --t-fnt: #586e75; /* base01 */
+  --t-acc: #268bd2;
+  --t-acc-strong: #4ba3dd;
+  --t-acc-soft: rgb(38 139 210 / 0.2);
+  --t-on-acc: #fdf6e3;
+  --t-brand: #dc322f;
+  --t-brand-strong: #e5504d;
+  --t-brand-soft: rgb(220 50 47 / 0.16);
+  --t-on-brand: #fdf6e3;
+  --t-danger: #dc322f;
+  --t-danger-strong: #e5504d;
+  --t-danger-soft: rgb(220 50 47 / 0.16);
+  --t-danger-ink: #e5716f;
+  --t-on-danger: #fdf6e3;
+  --t-warn-ink: #b58900;
+  --t-warn-soft: rgb(181 137 0 / 0.15);
+  --t-warn-line: rgb(181 137 0 / 0.4);
+  --t-ok: #859900;
+  --t-ok-soft: rgb(133 153 0 / 0.15);
+  --t-scrim: rgb(0 0 0 / 0.55);
+  --t-track: #12505e;
+  /* 面板再深一档(base03 之下),保持分区 */
+  --p-app: #00212b;
+  --p-side: #001b23;
+  --p-surface: #073642;
+  --p-raised: #0a3d4a;
+  --p-inset: #001b23;
+  --p-hov: #0d4553; /* 高于 surface(#073642)与 raised(#0a3d4a) */
+  --p-sel: #0f4a59;
+  --p-line: #0f4552;
+  --p-track: #12505e;
+  --p-line-soft: #062f39;
+  --p-ink: #93a1a1;
+  --p-mut: #839496;
+  --p-fnt: #586e75;
+  --p-acc: #268bd2;
+  --p-acc-strong: #4ba3dd;
+  --p-acc-soft: rgb(38 139 210 / 0.2);
+  --p-on-acc: #fdf6e3;
+  --p-brand: #dc322f;
+  --p-brand-strong: #e5504d;
+  --p-brand-soft: rgb(220 50 47 / 0.18);
+  --p-on-brand: #fdf6e3;
+  --p-danger: #dc322f;
+  --p-danger-strong: #e5504d;
+  --p-danger-soft: rgb(220 50 47 / 0.18);
+  --p-danger-ink: #e5716f;
+  --p-on-danger: #fdf6e3;
+  --p-warn-ink: #b58900;
+  --p-warn-soft: rgb(181 137 0 / 0.15);
+  --p-warn-line: rgb(181 137 0 / 0.4);
+  --p-ok: #859900;
+  --p-ok-soft: rgb(133 153 0 / 0.15);
+}
+
+/*
+ * 面板作用域:同一批语义类在 .theme-panel 内自动换成 --p-* 值。
+ * 组件因此**只写一套类名**;要不要用面板色由挂不挂这个 class 决定。
+ * 弹窗经 portal 到 body → 天然在作用域外 → 永远用主题主色(对比度问题的根治点)。
+ */
+.theme-panel {
+  --t-app: var(--p-app);
+  --t-side: var(--p-side);
+  --t-surface: var(--p-surface);
+  --t-raised: var(--p-raised);
+  --t-inset: var(--p-inset);
+  --t-hov: var(--p-hov);
+  --t-sel: var(--p-sel);
+  --t-line: var(--p-line);
+  --t-track: var(--p-track);
+  --t-line-soft: var(--p-line-soft);
+  --t-ink: var(--p-ink);
+  --t-mut: var(--p-mut);
+  --t-fnt: var(--p-fnt);
+  --t-acc: var(--p-acc);
+  --t-acc-strong: var(--p-acc-strong);
+  --t-acc-soft: var(--p-acc-soft);
+  --t-on-acc: var(--p-on-acc);
+  --t-brand: var(--p-brand);
+  --t-brand-strong: var(--p-brand-strong);
+  --t-brand-soft: var(--p-brand-soft);
+  --t-on-brand: var(--p-on-brand);
+  --t-danger: var(--p-danger);
+  --t-danger-strong: var(--p-danger-strong);
+  --t-danger-soft: var(--p-danger-soft);
+  --t-danger-ink: var(--p-danger-ink);
+  --t-on-danger: var(--p-on-danger);
+  --t-warn-ink: var(--p-warn-ink);
+  --t-warn-soft: var(--p-warn-soft);
+  --t-warn-line: var(--p-warn-line);
+  --t-ok: var(--p-ok);
+  --t-ok-soft: var(--p-ok-soft);
+  font-family: var(--font-chat);
+}
+
+/* ------------------------------------------------------------------ 字体 */
+
+:root {
+  /* 「英文, 中文, 系统兜底」栈:拉丁字形命中前者,CJK 落到后者 —— 中英文因此可分开设 */
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  --font-chat: var(--font-ui);
+  --font-code:
+    ui-monospace, 'SF Mono', Menlo, Consolas, 'PingFang SC', 'Hiragino Sans GB', monospace;
+}
+
+html,
+body {
+  background: var(--t-app);
+  color: var(--t-ink);
+  font-family: var(--font-ui);
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-code);
+}
+
+/* 原生控件(input[type=date] 等)跟随主题的明暗,别在深主题里弹白色系统皮肤 */
+:root[data-theme='claudoist-dark'],
+:root[data-theme='solarized-dark'] {
+  color-scheme: dark;
+}
+:root,
+:root[data-theme='claudoist-light'],
+:root[data-theme='solarized-light'] {
+  color-scheme: light;
+}
+
+/* 面板作用域的原生控件/滚动条跟面板明暗,不跟主区(浅主题里深面板的滚动条否则近乎隐形) */
+:root .theme-panel,
+:root[data-theme='claudoist-light'] .theme-panel,
+:root[data-theme='claudoist-dark'] .theme-panel,
+:root[data-theme='solarized-dark'] .theme-panel {
+  color-scheme: dark;
+}
+:root[data-theme='solarized-light'] .theme-panel {
+  color-scheme: light;
+}

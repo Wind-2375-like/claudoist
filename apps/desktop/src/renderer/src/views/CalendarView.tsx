@@ -329,11 +329,11 @@ export function CalendarView(): React.JSX.Element {
     <div className="flex h-full flex-col px-6 py-4">
       <div className="mb-3 flex items-center gap-3">
         <h1 className="text-2xl font-bold">Calendar</h1>
-        <span className="text-xs text-neutral-400">{weekLabel}</span>
+        <span className="text-xs text-fnt">{weekLabel}</span>
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
-            className="rounded-md border border-neutral-200 px-2 py-1 text-sm hover:bg-neutral-50"
+            className="rounded-md border border-line px-2 py-1 text-sm hover:bg-hov"
             onClick={() => setAnchor((a) => addDays(a, -7))}
             title="上一周"
           >
@@ -341,14 +341,14 @@ export function CalendarView(): React.JSX.Element {
           </button>
           <button
             type="button"
-            className="rounded-md border border-neutral-200 px-2 py-1 text-sm hover:bg-neutral-50"
+            className="rounded-md border border-line px-2 py-1 text-sm hover:bg-hov"
             onClick={() => setAnchor(startOfWeek(todayIso()))}
           >
             本周
           </button>
           <button
             type="button"
-            className="rounded-md border border-neutral-200 px-2 py-1 text-sm hover:bg-neutral-50"
+            className="rounded-md border border-line px-2 py-1 text-sm hover:bg-hov"
             onClick={() => setAnchor((a) => addDays(a, 7))}
             title="下一周"
           >
@@ -358,12 +358,12 @@ export function CalendarView(): React.JSX.Element {
       </div>
 
       {/* 日期表头 */}
-      <div className="flex border-b border-neutral-200 pb-1" style={{ paddingLeft: GUTTER_PX }}>
+      <div className="flex border-b border-line pb-1" style={{ paddingLeft: GUTTER_PX }}>
         {days.map((d, i) => (
           <div key={d.date} className="min-w-0 flex-1 text-center">
-            <div className="text-[11px] text-neutral-400">周{WEEKDAYS[i]}</div>
+            <div className="text-[11px] text-fnt">周{WEEKDAYS[i]}</div>
             <div
-              className={`text-sm ${d.isToday ? 'font-bold text-red-600' : 'text-neutral-700'}`}
+              className={`text-sm ${d.isToday ? 'font-bold text-brand' : 'text-ink'}`}
               title={d.date}
             >
               {Number(d.date.slice(8, 10))}
@@ -373,9 +373,9 @@ export function CalendarView(): React.JSX.Element {
       </div>
 
       {/* 全天段:点空白建全天任务;拖块到此变全天 */}
-      <div className="flex border-b border-neutral-200" ref={allDayRef}>
+      <div className="flex border-b border-line" ref={allDayRef}>
         <div
-          className="shrink-0 py-1 text-right text-[11px] text-neutral-400"
+          className="shrink-0 py-1 text-right text-[11px] text-fnt"
           style={{ width: GUTTER_PX, paddingRight: 6 }}
         >
           全天
@@ -383,7 +383,7 @@ export function CalendarView(): React.JSX.Element {
         {days.map((d, di) => (
           <div
             key={d.date}
-            className="min-h-8 min-w-0 flex-1 border-l border-neutral-100 p-0.5"
+            className="min-h-8 min-w-0 flex-1 border-l border-line-soft p-0.5"
             onMouseDown={(e) => {
               if (e.button !== 0) return; // 右键/中键不建任务
               if (e.currentTarget !== e.target) return; // 点在 chip 上不建新任务
@@ -436,7 +436,7 @@ export function CalendarView(): React.JSX.Element {
             {Array.from({ length: 24 }, (_, h) => (
               <div
                 key={h}
-                className="absolute right-1.5 -translate-y-1/2 text-[11px] text-neutral-400"
+                className="absolute right-1.5 -translate-y-1/2 text-[11px] text-fnt"
                 style={{ top: h * HOUR_PX }}
               >
                 {h > 0 ? `${pad(h)}:00` : ''}
@@ -449,7 +449,7 @@ export function CalendarView(): React.JSX.Element {
               ref={(el) => {
                 colRefs.current[di] = el;
               }}
-              className="relative min-w-0 flex-1 border-l border-neutral-100 select-none"
+              className="relative min-w-0 flex-1 border-l border-line-soft select-none"
               onMouseDown={(e) => {
                 if (e.button !== 0) return;
                 // 通常只在"落在列本身"时起手,免得在块上按下也开始拖选。
@@ -465,16 +465,16 @@ export function CalendarView(): React.JSX.Element {
               {Array.from({ length: 24 }, (_, h) => (
                 <div
                   key={h}
-                  className="pointer-events-none absolute inset-x-0 border-t border-neutral-100"
+                  className="pointer-events-none absolute inset-x-0 border-t border-line-soft"
                   style={{ top: h * HOUR_PX }}
                 />
               ))}
               {d.isToday && (
                 <div
-                  className="pointer-events-none absolute inset-x-0 z-20 border-t border-red-500"
+                  className="pointer-events-none absolute inset-x-0 z-20 border-t border-brand"
                   style={{ top: (nowMin / 60) * HOUR_PX }}
                 >
-                  <span className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-red-500" />
+                  <span className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-brand" />
                 </div>
               )}
               {/* 拖选 ghost */}
@@ -581,7 +581,7 @@ export function CalendarView(): React.JSX.Element {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
           <div
-            className="fixed z-50 w-36 rounded-lg border border-neutral-200 bg-white py-1 shadow-xl"
+            className="fixed z-50 w-36 rounded-lg border border-line bg-raised py-1 shadow-xl"
             style={{
               left: Math.min(menu.x, window.innerWidth - 150),
               top: Math.min(menu.y, window.innerHeight - 120),
@@ -589,7 +589,7 @@ export function CalendarView(): React.JSX.Element {
           >
             <button
               type="button"
-              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50"
+              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-hov"
               onClick={() => {
                 const t = menu.task;
                 setMenu(null);
@@ -602,7 +602,7 @@ export function CalendarView(): React.JSX.Element {
             {menu.task.completedAt === null && menu.task.externalId === null && (
               <button
                 type="button"
-                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50"
+                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-hov"
                 onClick={() => {
                   const t = menu.task;
                   setMenu(null);
@@ -614,7 +614,7 @@ export function CalendarView(): React.JSX.Element {
             )}
             <button
               type="button"
-              className="block w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+              className="block w-full px-3 py-1.5 text-left text-sm text-danger-ink hover:bg-danger-soft"
               onClick={async () => {
                 const t = menu.task;
                 setMenu(null);
@@ -638,10 +638,10 @@ function SelectionGhost({ from, to }: { from: number; to: number }): React.JSX.E
   const { start: a, end: b } = blockFromDrag(from, to);
   return (
     <div
-      className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-blue-400 bg-blue-200/50"
+      className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-acc bg-acc/20"
       style={{ top: (a / 60) * HOUR_PX, height: ((b - a) / 60) * HOUR_PX }}
     >
-      <span className="px-1 text-[10px] text-blue-700">
+      <span className="px-1 text-[10px] text-acc">
         {timeOf(a)}–{endLabel(b)}
       </span>
     </div>
@@ -669,10 +669,10 @@ function AllDayChip({
     <div
       className={`mb-0.5 block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] ${
         done
-          ? 'bg-neutral-100 text-neutral-400 line-through'
+          ? 'bg-inset text-fnt line-through'
           : color != null
-            ? 'border border-dashed text-neutral-800'
-            : 'bg-blue-50 text-blue-700'
+            ? 'border border-dashed text-ink'
+            : 'bg-acc-soft text-acc'
       }`}
       style={{
         cursor: draggable ? 'grab' : onOpen ? 'pointer' : 'default',
@@ -740,11 +740,11 @@ function CalendarBlock({
     <div
       className={`absolute z-10 overflow-hidden rounded-md border px-1 py-0.5 text-[11px] shadow-sm ${
         done
-          ? 'border-neutral-200 bg-neutral-100 text-neutral-400 line-through'
+          ? 'border-line bg-inset text-fnt line-through'
           : externalColor != null
-            ? 'border-dashed text-neutral-800'
-            : 'border-blue-300 bg-blue-100 text-blue-900'
-      } ${active ? 'opacity-70 ring-2 ring-blue-400' : ''}`}
+            ? 'border-dashed text-ink'
+            : 'border-acc bg-acc-soft text-acc'
+      } ${active ? 'opacity-70 ring-2 ring-acc' : ''}`}
       style={{
         top: (start / 60) * HOUR_PX,
         height,
@@ -823,16 +823,16 @@ function QuickComposer({
     <>
       <div className="fixed inset-0 z-40" onMouseDown={onCancel} />
       <div
-        className="fixed z-50 w-64 rounded-lg border border-neutral-200 bg-white p-2 shadow-xl"
+        className="fixed z-50 w-64 rounded-lg border border-line bg-raised p-2 shadow-xl"
         style={{
           left: Math.min(composer.x, window.innerWidth - 280),
           top: Math.min(composer.y, window.innerHeight - 120),
         }}
       >
-        <p className="mb-1 text-[11px] text-neutral-400">{label}</p>
+        <p className="mb-1 text-[11px] text-fnt">{label}</p>
         <input
           ref={ref}
-          className="w-full rounded border border-neutral-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+          className="w-full rounded border border-line px-2 py-1 text-sm outline-none focus:border-acc"
           placeholder="任务标题(回车创建)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}

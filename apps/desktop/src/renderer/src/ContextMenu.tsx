@@ -69,7 +69,7 @@ export function ContextMenu({
       <div className="fixed inset-0 z-[70]" onMouseDown={onClose} onContextMenu={onClose} />
       <div
         ref={ref}
-        className="fixed z-[71] min-w-32 rounded-lg border border-neutral-200 bg-white py-1 shadow-xl"
+        className="fixed z-[71] min-w-32 rounded-lg border border-line bg-raised py-1 shadow-xl"
         style={{ left: pos.left, top: pos.top }}
       >
         {children}
@@ -100,7 +100,7 @@ export function ContextMenuItem({
       disabled={disabled}
       title={title}
       className={`block w-full px-3 py-1.5 text-left text-sm whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40 ${
-        danger ? 'text-red-600 hover:bg-red-50' : 'hover:bg-neutral-50'
+        danger ? 'text-danger-ink hover:bg-danger-soft' : 'hover:bg-hov'
       }`}
       onClick={onClick}
     >

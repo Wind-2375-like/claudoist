@@ -40,7 +40,7 @@ export interface Leaf {
 
 const leafSpan = (l: Leaf, key: number): ReactNode => {
   let cls = '';
-  if (l.code) cls = 'rounded bg-neutral-900/60 px-1 py-0.5 font-mono text-[0.92em]';
+  if (l.code) cls = 'rounded bg-inset/60 px-1 py-0.5 font-mono text-[0.92em]';
   if (l.bold) cls += ' font-semibold';
   if (l.italic) cls += ' italic';
   const props = {
@@ -52,7 +52,7 @@ const leafSpan = (l: Leaf, key: number): ReactNode => {
   };
   if (l.href !== undefined) {
     return (
-      <a {...props} href={l.href} className={`${cls} text-blue-400 underline`.trim()}>
+      <a {...props} href={l.href} className={`${cls} text-acc underline`.trim()}>
         {l.text}
       </a>
     );
@@ -163,7 +163,7 @@ export function renderMarkdown(src: string): ReactNode {
         render: (k) => (
           <pre
             key={k}
-            className="my-1 overflow-x-auto rounded-md bg-neutral-900 p-2 text-[12px] leading-relaxed"
+            className="my-1 overflow-x-auto rounded-md bg-inset p-2 text-[12px] leading-relaxed"
           >
             <code data-ms={start} data-me={start + text.length}>
               {text}
@@ -198,7 +198,7 @@ export function renderMarkdown(src: string): ReactNode {
     }
 
     if (/^(-{3,}|\*{3,})\s*$/.test(line)) {
-      blocks.push({ render: (k) => <hr key={k} className="my-2 border-neutral-700" /> });
+      blocks.push({ render: (k) => <hr key={k} className="my-2 border-line" /> });
       i += 1;
       continue;
     }
@@ -213,10 +213,7 @@ export function renderMarkdown(src: string): ReactNode {
       }
       blocks.push({
         render: (k) => (
-          <blockquote
-            key={k}
-            className="my-1 border-l-2 border-neutral-600 pl-2 text-neutral-400 italic"
-          >
+          <blockquote key={k} className="my-1 border-l-2 border-line pl-2 text-mut italic">
             {quoted.map(([t, a], n) => (
               <p key={n}>{inl(t, a)}</p>
             ))}
@@ -244,7 +241,7 @@ export function renderMarkdown(src: string): ReactNode {
           <ul key={k} className="my-1 space-y-0.5 pl-4">
             {items.map(([t, a, mark], n) => (
               <li key={n} className="list-none">
-                <span className="mr-1 text-neutral-500">{ordered ? mark : '·'}</span>
+                <span className="mr-1 text-fnt">{ordered ? mark : '·'}</span>
                 {inl(t, a)}
               </li>
             ))}

@@ -184,15 +184,15 @@ export function TaskCard({
   };
 
   const chipCls = (active: boolean): string =>
-    `rounded-md border px-2 py-1 text-xs ${active ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'}`;
+    `rounded-md border px-2 py-1 text-xs ${active ? 'border-acc bg-acc-soft text-acc' : 'border-line text-mut hover:bg-hov'}`;
 
   const card = (
     <div
-      className={`rounded-xl border border-neutral-200 bg-white p-4 ${inline ? '' : 'w-[600px] max-w-[94vw] shadow-2xl'}`}
+      className={`rounded-xl border border-line bg-raised p-4 ${inline ? '' : 'w-[600px] max-w-[94vw] shadow-2xl'}`}
     >
       <input
         ref={titleRef}
-        className="w-full border-none text-base font-medium outline-none placeholder:text-neutral-400"
+        className="w-full border-none text-base font-medium outline-none placeholder:text-fnt"
         placeholder={
           isSubtask
             ? 'Sub-task name'
@@ -210,7 +210,7 @@ export function TaskCard({
         }}
       />
       <input
-        className="mt-1 w-full border-none text-sm outline-none placeholder:text-neutral-400"
+        className="mt-1 w-full border-none text-sm outline-none placeholder:text-fnt"
         placeholder="Description"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -282,16 +282,12 @@ export function TaskCard({
           </button>
           <input
             type="date"
-            className="w-36 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            className="w-36 rounded border border-line px-2 py-1 text-xs outline-none focus:border-acc"
             value={scheduled}
             onChange={(e) => setScheduled(e.target.value)}
           />
           {scheduled && (
-            <button
-              type="button"
-              className="text-xs text-neutral-400"
-              onClick={() => setScheduled('')}
-            >
+            <button type="button" className="text-xs text-fnt" onClick={() => setScheduled('')}>
               清除
             </button>
           )}
@@ -316,17 +312,13 @@ export function TaskCard({
         <div className="mt-2 flex items-center gap-2">
           <input
             type="date"
-            className="w-36 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            className="w-36 rounded border border-line px-2 py-1 text-xs outline-none focus:border-acc"
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
           />
-          <span className="text-xs text-neutral-400">最迟完成日(与"计划哪天做"互补)</span>
+          <span className="text-xs text-fnt">最迟完成日(与"计划哪天做"互补)</span>
           {deadline && (
-            <button
-              type="button"
-              className="text-xs text-neutral-400"
-              onClick={() => setDeadline('')}
-            >
+            <button type="button" className="text-xs text-fnt" onClick={() => setDeadline('')}>
               清除
             </button>
           )}
@@ -371,23 +363,23 @@ export function TaskCard({
         <div className="mt-2 flex items-center gap-2">
           <input
             type="datetime-local"
-            className="rounded border border-neutral-300 px-2 py-1 text-xs"
+            className="rounded border border-line px-2 py-1 text-xs"
             value={reminderAt}
             onChange={(e) => setReminderAt(e.target.value)}
           />
-          <span className="text-xs text-neutral-400">落库即存;响铃 M6 上线</span>
+          <span className="text-xs text-fnt">落库即存;响铃 M6 上线</span>
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      {feedback && <p className="mt-2 text-xs text-green-600">{feedback}</p>}
+      {error && <p className="mt-2 text-sm text-danger-ink">{error}</p>}
+      {feedback && <p className="mt-2 text-xs text-ok">{feedback}</p>}
 
-      <div className="mt-4 flex items-center gap-2 border-t border-neutral-100 pt-3">
+      <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-3">
         {isSubtask ? (
-          <span className="text-xs text-neutral-400">子任务继承父任务的位置</span>
+          <span className="text-xs text-fnt">子任务继承父任务的位置</span>
         ) : (
           <select
-            className="max-w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-xs"
+            className="max-w-56 rounded-md border border-line px-2 py-1.5 text-xs"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             title="位置(Move to)"
@@ -408,14 +400,14 @@ export function TaskCard({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hov"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => void submit()}
-            className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700"
+            className="rounded-lg bg-brand px-3 py-1.5 text-sm text-on-brand hover:bg-brand-strong"
           >
             {mode === 'edit'
               ? '保存'
@@ -432,8 +424,6 @@ export function TaskCard({
 
   if (inline) return card;
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 pt-24">
-      {card}
-    </div>
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-scrim pt-24">{card}</div>
   );
 }

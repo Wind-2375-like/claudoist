@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ErrorBoundary } from './ErrorBoundary';
 import { toast } from './toast';
 import { AccountUsage } from './AccountUsage';
@@ -47,10 +48,11 @@ export function AgentSettings({
   onChanged: () => void;
 }): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('account');
-  return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 pt-16">
-      <div className="flex max-h-[78vh] w-[680px] max-w-[94vw] flex-col rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-100 shadow-2xl">
-        <div className="flex items-center gap-1 border-b border-neutral-800 px-3 py-2">
+  // 全窗弹层:portal 到 body,脱离 .theme-panel 作用域,吃主题主色(而不是面板色)。
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-scrim pt-16">
+      <div className="flex max-h-[78vh] w-[680px] max-w-[94vw] flex-col rounded-xl border border-line bg-raised text-ink shadow-2xl">
+        <div className="flex items-center gap-1 border-b border-line-soft px-3 py-2">
           {(
             [
               ['account', '账号与用量'],
@@ -65,9 +67,7 @@ export function AgentSettings({
               type="button"
               data-testid={`agent-tab-${k}`}
               className={`rounded px-2.5 py-1 text-xs ${
-                tab === k
-                  ? 'bg-neutral-700 text-neutral-100'
-                  : 'text-neutral-400 hover:bg-neutral-800'
+                tab === k ? 'bg-sel text-ink' : 'text-mut hover:bg-hov'
               }`}
               onClick={() => setTab(k)}
             >
@@ -76,7 +76,7 @@ export function AgentSettings({
           ))}
           <button
             type="button"
-            className="ml-auto text-lg leading-none text-neutral-500 hover:text-neutral-200"
+            className="ml-auto text-lg leading-none text-fnt hover:text-ink"
             onClick={onClose}
           >
             ×
@@ -92,16 +92,17 @@ export function AgentSettings({
           </ErrorBoundary>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 // ------------------------------------------------------------------ 权限与审计
 
 const DECISION_LABEL: Record<string, { text: string; cls: string }> = {
-  'allowed-auto': { text: '自动放行', cls: 'text-neutral-400' },
-  'allowed-user': { text: '你批准了', cls: 'text-emerald-400' },
-  denied: { text: '被拒绝', cls: 'text-red-400' },
+  'allowed-auto': { text: '自动放行', cls: 'text-mut' },
+  'allowed-user': { text: '你批准了', cls: 'text-ok' },
+  denied: { text: '被拒绝', cls: 'text-danger-ink' },
 };
 
 /**
@@ -134,7 +135,7 @@ function PermissionsTab({
   return (
     <div className="space-y-4">
       <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">权限模式</h3>
+        <h3 className="mb-1 text-xs font-semibold text-mut">权限模式</h3>
         <div className="space-y-1">
           {modes.map((m) => (
             <button
@@ -142,8 +143,8 @@ function PermissionsTab({
               type="button"
               className={`flex w-full items-start gap-2 rounded-md border px-2.5 py-1.5 text-left ${
                 status.permissionMode === m.id
-                  ? 'border-blue-500 bg-blue-950/50'
-                  : 'border-neutral-800 hover:bg-neutral-800'
+                  ? 'border-acc bg-acc-soft'
+                  : 'border-line-soft hover:bg-hov'
               }`}
               onClick={() => {
                 void window.agent.setPermissionMode(m.id).then((r) => {
@@ -159,37 +160,35 @@ function PermissionsTab({
             >
               <span className="mt-0.5 text-xs">{status.permissionMode === m.id ? '●' : '○'}</span>
               <span className="min-w-0">
-                <span className="block text-xs text-neutral-100">{m.label}</span>
-                <span className="block text-[11px] text-neutral-500">{m.hint}</span>
+                <span className="block text-xs text-ink">{m.label}</span>
+                <span className="block text-[11px] text-fnt">{m.hint}</span>
               </span>
             </button>
           ))}
         </div>
-        <p className="mt-1 text-[11px] text-neutral-500">
+        <p className="mt-1 text-[11px] text-fnt">
           删除、完成项目、以及会级联完成子任务的完成操作,在「自动」模式下<strong>仍会</strong>
           弹窗。只读模式下写工具根本不注册。
         </p>
       </section>
 
       <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">始终允许</h3>
+        <h3 className="mb-1 text-xs font-semibold text-mut">始终允许</h3>
         {alwaysAllow.length === 0 ? (
-          <p className="text-[11px] text-neutral-500">
-            还没有。在审批弹窗里按「始终允许」会加到这里。
-          </p>
+          <p className="text-[11px] text-fnt">还没有。在审批弹窗里按「始终允许」会加到这里。</p>
         ) : (
           <div className="flex flex-wrap items-center gap-1.5">
             {alwaysAllow.map((t) => (
               <span
                 key={t}
-                className="rounded-full border border-neutral-700 px-2 py-0.5 font-mono text-[11px] text-neutral-300"
+                className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-mut"
               >
                 {t}
               </span>
             ))}
             <button
               type="button"
-              className="text-[11px] text-neutral-400 underline hover:text-neutral-100"
+              className="text-[11px] text-mut underline hover:text-ink"
               onClick={() => {
                 void window.agent.clearAlwaysAllow().then(() => {
                   onChanged();
@@ -205,17 +204,17 @@ function PermissionsTab({
 
       <section>
         <div className="mb-1 flex items-center gap-2">
-          <h3 className="text-xs font-semibold text-neutral-300">审计</h3>
+          <h3 className="text-xs font-semibold text-mut">审计</h3>
           <button
             type="button"
-            className="ml-auto text-[11px] text-neutral-400 underline hover:text-neutral-100"
+            className="ml-auto text-[11px] text-mut underline hover:text-ink"
             onClick={() => setScopeAll(!scopeAll)}
           >
             {scopeAll ? '只看本会话' : '看全部会话'}
           </button>
         </div>
         {audit.length === 0 ? (
-          <p className="text-[11px] text-neutral-500">还没有记录。</p>
+          <p className="text-[11px] text-fnt">还没有记录。</p>
         ) : (
           <ul className="space-y-1">
             {audit.map((a) => (
@@ -230,20 +229,20 @@ function PermissionsTab({
 
 function AuditRow({ row }: { row: AuditRowVM }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const d = DECISION_LABEL[row.decision] ?? { text: row.decision, cls: 'text-neutral-400' };
+  const d = DECISION_LABEL[row.decision] ?? { text: row.decision, cls: 'text-mut' };
   return (
-    <li className="border-b border-neutral-800 pb-1">
+    <li className="border-b border-line-soft pb-1">
       <button
         type="button"
         className="flex w-full items-center gap-2 text-left text-[11px]"
         onClick={() => setOpen(!open)}
       >
-        <span className="text-neutral-600">{row.createdAt.slice(11, 19)}</span>
-        <span className="font-mono text-neutral-300">{row.toolName}</span>
+        <span className="text-fnt">{row.createdAt.slice(11, 19)}</span>
+        <span className="font-mono text-mut">{row.toolName}</span>
         <span className={`ml-auto shrink-0 ${d.cls}`}>{d.text}</span>
       </button>
       {open && (
-        <pre className="mt-1 max-h-40 overflow-auto rounded bg-neutral-950 p-1.5 text-[10px] whitespace-pre-wrap text-neutral-500">
+        <pre className="mt-1 max-h-40 overflow-auto rounded bg-inset p-1.5 text-[10px] whitespace-pre-wrap text-fnt">
           入参 {row.inputJson}
           {row.resultSummary !== null ? `\n结果 ${row.resultSummary}` : ''}
         </pre>
@@ -264,10 +263,10 @@ function MemoryTab(): React.JSX.Element {
       setPath(r.path);
     });
   }, []);
-  if (body === null) return <p className="text-xs text-neutral-500">读取中…</p>;
+  if (body === null) return <p className="text-xs text-fnt">读取中…</p>;
   return (
     <div className="flex h-[52vh] flex-col">
-      <p className="mb-1 text-[11px] text-neutral-500">
+      <p className="mb-1 text-[11px] text-fnt">
         这是 <code>CLAUDE.md</code> —— agent 每次开会话都会读它。规则类约束(优先级方向、
         日期语义等)写在这里无效,那些是程序里的正确性约束。
       </p>
@@ -278,13 +277,13 @@ function MemoryTab(): React.JSX.Element {
           setDirty(true);
         }}
         spellCheck={false}
-        className="min-h-0 flex-1 resize-none rounded border border-neutral-700 bg-neutral-950 p-2 font-mono text-xs outline-none focus:border-neutral-500"
+        className="min-h-0 flex-1 resize-none rounded border border-line bg-surface p-2 font-mono text-xs outline-none focus:border-acc"
       />
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
           disabled={!dirty}
-          className="rounded-md bg-blue-600 px-3 py-1 text-xs disabled:opacity-40"
+          className="rounded-md bg-acc px-3 py-1 text-xs text-on-acc disabled:opacity-40"
           onClick={() => {
             void window.agent.writeMemory(body).then(() => {
               setDirty(false);
@@ -294,7 +293,7 @@ function MemoryTab(): React.JSX.Element {
         >
           保存
         </button>
-        <span className="truncate text-[11px] text-neutral-600">{path}</span>
+        <span className="truncate text-[11px] text-fnt">{path}</span>
       </div>
     </div>
   );
@@ -350,7 +349,7 @@ function SkillsTab(): React.JSX.Element {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="skill 名(小写字母、数字、连字符)"
-            className="mb-2 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs outline-none focus:border-neutral-500"
+            className="mb-2 rounded border border-line bg-surface px-2 py-1 text-xs outline-none focus:border-acc"
           />
         )}
         <div className="flex min-h-0 flex-1 gap-2">
@@ -358,10 +357,10 @@ function SkillsTab(): React.JSX.Element {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             spellCheck={false}
-            className="min-h-0 flex-1 resize-none rounded border border-neutral-700 bg-neutral-950 p-2 font-mono text-xs outline-none focus:border-neutral-500"
+            className="min-h-0 flex-1 resize-none rounded border border-line bg-surface p-2 font-mono text-xs outline-none focus:border-acc"
           />
           {showTools && (
-            <div className="w-1/2 overflow-y-auto rounded border border-neutral-800 bg-neutral-950 p-2">
+            <div className="w-1/2 overflow-y-auto rounded border border-line-soft bg-inset p-2">
               <ToolsTab compact />
             </div>
           )}
@@ -369,7 +368,7 @@ function SkillsTab(): React.JSX.Element {
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
-            className="rounded-md bg-blue-600 px-3 py-1 text-xs"
+            className="rounded-md bg-acc px-3 py-1 text-xs text-on-acc"
             onClick={() => {
               void window.agent.writeSkill(name, body).then((r) => {
                 if (r.error !== undefined) return toast(r.error);
@@ -384,7 +383,7 @@ function SkillsTab(): React.JSX.Element {
           </button>
           <button
             type="button"
-            className="text-xs text-neutral-400 hover:text-neutral-100"
+            className="text-xs text-mut hover:text-ink"
             onClick={() => {
               setEditing(null);
               setCreating(false);
@@ -394,12 +393,12 @@ function SkillsTab(): React.JSX.Element {
           </button>
           <button
             type="button"
-            className="text-xs text-neutral-400 underline hover:text-neutral-100"
+            className="text-xs text-mut underline hover:text-ink"
             onClick={() => setShowTools(!showTools)}
           >
             {showTools ? '收起工具参考' : '工具参考'}
           </button>
-          <span className="ml-auto text-[11px] text-neutral-600">
+          <span className="ml-auto text-[11px] text-fnt">
             改动内置 skill 后,应用升级不会再覆盖它
           </span>
         </div>
@@ -410,12 +409,12 @@ function SkillsTab(): React.JSX.Element {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <p className="text-[11px] text-neutral-500">
+        <p className="text-[11px] text-fnt">
           skill = 一段流程说明书。agent 按 description 判断何时加载;能调的工具见「工具参考」。
         </p>
         <button
           type="button"
-          className="ml-auto rounded-md border border-neutral-700 px-2 py-0.5 text-xs hover:bg-neutral-800"
+          className="ml-auto rounded-md border border-line px-2 py-0.5 text-xs hover:bg-hov"
           onClick={() => {
             setBody(NEW_SKILL_TEMPLATE);
             setNewName('');
@@ -427,17 +426,17 @@ function SkillsTab(): React.JSX.Element {
       </div>
       <ul>
         {list.map((s) => (
-          <li key={s.name} className="flex items-center gap-2 border-b border-neutral-800 py-2">
+          <li key={s.name} className="flex items-center gap-2 border-b border-line-soft py-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => open(s.name)}>
               <span className="block truncate text-sm">{s.name}</span>
-              <span className="text-[11px] text-neutral-500">
+              <span className="text-[11px] text-fnt">
                 {s.builtin ? (s.modified ? '内置 · 已被你修改' : '内置') : '自定义'}
               </span>
             </button>
             {s.modified && (
               <button
                 type="button"
-                className="text-[11px] text-neutral-400 hover:text-neutral-100"
+                className="text-[11px] text-mut hover:text-ink"
                 onClick={() => {
                   if (!window.confirm(`把 ${s.name} 恢复成随应用发布的版本?你的修改会丢失。`))
                     return;
@@ -450,7 +449,7 @@ function SkillsTab(): React.JSX.Element {
             {!s.builtin && (
               <button
                 type="button"
-                className="text-[11px] text-neutral-400 hover:text-red-400"
+                className="text-[11px] text-mut hover:text-danger-ink"
                 onClick={() => {
                   if (!window.confirm(`删除 skill「${s.name}」?`)) return;
                   void window.agent.deleteSkill(s.name).then(reload);
@@ -481,18 +480,18 @@ function ToolsTab({ compact = false }: { compact?: boolean }): React.JSX.Element
   return (
     <div>
       {!compact && (
-        <p className="mb-2 text-[11px] text-neutral-500">
+        <p className="mb-2 text-[11px] text-fnt">
           在 skill 里按<strong>全名</strong>调用,例如 <code>mcp__gtd__run_filter</code>
           (点名字可复制)。标「写」的会改数据、要经权限审批;标「危险」的即使在自动模式也弹窗。
         </p>
       )}
       <ul className="space-y-2">
         {tools.map((t) => (
-          <li key={t.name} className="border-b border-neutral-800 pb-2">
+          <li key={t.name} className="border-b border-line-soft pb-2">
             <button
               type="button"
               className={`font-mono text-xs hover:underline ${
-                t.kind === 'write' ? 'text-amber-400' : 'text-emerald-400'
+                t.kind === 'write' ? 'text-warn-ink' : 'text-ok'
               }`}
               title="点击复制"
               onClick={() => void navigator.clipboard.writeText(t.qualified)}
@@ -500,23 +499,23 @@ function ToolsTab({ compact = false }: { compact?: boolean }): React.JSX.Element
               {t.qualified}
             </button>
             {t.kind === 'write' && (
-              <span className="ml-1.5 rounded bg-amber-950 px-1 py-0.5 text-[10px] text-amber-300">
+              <span className="ml-1.5 rounded bg-warn-soft px-1 py-0.5 text-[10px] text-warn-ink">
                 写
               </span>
             )}
             {t.destructive && (
-              <span className="ml-1 rounded bg-red-950 px-1 py-0.5 text-[10px] text-red-300">
+              <span className="ml-1 rounded bg-danger-soft px-1 py-0.5 text-[10px] text-danger-ink">
                 危险
               </span>
             )}
-            <p className="mt-0.5 text-[11px] leading-relaxed text-neutral-400">{t.description}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-mut">{t.description}</p>
             {t.params.length > 0 && (
               <ul className="mt-1 space-y-0.5">
                 {t.params.map((p) => (
-                  <li key={p.name} className="text-[11px] text-neutral-500">
-                    <span className="font-mono text-neutral-300">{p.name}</span>
-                    <span className="ml-1 font-mono text-neutral-600">{p.type}</span>
-                    {!p.required && <span className="ml-1 text-neutral-600">(可选)</span>}
+                  <li key={p.name} className="text-[11px] text-fnt">
+                    <span className="font-mono text-mut">{p.name}</span>
+                    <span className="ml-1 font-mono text-fnt">{p.type}</span>
+                    {!p.required && <span className="ml-1 text-fnt">(可选)</span>}
                     {p.description !== '' && <span className="ml-1">— {p.description}</span>}
                   </li>
                 ))}

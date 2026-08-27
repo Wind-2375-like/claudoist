@@ -77,20 +77,20 @@ export function PermissionPrompt({
   const entries = Object.entries(req.input);
 
   return (
-    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/50 p-3">
+    <div className="absolute inset-0 z-30 flex items-end justify-center bg-scrim p-3">
       <div
-        className={`w-full rounded-xl border bg-neutral-900 p-3 shadow-2xl ${
-          destructive ? 'border-red-700' : 'border-neutral-700'
+        className={`w-full rounded-xl border bg-app p-3 shadow-2xl ${
+          destructive ? 'border-danger' : 'border-line'
         }`}
       >
         <div className="flex items-center gap-2">
           <span>{destructive ? '⚠️' : '🔧'}</span>
-          <span className="text-sm font-semibold text-neutral-100">
+          <span className="text-sm font-semibold text-ink">
             Claude 想{TOOL_LABEL[req.tool] ?? req.tool}
           </span>
           <span
             className={`rounded px-1.5 py-0.5 text-[10px] ${
-              destructive ? 'bg-red-900 text-red-200' : 'bg-neutral-800 text-neutral-400'
+              destructive ? 'bg-danger-soft text-danger-ink' : 'bg-surface text-mut'
             }`}
           >
             {CLASS_LABEL[req.toolClass] ?? req.toolClass}
@@ -98,18 +98,18 @@ export function PermissionPrompt({
         </div>
 
         {req.escalation !== undefined && (
-          <p className="mt-2 rounded bg-red-950/70 px-2 py-1.5 text-xs text-red-200">
+          <p className="mt-2 rounded bg-danger-soft px-2 py-1.5 text-xs text-danger-ink">
             {req.escalation}
           </p>
         )}
 
-        <dl className="mt-2 max-h-40 overflow-auto rounded bg-neutral-950/60 p-2 text-[11px]">
-          <div className="mb-1 font-mono text-neutral-500">{req.tool}</div>
-          {entries.length === 0 && <span className="text-neutral-500">(无参数)</span>}
+        <dl className="mt-2 max-h-40 overflow-auto rounded bg-inset/60 p-2 text-[11px]">
+          <div className="mb-1 font-mono text-fnt">{req.tool}</div>
+          {entries.length === 0 && <span className="text-fnt">(无参数)</span>}
           {entries.map(([k, v]) => (
             <div key={k} className="flex gap-2">
-              <dt className="shrink-0 font-mono text-neutral-500">{k}</dt>
-              <dd className="min-w-0 flex-1 break-all text-neutral-300">
+              <dt className="shrink-0 font-mono text-fnt">{k}</dt>
+              <dd className="min-w-0 flex-1 break-all text-mut">
                 {typeof v === 'string' ? v : JSON.stringify(v)}
               </dd>
             </div>
@@ -121,16 +121,18 @@ export function PermissionPrompt({
             type="button"
             disabled={sending}
             data-testid="perm-deny"
-            className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
+            className="rounded border border-line px-3 py-1 text-xs text-ink hover:bg-hov disabled:opacity-40"
             onClick={() => respond({ behavior: 'deny' })}
           >
-            拒绝 <span className="text-neutral-500">(Esc)</span>
+            拒绝 <span className="text-fnt">(Esc)</span>
           </button>
           <button
             type="button"
             disabled={sending}
-            className={`rounded px-3 py-1 text-xs text-white disabled:opacity-40 ${
-              destructive ? 'bg-red-700 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-500'
+            className={`rounded px-3 py-1 text-xs disabled:opacity-40 ${
+              destructive
+                ? 'bg-danger text-on-danger hover:bg-danger-strong'
+                : 'bg-acc text-on-acc hover:bg-acc-strong'
             }`}
             data-testid="perm-allow"
             onClick={() => respond({ behavior: 'allow' })}
@@ -145,7 +147,7 @@ export function PermissionPrompt({
                 ? '这是破坏性操作 —— 选了之后它在任何模式下都不再问你'
                 : '之后同类调用不再询问(可在设置里清除)'
             }
-            className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-400 hover:bg-neutral-800 disabled:opacity-40"
+            className="rounded border border-line px-3 py-1 text-xs text-mut hover:bg-hov disabled:opacity-40"
             data-testid="perm-always"
             onClick={() => respond({ behavior: 'allow', always: true })}
           >

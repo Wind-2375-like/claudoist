@@ -12,13 +12,13 @@ export function BucketView({ kind }: { kind: 'someday' | 'reference' }): React.J
   return (
     <div className="px-8 py-6">
       <h1 className="mb-1 text-2xl font-bold">{title}</h1>
-      <p className="mb-4 text-xs text-neutral-400">
+      <p className="mb-4 text-xs text-fnt">
         {kind === 'someday'
           ? '孵化中的想法 —— 不出现在 Today,想启动就 Move 回 Inbox 或项目'
           : '参考资料型条目 —— 不参与执行'}
       </p>
-      {isLoading && <p className="text-sm text-neutral-400">加载中…</p>}
-      {data && data.length === 0 && <p className="text-sm text-neutral-400">空的。</p>}
+      {isLoading && <p className="text-sm text-fnt">加载中…</p>}
+      {data && data.length === 0 && <p className="text-sm text-fnt">空的。</p>}
       {data && data.length > 0 && <TaskTree nodes={data} onDetail={setDetailId} />}
       {detailId && <TaskDetailModal taskId={detailId} onClose={() => setDetailId(null)} />}
     </div>
@@ -32,11 +32,11 @@ export function CompletedView(): React.JSX.Element {
   return (
     <div className="px-8 py-6">
       <h1 className="mb-1 text-2xl font-bold">Completed</h1>
-      <p className="mb-4 text-xs text-neutral-400">
+      <p className="mb-4 text-xs text-fnt">
         做完了什么,一目了然。{data && data.length >= 200 ? '(只显示最近 200 条)' : ''}
       </p>
-      {isLoading && <p className="text-sm text-neutral-400">加载中…</p>}
-      {data && data.length === 0 && <p className="text-sm text-neutral-400">还没有完成记录。</p>}
+      {isLoading && <p className="text-sm text-fnt">加载中…</p>}
+      {data && data.length === 0 && <p className="text-sm text-fnt">还没有完成记录。</p>}
       <ul className="space-y-0.5">
         {data?.map((it) => (
           <li key={it.task.id}>

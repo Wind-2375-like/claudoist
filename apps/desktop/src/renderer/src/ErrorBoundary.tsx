@@ -21,22 +21,26 @@ export class ErrorBoundary extends Component<
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    // 留给 DevTools;主进程日志在 M10 的用量账本一并接
     console.error('[renderer] 组件崩溃', this.props.label ?? '', error, info.componentStack);
+    // M11-B:落主进程错误日志(<userData>/logs/errors.log),设置页有入口
+    window.appearance?.logError(
+      `renderer:${this.props.label ?? 'ErrorBoundary'}`,
+      `${error.message}\n${error.stack ?? ''}\n${info.componentStack ?? ''}`,
+    );
   }
 
   override render(): ReactNode {
     const { error } = this.state;
     if (error === null) return this.props.children;
     return (
-      <div className="m-3 rounded-lg border border-red-800 bg-red-950/60 p-3 text-xs text-red-200">
+      <div className="m-3 rounded-lg border border-danger bg-danger-soft p-3 text-xs text-danger-ink">
         <p className="font-medium">{this.props.label ?? '这一块'}出错了 —— 其余功能不受影响。</p>
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-red-300">
+        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-danger-ink">
           {error.message}
         </pre>
         <button
           type="button"
-          className="mt-2 rounded border border-red-700 px-2 py-0.5 hover:bg-red-900"
+          className="mt-2 rounded border border-danger px-2 py-0.5 hover:bg-danger-soft"
           onClick={() => this.setState({ error: null })}
         >
           重试

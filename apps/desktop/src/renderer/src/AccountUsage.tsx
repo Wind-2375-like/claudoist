@@ -25,10 +25,10 @@ import type { AgentStatusVM } from './AgentSettings';
 
 const pctColor = (u: number): { bar: string; text: string } =>
   u >= 90
-    ? { bar: 'bg-red-500', text: 'text-red-300' }
+    ? { bar: 'bg-danger', text: 'text-danger-ink' }
     : u >= 60
-      ? { bar: 'bg-amber-500', text: 'text-amber-300' }
-      : { bar: 'bg-blue-500', text: 'text-neutral-300' };
+      ? { bar: 'bg-warn-ink', text: 'text-warn-ink' }
+      : { bar: 'bg-acc', text: 'text-mut' };
 
 /**
  * "还有多久重置"。**一律向上取整** —— ceil 让用户以为恢复更晚,是保守方向;
@@ -60,18 +60,19 @@ function Meter({
   return (
     <div className={dim ? 'mb-2.5 opacity-50' : 'mb-2.5'}>
       <div className="flex items-baseline justify-between text-xs">
-        <span className="text-neutral-300">{w.label}</span>
+        <span className="text-mut">{w.label}</span>
         <span className={`font-mono ${c.text}`}>{w.utilization}%</span>
       </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-neutral-800">
+      {/* 轨道用专用 track token:surface 在浅色主题里与弹窗底同色,量程会消失(审查实测 1.00:1) */}
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-track">
         <div
           className={`h-full rounded-full ${c.bar}`}
           style={{ width: `${String(w.utilization)}%` }}
         />
       </div>
-      <div className="mt-0.5 flex justify-between text-[10px] text-neutral-500">
+      <div className="mt-0.5 flex justify-between text-[10px] text-fnt">
         <span title={w.resetsAt ?? undefined}>{reset ?? ''}</span>
-        {w.utilization >= 90 && <span className="text-red-400">接近上限</span>}
+        {w.utilization >= 90 && <span className="text-danger-ink">接近上限</span>}
       </div>
     </div>
   );
@@ -107,8 +108,8 @@ export function AccountUsage({
   }, []);
 
   const row = (k: string, v: string): React.JSX.Element => (
-    <div className="flex justify-between gap-4 border-b border-neutral-800 py-1.5 text-xs">
-      <span className="shrink-0 text-neutral-400">{k}</span>
+    <div className="flex justify-between gap-4 border-b border-line-soft py-1.5 text-xs">
+      <span className="shrink-0 text-mut">{k}</span>
       <span className="truncate font-mono">{v}</span>
     </div>
   );
@@ -121,15 +122,17 @@ export function AccountUsage({
       {/* 数据新鲜度 —— 断网时 SDK 会静默返回磁盘缓存且响应体无任何标记,所以这一条必须有 */}
       <div className="flex items-center gap-2 text-[11px]">
         {loading ? (
-          <span className="text-neutral-500">读取中…</span>
+          <span className="text-fnt">读取中…</span>
         ) : fresh?.source === 'local-cache' ? (
-          <span className="rounded bg-amber-950/60 px-1.5 py-0.5 text-amber-200">
+          <span className="rounded bg-warn-soft px-1.5 py-0.5 text-warn-ink">
             本机缓存{cacheMin !== null ? ` · 约 ${String(cacheMin)} 分钟前` : ''}
           </span>
         ) : fresh?.source === 'none' ? (
-          <span className="rounded bg-red-950/60 px-1.5 py-0.5 text-red-200">取不到用量数据</span>
+          <span className="rounded bg-danger-soft px-1.5 py-0.5 text-danger-ink">
+            取不到用量数据
+          </span>
         ) : (
-          <span className="text-neutral-500">
+          <span className="text-fnt">
             实时 · 更新于{' '}
             {fresh?.fetchedAtMs != null
               ? new Date(fresh.fetchedAtMs).toLocaleTimeString('zh-CN', {
@@ -142,7 +145,7 @@ export function AccountUsage({
         <button
           type="button"
           disabled={loading}
-          className="ml-auto rounded border border-neutral-700 px-2 py-0.5 hover:bg-neutral-800 disabled:opacity-40"
+          className="ml-auto rounded border border-line px-2 py-0.5 hover:bg-hov disabled:opacity-40"
           onClick={() => load(true)}
         >
           刷新
@@ -152,27 +155,27 @@ export function AccountUsage({
       {vm !== null && (
         <>
           <section>
-            <h3 className="mb-1 text-xs font-semibold text-neutral-300">账号</h3>
+            <h3 className="mb-1 text-xs font-semibold text-mut">账号</h3>
             {row('登录方式', vm.account.methodLabel)}
             {row('账号', vm.account.email ?? '—')}
             {row('组织', vm.account.organization ?? '—')}
             {row('订阅', vm.account.planLabel ?? '—')}
             {vm.account.apiKeyInEnv && (
-              <p className="mt-1 rounded bg-amber-950/60 px-2 py-1 text-[11px] text-amber-200">
+              <p className="mt-1 rounded bg-warn-soft px-2 py-1 text-[11px] text-warn-ink">
                 环境里存在 ANTHROPIC_API_KEY —— SDK 会优先用它,可能产生 API 计费。
               </p>
             )}
             {vm.account.method === 'logged-out' && (
-              <p className="mt-1 rounded bg-amber-950/60 px-2 py-1 text-[11px] text-amber-200">
+              <p className="mt-1 rounded bg-warn-soft px-2 py-1 text-[11px] text-warn-ink">
                 在终端执行 <code>claude</code> 登录后回来点刷新,不用重启应用。
               </p>
             )}
           </section>
 
           <section>
-            <h3 className="mb-1 text-xs font-semibold text-neutral-300">订阅额度</h3>
+            <h3 className="mb-1 text-xs font-semibold text-mut">订阅额度</h3>
             {!vm.usage.available ? (
-              <p className="text-[11px] text-neutral-500">
+              <p className="text-[11px] text-fnt">
                 {vm.usage.unavailableReason ?? '暂时拿不到额度数据。'}
               </p>
             ) : (
@@ -182,7 +185,7 @@ export function AccountUsage({
             )}
             <button
               type="button"
-              className="text-[11px] text-neutral-500 underline hover:text-neutral-300"
+              className="text-[11px] text-fnt underline hover:text-mut"
               onClick={() => void window.agent.openBilling()}
             >
               在 claude.ai 上管理用量
@@ -192,13 +195,13 @@ export function AccountUsage({
           <Contribution vm={vm} />
 
           <section>
-            <h3 className="mb-1 text-xs font-semibold text-neutral-300">本应用的花费(估值)</h3>
+            <h3 className="mb-1 text-xs font-semibold text-mut">本应用的花费(估值)</h3>
             {row('当前会话', `≈$${vm.appLedger.session.costUsd.toFixed(4)}`)}
             {row(
               '全部历史',
               `${String(vm.appLedger.totals.conversations)} 个会话 · ≈$${vm.appLedger.totals.costUsd.toFixed(4)}`,
             )}
-            <p className="mt-1 text-[11px] text-neutral-500">
+            <p className="mt-1 text-[11px] text-fnt">
               走的是本机 Claude Code 登录,<strong>不是</strong>本应用的 API key。金额是按 API
               单价折算的估值,用来判断哪一轮吃了多少上下文。
               <strong>这里的美元和上面的订阅额度是两回事 —— 订阅用户不会被扣这笔钱。</strong>
@@ -220,8 +223,8 @@ function Contribution({ vm }: { vm: AccountUsageVM }): React.JSX.Element | null 
   if (vm.contribution === null) {
     return (
       <section>
-        <h3 className="mb-1 text-xs font-semibold text-neutral-300">什么在消耗你的额度?</h3>
-        <p className="text-[11px] text-neutral-500">需要连上 Claude 才能统计(当前是离线数据)。</p>
+        <h3 className="mb-1 text-xs font-semibold text-mut">什么在消耗你的额度?</h3>
+        <p className="text-[11px] text-fnt">需要连上 Claude 才能统计(当前是离线数据)。</p>
       </section>
     );
   }
@@ -239,13 +242,13 @@ function Contribution({ vm }: { vm: AccountUsageVM }): React.JSX.Element | null 
   return (
     <section>
       <div className="mb-1 flex items-center gap-2">
-        <h3 className="text-xs font-semibold text-neutral-300">什么在消耗你的额度?</h3>
-        <div className="ml-auto flex overflow-hidden rounded border border-neutral-700 text-[10px]">
+        <h3 className="text-xs font-semibold text-mut">什么在消耗你的额度?</h3>
+        <div className="ml-auto flex overflow-hidden rounded border border-line text-[10px]">
           {(['day', 'week'] as const).map((k) => (
             <button
               key={k}
               type="button"
-              className={`px-2 py-0.5 ${tab === k ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400'}`}
+              className={`px-2 py-0.5 ${tab === k ? 'bg-sel text-ink' : 'text-mut'}`}
               onClick={() => setTab(k)}
             >
               {k === 'day' ? '近 24 小时' : '近 7 天'}
@@ -255,22 +258,22 @@ function Contribution({ vm }: { vm: AccountUsageVM }): React.JSX.Element | null 
       </div>
 
       {/* 口径声明必须置顶且不可折叠 —— 否则用户会把终端里自己的用量算到这个应用头上 */}
-      <p className="mb-2 rounded bg-amber-950/40 px-2 py-1.5 text-[11px] leading-relaxed text-amber-200/90">
+      <p className="mb-2 rounded bg-warn-soft px-2 py-1.5 text-[11px] leading-relaxed text-warn-ink/90">
         以下统计来自<strong>这台机器上全部</strong> Claude Code 会话的本地记录 ——
         包含你自己在终端里用的 Claude Code,<strong>不只是本应用</strong>。近似值,不含其它设备与
         claude.ai。下列特征彼此独立、可以重叠,<strong>不是占比拆分</strong>(加起来可以超过 100%)。
       </p>
 
       {w === null ? (
-        <p className="text-[11px] text-neutral-500">这个时间窗里没有记录。</p>
+        <p className="text-[11px] text-fnt">这个时间窗里没有记录。</p>
       ) : (
         <>
-          <p className="mb-1.5 text-[11px] text-neutral-500">
+          <p className="mb-1.5 text-[11px] text-fnt">
             {tab === 'day' ? '近 24 小时' : '近 7 天'} · {w.requestCount} 次请求 · {w.sessionCount}{' '}
             个会话
           </p>
           {w.behaviors.length === 0 && (
-            <p className="text-[11px] text-neutral-500">没有超过 10% 的显著特征。</p>
+            <p className="text-[11px] text-fnt">没有超过 10% 的显著特征。</p>
           )}
           {w.behaviors.map((b) => (
             <BehaviorRow
@@ -283,16 +286,16 @@ function Contribution({ vm }: { vm: AccountUsageVM }): React.JSX.Element | null 
           ))}
           {groups.map(([kind, rows]) => (
             <div key={kind} className="mt-2">
-              <div className="flex justify-between text-[10px] text-neutral-500">
+              <div className="flex justify-between text-[10px] text-fnt">
                 <span>{KIND_LABEL[kind]}</span>
                 <span>占用量</span>
               </div>
               {rows.map((a) => (
                 <div key={a.name} className="flex justify-between py-0.5 text-[11px]">
-                  <span className="truncate text-neutral-300">
+                  <span className="truncate text-mut">
                     {a.kind === 'skill' ? `/${a.name}` : a.name}
                   </span>
-                  <span className="font-mono text-neutral-400">{a.pct}%</span>
+                  <span className="font-mono text-mut">{a.pct}%</span>
                 </div>
               ))}
             </div>
@@ -316,21 +319,21 @@ function BehaviorRow({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-neutral-800 py-1.5">
+    <div className="border-b border-line-soft py-1.5">
       <button
         type="button"
-        className="w-full text-left text-[11px] text-neutral-200"
+        className="w-full text-left text-[11px] text-ink"
         // count 的单位在不同特征下不一致(请求数 / 会话数),所以只在 title 里中性地说"命中 N 次"
         title={`命中 ${String(count)} 次`}
         onClick={() => setOpen(!open)}
       >
-        <span className={`mr-1.5 font-mono ${pct >= 60 ? 'text-amber-300' : 'text-neutral-400'}`}>
+        <span className={`mr-1.5 font-mono ${pct >= 60 ? 'text-warn-ink' : 'text-mut'}`}>
           {pct}%
         </span>
         {headline.replace(/^\d+% /, '')}
       </button>
       {open && detail !== '' && (
-        <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">{detail}</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-fnt">{detail}</p>
       )}
     </div>
   );
@@ -352,9 +355,9 @@ function ModelSection({
   const current = models.find((m) => m.value === selected) ?? models[0];
   return (
     <section>
-      <h3 className="mb-1 text-xs font-semibold text-neutral-300">模型</h3>
+      <h3 className="mb-1 text-xs font-semibold text-mut">模型</h3>
       {models.length === 0 ? (
-        <p className="text-[11px] text-neutral-500">读取模型列表失败,点上面的「刷新」重试。</p>
+        <p className="text-[11px] text-fnt">读取模型列表失败,点上面的「刷新」重试。</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {models.map((m) => (
@@ -364,8 +367,8 @@ function ModelSection({
               title={m.description}
               className={`rounded-md border px-2 py-1 text-xs ${
                 selected === m.value
-                  ? 'border-blue-500 bg-blue-950 text-blue-200'
-                  : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+                  ? 'border-acc bg-acc-soft text-acc'
+                  : 'border-line text-mut hover:bg-hov'
               }`}
               onClick={() => {
                 void window.agent.setModel(m.value).then((r) => {
@@ -382,7 +385,7 @@ function ModelSection({
         </div>
       )}
 
-      <h4 className="mt-3 mb-1 text-[11px] font-semibold text-neutral-400">思考深度</h4>
+      <h4 className="mt-3 mb-1 text-[11px] font-semibold text-mut">思考深度</h4>
       <div className="flex flex-wrap gap-1.5">
         {(['low', 'medium', 'high', 'xhigh', 'max'] as const).map((e) => {
           // 可用档位由**当前模型**决定;不支持的直接禁用,而不是让用户点了没反应
@@ -404,8 +407,8 @@ function ModelSection({
               }
               className={`rounded-md border px-2 py-1 text-xs disabled:opacity-30 ${
                 status.effort === e
-                  ? 'border-blue-500 bg-blue-950 text-blue-200'
-                  : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+                  ? 'border-acc bg-acc-soft text-acc'
+                  : 'border-line text-mut hover:bg-hov'
               }`}
               onClick={() => {
                 void window.agent.setEffort(e).then((r) => {
@@ -432,8 +435,8 @@ function ModelSection({
             type="button"
             className={`rounded-md border px-2 py-1 text-xs ${
               status.thinking === m
-                ? 'border-blue-500 bg-blue-950 text-blue-200'
-                : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+                ? 'border-acc bg-acc-soft text-acc'
+                : 'border-line text-mut hover:bg-hov'
             }`}
             onClick={() => {
               void window.agent.setThinking(m).then((r) => {
@@ -446,7 +449,7 @@ function ModelSection({
           </button>
         ))}
       </div>
-      <p className="mt-1 text-[11px] text-neutral-500">
+      <p className="mt-1 text-[11px] text-fnt">
         思考 token 计入输出计费 —— 开着更准,但更贵也更慢。「不显示」只是不渲染给你看,
         <strong>照样计费</strong>。
       </p>
@@ -482,16 +485,16 @@ function Guardrails({ status }: { status: AgentStatusVM }): React.JSX.Element {
     });
   };
 
-  if (g === null) return <p className="text-xs text-neutral-500">读取中…</p>;
+  if (g === null) return <p className="text-xs text-fnt">读取中…</p>;
 
   return (
     <section>
-      <h3 className="mb-1 text-xs font-semibold text-neutral-300">护栏</h3>
+      <h3 className="mb-1 text-xs font-semibold text-mut">护栏</h3>
 
-      <div className="border-b border-neutral-800 py-2">
+      <div className="border-b border-line-soft py-2">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-neutral-300">单条消息内最多工具往返</span>
-          <span className="font-mono text-neutral-400">{g.maxTurns ?? '不限'}</span>
+          <span className="text-mut">单条消息内最多工具往返</span>
+          <span className="font-mono text-mut">{g.maxTurns ?? '不限'}</span>
         </div>
         <div className="mt-1 flex items-center gap-2">
           <input
@@ -501,10 +504,10 @@ function Guardrails({ status }: { status: AgentStatusVM }): React.JSX.Element {
             step={5}
             disabled={g.maxTurns === null}
             value={g.maxTurns ?? 40}
-            className="flex-1 accent-blue-500 disabled:opacity-30"
+            className="flex-1 accent-acc disabled:opacity-30"
             onChange={(e) => save(Number(e.target.value), g.maxBudgetUsd)}
           />
-          <label className="flex shrink-0 items-center gap-1 text-[11px] text-neutral-400">
+          <label className="flex shrink-0 items-center gap-1 text-[11px] text-mut">
             <input
               type="checkbox"
               checked={g.maxTurns === null}
@@ -513,15 +516,15 @@ function Guardrails({ status }: { status: AgentStatusVM }): React.JSX.Element {
             不限
           </label>
         </div>
-        <p className="mt-0.5 text-[11px] text-neutral-500">
+        <p className="mt-0.5 text-[11px] text-fnt">
           到了上限它会停下来,你发一句「继续」就能接着跑。
         </p>
       </div>
 
-      <div className="border-b border-neutral-800 py-2">
+      <div className="border-b border-line-soft py-2">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-neutral-300">单次会话工作量刹车</span>
-          <span className="font-mono text-neutral-400">
+          <span className="text-mut">单次会话工作量刹车</span>
+          <span className="font-mono text-mut">
             {g.maxBudgetUsd === null ? '不限' : `$${String(g.maxBudgetUsd)}`}
           </span>
         </div>
@@ -533,14 +536,14 @@ function Guardrails({ status }: { status: AgentStatusVM }): React.JSX.Element {
             step={0.5}
             disabled={g.maxBudgetUsd === null}
             value={g.maxBudgetUsd ?? 5}
-            className="w-24 rounded border border-neutral-700 bg-neutral-950 px-2 py-0.5 text-xs disabled:opacity-30"
+            className="w-24 rounded border border-line bg-inset px-2 py-0.5 text-xs disabled:opacity-30"
             onChange={(e) => {
               const v = Number(e.target.value);
               // 下限必须 > 0:判定是「累计成本 >= 上限」,0 会让会话一开口就熄火
               if (Number.isFinite(v) && v >= 0.5) save(g.maxTurns, v);
             }}
           />
-          <label className="flex items-center gap-1 text-[11px] text-neutral-400">
+          <label className="flex items-center gap-1 text-[11px] text-mut">
             <input
               type="checkbox"
               checked={g.maxBudgetUsd === null}
@@ -549,7 +552,7 @@ function Guardrails({ status }: { status: AgentStatusVM }): React.JSX.Element {
             不限
           </label>
         </div>
-        <p className="mt-0.5 text-[11px] text-neutral-500">
+        <p className="mt-0.5 text-[11px] text-fnt">
           达到约这个数额的<strong>等效</strong> API 用量就停下,防止跑飞。
           <strong>你是订阅用户,这笔钱不会被扣</strong>;真正的配额是上面那几条进度条。重起会话后从 0
           重新计。
@@ -558,12 +561,12 @@ function Guardrails({ status }: { status: AgentStatusVM }): React.JSX.Element {
 
       {dirty &&
         (status.alive ? (
-          <div className="mt-2 flex items-center gap-2 rounded bg-amber-950/60 px-2 py-1.5 text-[11px] text-amber-200">
+          <div className="mt-2 flex items-center gap-2 rounded bg-warn-soft px-2 py-1.5 text-[11px] text-warn-ink">
             <span>已保存,但当前会话仍在用旧设置。</span>
             <button
               type="button"
               disabled={restarting || status.busy === true}
-              className="ml-auto shrink-0 rounded border border-amber-700 px-2 py-0.5 hover:bg-amber-900 disabled:opacity-40"
+              className="ml-auto shrink-0 rounded border border-warn-line px-2 py-0.5 hover:bg-warn-soft disabled:opacity-40"
               onClick={() => {
                 setRestarting(true);
                 void window.agent.restartSession().then((r) => {
@@ -578,12 +581,12 @@ function Guardrails({ status }: { status: AgentStatusVM }): React.JSX.Element {
             </button>
           </div>
         ) : (
-          <p className="mt-2 text-[11px] text-neutral-500">已保存 —— 下次开会话时生效。</p>
+          <p className="mt-2 text-[11px] text-fnt">已保存 —— 下次开会话时生效。</p>
         ))}
 
       <div className="mt-2 flex justify-between gap-4 py-1 text-xs">
-        <span className="shrink-0 text-neutral-400">会话工作目录</span>
-        <span className="truncate font-mono text-neutral-500">{status.cwd}</span>
+        <span className="shrink-0 text-mut">会话工作目录</span>
+        <span className="truncate font-mono text-fnt">{status.cwd}</span>
       </div>
     </section>
   );

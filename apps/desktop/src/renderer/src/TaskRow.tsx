@@ -49,7 +49,7 @@ export function TaskRow({
   return (
     <div className="relative">
       <div
-        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-neutral-50"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-hov"
         style={depth > 0 ? { paddingLeft: `${depth * 22 + 8}px` } : undefined}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -68,14 +68,14 @@ export function TaskRow({
         {!done ? (
           <button
             type="button"
-            className="h-4.5 w-4.5 shrink-0 rounded-full border-2 border-neutral-300 hover:border-green-500 hover:bg-green-50"
+            className="h-4.5 w-4.5 shrink-0 rounded-full border-2 border-line hover:border-ok hover:bg-ok-soft"
             title={completeTitle(task.subtaskCount)}
             onClick={() => void completeWithFeedback(task.title, task.id)}
           />
         ) : (
           <button
             type="button"
-            className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-green-500 text-[10px] text-white hover:bg-green-600"
+            className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-ok text-[10px] text-on-acc hover:bg-ok/90"
             title="已完成 — 点击撤销"
             onClick={() => void reopenTask(task.id)}
           >
@@ -85,54 +85,54 @@ export function TaskRow({
         <button
           type="button"
           onClick={onDetail}
-          className={`min-w-0 flex-1 truncate text-left text-sm ${done ? 'text-neutral-400 line-through' : ''}`}
+          className={`min-w-0 flex-1 truncate text-left text-sm ${done ? 'text-fnt line-through' : ''}`}
           title="查看详情(子任务 / 评论)"
         >
           {task.title}
           {progress && progress.total > 0 ? (
-            <span className="ml-1.5 text-xs text-neutral-400">
+            <span className="ml-1.5 text-xs text-fnt">
               ⑂ {progress.done}/{progress.total}
             </span>
           ) : (
             !progress &&
             task.subtaskCount > 0 && (
-              <span className="ml-1.5 text-xs text-neutral-400">⑂{task.subtaskCount}</span>
+              <span className="ml-1.5 text-xs text-fnt">⑂{task.subtaskCount}</span>
             )
           )}
         </button>
-        <span className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-400">
+        <span className="flex shrink-0 items-center gap-1.5 text-xs text-fnt">
           {task.externalId !== null && (
             <span
-              className="rounded bg-neutral-100 px-1 py-0.5"
+              className="rounded bg-inset px-1 py-0.5"
               title="来自 Google 日历:时间不可在此修改,完成/标签等本地操作不会写回"
             >
               🗓 Google
             </span>
           )}
           {task.startTime && (
-            <span className="rounded bg-blue-50 px-1 py-0.5 text-blue-600">
+            <span className="rounded bg-acc-soft px-1 py-0.5 text-acc">
               🕐 {task.startTime}·{task.durationMinutes ?? task.estimatedMinutes}m
             </span>
           )}
-          {task.scheduledDate && <span className="text-blue-600">📅 {task.scheduledDate}</span>}
+          {task.scheduledDate && <span className="text-acc">📅 {task.scheduledDate}</span>}
           {/* 🔁 紧贴 📅:循环是对计划日的修饰,不该被 🎯deadline 隔开 */}
           {task.repeatShort !== null && (
-            <span className="text-blue-600" title={task.repeatLong ?? undefined}>
+            <span className="text-acc" title={task.repeatLong ?? undefined}>
               🔁 {task.repeatShort}
             </span>
           )}
           {task.deadline && (
-            <span className={task.overdue ? 'font-medium text-red-600' : ''}>
+            <span className={task.overdue ? 'font-medium text-danger-ink' : ''}>
               🎯 {task.deadline}
             </span>
           )}
           {task.priority !== 3 && (
-            <span className="rounded bg-neutral-100 px-1 py-0.5">{task.priorityLabel}</span>
+            <span className="rounded bg-inset px-1 py-0.5">{task.priorityLabel}</span>
           )}
           {task.labels.map((l) => (
             <span
               key={l.id}
-              className="hidden rounded bg-amber-50 px-1 py-0.5 text-amber-700 @md:inline"
+              className="hidden rounded bg-warn-soft px-1 py-0.5 text-warn-ink @md:inline"
             >
               @{l.name}
             </span>
@@ -140,7 +140,7 @@ export function TaskRow({
           {showCompletedAt && task.completedAt && <span>{task.completedAt.slice(0, 10)} 完成</span>}
           {(occurrenceCount ?? 1) > 1 && (
             <span
-              className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-600"
+              className="rounded-full bg-acc-soft px-2 py-0.5 text-acc"
               title="循环任务的历史完成次数(只显示最近一次)"
             >
               共 {occurrenceCount} 次

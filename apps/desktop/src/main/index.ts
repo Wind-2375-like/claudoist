@@ -3,12 +3,18 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 // spike 仅保留 --spike-test 打包冒烟通道(M1);正式会话在 agent/sessionManager.ts
 import { runSpikeTurn, type SpikeImage } from './agent/spike';
-import { initStore } from './db';
+import { initStore, settingsStore } from './db';
 import { systemClock } from './clock';
 import { watchDbForExternalWrites } from './dbWatch';
 import { broadcastChanged, createGtdViews, registerGtdIpc } from './ipc/gtd';
 import { inspectAppCalendar, registerGoogleIpc } from './ipc/google';
 import { registerAgentIpc } from './ipc/agent';
+import {
+  applyNativeAppearance,
+  currentAppearance,
+  installErrorLogging,
+  registerAppearanceIpc,
+} from './ipc/appearance';
 import { runAgentSmoke } from './agent/smoke';
 
 // dev/prod 数据完全隔离(docs/DESIGN.md §9.2):必须在 app ready 之前设置。
@@ -151,7 +157,9 @@ if (agentSmokeArg) {
   app.quit();
 } else {
   void app.whenReady().then(() => {
+    installErrorLogging();
     const store = initStore();
+    registerAppearanceIpc(settingsStore());
     const views = createGtdViews(store, systemClock);
     registerGtdIpc(views, store, {
       clock: systemClock,
@@ -165,6 +173,7 @@ if (agentSmokeArg) {
     registerAgentIpc(store, systemClock);
     watchDbForExternalWrites(() => broadcastChanged('agent'));
     const win = createWindow();
+    applyNativeAppearance(currentAppearance(settingsStore()));
     if (screenshotArg) {
       const path = screenshotArg.slice('--screenshot='.length);
       win.webContents.once('did-finish-load', () => {

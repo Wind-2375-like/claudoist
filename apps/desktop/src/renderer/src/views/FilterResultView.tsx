@@ -28,35 +28,35 @@ export function FilterResultView({
   return (
     <div className="px-8 py-6">
       <h1 className="mb-1 text-2xl font-bold">{title}</h1>
-      <p className="mb-4 font-mono text-xs text-neutral-400">{query}</p>
+      <p className="mb-4 font-mono text-xs text-fnt">{query}</p>
 
       {data?.error != null && (
-        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+        <p className="mb-3 rounded-md bg-danger-soft px-3 py-2 text-xs text-danger-ink">
           查询语法错误:{data.error}
         </p>
       )}
       {unknown.length > 0 && (
-        <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <p className="mb-3 rounded-md bg-warn-soft px-3 py-2 text-xs text-warn-ink">
           {unknown.join('、')} 不存在 —— 这些条件恒不成立,结果会偏少。改一下过滤器?
         </p>
       )}
 
-      {isLoading && <p className="text-sm text-neutral-400">计算中…</p>}
+      {isLoading && <p className="text-sm text-fnt">计算中…</p>}
       {data?.error == null && !isLoading && total === 0 && (
-        <p className="text-sm text-neutral-400">没有任务匹配这条查询。</p>
+        <p className="text-sm text-fnt">没有任务匹配这条查询。</p>
       )}
 
       {(data?.sections ?? []).map((sec, i) => (
         <section key={`${sec.source}:${i}`} className="mb-6">
           {(data?.sections.length ?? 0) > 1 && (
-            <p className="mb-1 font-mono text-xs font-medium text-neutral-500">
+            <p className="mb-1 font-mono text-xs font-medium text-mut">
               {sec.source}
-              <span className="ml-2 text-neutral-400">{sec.tasks.length}</span>
+              <span className="ml-2 text-fnt">{sec.tasks.length}</span>
             </p>
           )}
           <ul>
             {sec.tasks.map((t) => (
-              <li key={t.id} className="border-b border-neutral-100">
+              <li key={t.id} className="border-b border-line-soft">
                 <TaskRow task={t} onDetail={() => setDetailId(t.id)} showCompletedAt={t.done} />
               </li>
             ))}

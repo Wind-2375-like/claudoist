@@ -86,7 +86,7 @@ function PaneHandle({
 }): React.JSX.Element {
   return (
     <div
-      className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-blue-400 active:bg-blue-500"
+      className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-acc active:bg-acc-strong"
       onPointerDown={onPointerDown}
     />
   );
@@ -137,15 +137,13 @@ function SidebarProject({
           setMenu({ x: e.clientX, y: e.clientY });
         }}
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm ${
-          active ? 'bg-red-50 font-medium text-red-700' : 'hover:bg-neutral-200'
+          active ? 'bg-brand-soft font-medium text-brand' : 'hover:bg-hov'
         }`}
       >
-        <span className="text-neutral-400">#</span>
+        <span className="text-fnt">#</span>
         <span className="min-w-0 flex-1 truncate">{project.name}</span>
         {project.activeCount > 0 && (
-          <span className="rounded-full bg-neutral-300 px-1.5 text-xs text-neutral-700">
-            {project.activeCount}
-          </span>
+          <span className="rounded-full bg-sel px-1.5 text-xs text-ink">{project.activeCount}</span>
         )}
       </button>
       {menu && (
@@ -199,7 +197,7 @@ function Toasts(): React.JSX.Element {
       {msgs.map((m) => (
         <div
           key={m.id}
-          className="max-w-[70vw] rounded-lg bg-neutral-800 px-4 py-2 text-sm text-white shadow-xl"
+          className="max-w-[70vw] rounded-lg bg-ink px-4 py-2 text-sm text-app shadow-xl"
         >
           {m.text}
         </div>
@@ -338,28 +336,26 @@ export function App(): React.JSX.Element {
       data-testid={`nav-${kind}`}
       onClick={() => setView({ kind })}
       className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-        view.kind === kind ? 'bg-red-50 font-medium text-red-700' : 'hover:bg-neutral-200'
+        view.kind === kind ? 'bg-brand-soft font-medium text-brand' : 'hover:bg-hov'
       }`}
     >
       <span>{icon}</span>
       {label}
       {badge !== undefined && badge > 0 && (
-        <span className="ml-auto rounded-full bg-neutral-300 px-1.5 text-xs text-neutral-700">
-          {badge}
-        </span>
+        <span className="ml-auto rounded-full bg-sel px-1.5 text-xs text-ink">{badge}</span>
       )}
     </button>
   );
 
   return (
-    <div className="flex h-screen bg-white text-neutral-800">
+    <div className="flex h-screen bg-app text-ink">
       {/* 左栏:menu */}
       <aside
         style={{ width: left.width }}
-        className="flex shrink-0 flex-col overflow-y-auto border-r border-neutral-200 bg-neutral-50 p-3"
+        className="flex shrink-0 flex-col overflow-y-auto border-r border-line bg-side p-3"
       >
         <button
-          className="mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-left font-medium text-red-600 hover:bg-neutral-200"
+          className="mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-left font-medium text-brand hover:bg-hov"
           type="button"
           title="快速添加(⌘N)"
           onClick={() => setQuickAddOpen(true)}
@@ -375,11 +371,11 @@ export function App(): React.JSX.Element {
             data-testid="search-open"
             onClick={() => setSearchOpen(true)}
             title="搜索(⌘K)"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-neutral-200"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-hov"
           >
             <span>🔍</span>
             Search
-            <kbd className="ml-auto text-[10px] text-neutral-400">⌘K</kbd>
+            <kbd className="ml-auto text-[10px] text-fnt">⌘K</kbd>
           </button>
           {navItem('filters', '🏷️', 'Filters & Labels')}
         </nav>
@@ -390,9 +386,7 @@ export function App(): React.JSX.Element {
             type="button"
             onClick={() => setView({ kind: 'myprojects' })}
             className={`flex-1 text-left text-xs font-semibold ${
-              view.kind === 'myprojects'
-                ? 'text-red-700'
-                : 'text-neutral-500 hover:text-neutral-700'
+              view.kind === 'myprojects' ? 'text-brand' : 'text-mut hover:text-ink'
             }`}
             title="项目总览(进度)"
           >
@@ -400,7 +394,7 @@ export function App(): React.JSX.Element {
           </button>
           <button
             type="button"
-            className="rounded px-1 text-sm text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700"
+            className="rounded px-1 text-sm text-fnt hover:bg-hov hover:text-ink"
             title="新建项目"
             onClick={() => setProjectModal('add')}
           >
@@ -408,7 +402,7 @@ export function App(): React.JSX.Element {
           </button>
           <button
             type="button"
-            className="rounded px-1 text-xs text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700"
+            className="rounded px-1 text-xs text-fnt hover:bg-hov hover:text-ink"
             title={projectsCollapsed ? '展开项目列表' : '折叠项目列表'}
             onClick={() => setProjectsCollapsed((v) => !v)}
           >
@@ -435,7 +429,7 @@ export function App(): React.JSX.Element {
           </ul>
         )}
 
-        <div className="mt-6 px-2 text-xs font-semibold text-neutral-500">GTD</div>
+        <div className="mt-6 px-2 text-xs font-semibold text-mut">GTD</div>
         <nav className="mt-1 space-y-0.5">
           {/* Upstream(Google 镜像)不进侧栏:条目太多,徽章长期是个大数字,喧宾夺主。
               镜像任务本来就在 Calendar/Today 上各就各位;这个容器视图保留,经 ⌘K 命中可达。 */}
@@ -445,13 +439,13 @@ export function App(): React.JSX.Element {
         </nav>
         <button
           type="button"
-          className="mt-auto flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-neutral-200"
+          className="mt-auto flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-hov"
           onClick={() => setSettingsOpen(true)}
           title="设置(Google 日历连接)"
         >
           <span>⚙️</span> Settings
         </button>
-        <div className="px-2 pt-2 text-[11px] leading-relaxed text-neutral-400">
+        <div className="px-2 pt-2 text-[11px] leading-relaxed text-fnt">
           {info
             ? `v${info.version} · Electron ${info.electron} · ${info.packaged ? 'packaged' : 'dev'}`
             : 'IPC…'}
@@ -464,13 +458,13 @@ export function App(): React.JSX.Element {
       <main className="@container relative min-w-0 flex-1 overflow-y-auto">
         {/* 导航后退/前进:点进过滤器、标签、项目后要退得回来(⌘[ / ⌘] 与鼠标侧键同效) */}
         {(canBack || canForward) && (
-          <div className="sticky top-0 z-10 flex gap-1 bg-white/85 px-8 pt-4 backdrop-blur">
+          <div className="sticky top-0 z-10 flex gap-1 bg-app/85 px-8 pt-4 backdrop-blur">
             <button
               type="button"
               disabled={!canBack}
               onClick={back}
               title="后退(⌘[)"
-              className="rounded px-1.5 py-0.5 text-sm text-neutral-500 hover:bg-neutral-100 disabled:opacity-30"
+              className="rounded px-1.5 py-0.5 text-sm text-mut hover:bg-hov disabled:opacity-30"
             >
               ‹
             </button>
@@ -479,7 +473,7 @@ export function App(): React.JSX.Element {
               disabled={!canForward}
               onClick={forward}
               title="前进(⌘])"
-              className="rounded px-1.5 py-0.5 text-sm text-neutral-500 hover:bg-neutral-100 disabled:opacity-30"
+              className="rounded px-1.5 py-0.5 text-sm text-mut hover:bg-hov disabled:opacity-30"
             >
               ›
             </button>
@@ -530,7 +524,7 @@ export function App(): React.JSX.Element {
       {/* 右栏:agent */}
       <aside
         style={{ width: right.width }}
-        className="flex shrink-0 flex-col border-l border-neutral-200 bg-neutral-900 text-neutral-100"
+        className="theme-panel flex shrink-0 flex-col border-l border-line bg-app text-ink"
       >
         {/* 标题栏由 AgentPanel 自己画(它要显示登录态与新会话按钮) */}
         <ErrorBoundary label="Agent 面板">

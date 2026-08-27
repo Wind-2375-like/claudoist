@@ -35,7 +35,7 @@ export function TodayView(): React.JSX.Element {
   );
 
   if (isLoading || !data) {
-    return <div className="px-8 py-6 text-sm text-neutral-400">加载中…</div>;
+    return <div className="px-8 py-6 text-sm text-fnt">加载中…</div>;
   }
 
   // 拖到底部区块 → 推迟到明天(改 scheduledDate;M5R6 决策:Today 手动排序留 M6)。
@@ -52,10 +52,10 @@ export function TodayView(): React.JSX.Element {
   return (
     <div className="px-8 py-6">
       <h1 className="mb-1 text-2xl font-bold">Today</h1>
-      <p className="mb-5 text-xs text-neutral-400">{data.today}</p>
+      <p className="mb-5 text-xs text-fnt">{data.today}</p>
 
       {data.tasks.length === 0 && !adding && (
-        <p className="mb-2 text-sm text-neutral-400">今天没有待办任务 🎉</p>
+        <p className="mb-2 text-sm text-fnt">今天没有待办任务 🎉</p>
       )}
       <ul className="space-y-0.5">
         {data.tasks.map((t) => (
@@ -103,9 +103,7 @@ export function TodayView(): React.JSX.Element {
             if (id) void postpone(id);
           }}
           className={`mt-2 flex items-center justify-center gap-2 rounded-md border border-dashed py-3 text-sm transition-colors ${
-            overPostpone
-              ? 'border-blue-400 bg-blue-50 text-blue-600'
-              : 'border-neutral-300 text-neutral-400'
+            overPostpone ? 'border-acc bg-acc-soft text-acc' : 'border-line text-fnt'
           }`}
         >
           <span>↻</span> 拖到这里 → 推迟到明天({addDays(data.today, 1)})
@@ -123,7 +121,7 @@ export function TodayView(): React.JSX.Element {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-neutral-400 hover:text-red-600"
+            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-fnt hover:text-brand"
           >
             <span className="text-lg leading-none">＋</span> Add task
           </button>

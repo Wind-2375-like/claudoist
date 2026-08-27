@@ -56,9 +56,7 @@ export function RepeatButton({
         ref={btn}
         type="button"
         className={`rounded-md border px-2 py-1 text-xs ${
-          value !== null
-            ? 'border-blue-400 bg-blue-50 text-blue-700'
-            : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+          value !== null ? 'border-acc bg-acc-soft text-acc' : 'border-line text-mut hover:bg-hov'
         }`}
         onClick={open}
       >
@@ -67,7 +65,7 @@ export function RepeatButton({
       {menuAt !== null && (
         <ContextMenu x={menuAt.x} y={menuAt.y} onClose={() => setMenuAt(null)}>
           {anchor === '' ? (
-            <div className="px-3 py-1.5 text-xs text-neutral-400">先选一个计划日期</div>
+            <div className="px-3 py-1.5 text-xs text-fnt">先选一个计划日期</div>
           ) : (
             <>
               {presets.map((p) => (
@@ -174,15 +172,15 @@ export function RepeatCustomDialog({
 
   const invalid = pv?.error !== undefined;
   const seg = (active: boolean): string =>
-    `rounded-md border px-2.5 py-1 text-xs ${active ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'}`;
+    `rounded-md border px-2.5 py-1 text-xs ${active ? 'border-acc bg-acc-soft text-acc' : 'border-line text-mut hover:bg-hov'}`;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/40 pt-24">
-      <div className="w-[480px] max-w-[92vw] rounded-xl border border-neutral-200 bg-white p-4 shadow-2xl">
+    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-scrim pt-24">
+      <div className="w-[480px] max-w-[92vw] rounded-xl border border-line bg-raised p-4 shadow-2xl">
         <h2 className="text-sm font-semibold">自定义循环</h2>
 
         <div className="mt-3 flex items-center gap-2 text-xs">
-          <span className="w-16 text-neutral-500">基于</span>
+          <span className="w-16 text-mut">基于</span>
           <button
             type="button"
             className={seg(from === 'scheduled')}
@@ -197,23 +195,23 @@ export function RepeatCustomDialog({
           >
             完成日期
           </button>
-          <span className="text-neutral-400">
+          <span className="text-fnt">
             {from === 'completed' ? '从实际完成那天起算,永不追赶' : '按日历网格推进,逾期补齐到未来'}
           </span>
         </div>
 
         <div className="mt-2 flex items-center gap-2 text-xs">
-          <span className="w-16 text-neutral-500">每</span>
+          <span className="w-16 text-mut">每</span>
           <input
             type="number"
             min={1}
             max={999}
-            className="w-16 rounded border border-neutral-300 px-2 py-1 outline-none focus:border-blue-400"
+            className="w-16 rounded border border-line px-2 py-1 outline-none focus:border-acc"
             value={every}
             onChange={(e) => setEvery(Number(e.target.value))}
           />
           <select
-            className="rounded border border-neutral-300 px-2 py-1 outline-none focus:border-blue-400"
+            className="rounded border border-line px-2 py-1 outline-none focus:border-acc"
             value={unit}
             onChange={(e) => {
               const u = e.target.value as RepeatInputVM['unit'];
@@ -226,13 +224,13 @@ export function RepeatCustomDialog({
             <option value="month">月</option>
             <option value="year">年</option>
           </select>
-          {unit === 'month' && <span className="text-neutral-400">几号取自计划日</span>}
-          {unit === 'year' && <span className="text-neutral-400">几月几号取自计划日</span>}
+          {unit === 'month' && <span className="text-fnt">几号取自计划日</span>}
+          {unit === 'year' && <span className="text-fnt">几月几号取自计划日</span>}
         </div>
 
         {unit === 'week' && (
           <div className="mt-2 flex items-center gap-1 text-xs">
-            <span className="w-16 shrink-0 text-neutral-500">星期</span>
+            <span className="w-16 shrink-0 text-mut">星期</span>
             {WEEKDAYS.map((w) => (
               <button
                 key={w.key}
@@ -247,33 +245,33 @@ export function RepeatCustomDialog({
                 {w.zh}
               </button>
             ))}
-            <span className="ml-1 shrink-0 text-neutral-400">不选 = 计划日那天</span>
+            <span className="ml-1 shrink-0 text-fnt">不选 = 计划日那天</span>
           </div>
         )}
 
         <div className="mt-2 flex items-center gap-2 text-xs">
-          <span className="w-16 text-neutral-500">结束</span>
+          <span className="w-16 text-mut">结束</span>
           <button type="button" className={seg(until === '')} onClick={() => setUntil('')}>
             从不
           </button>
           <input
             type="date"
-            className="rounded border border-neutral-300 px-2 py-1 outline-none focus:border-blue-400"
+            className="rounded border border-line px-2 py-1 outline-none focus:border-acc"
             value={until}
             onChange={(e) => setUntil(e.target.value)}
           />
-          {until !== '' && <span className="text-neutral-400">含当天</span>}
+          {until !== '' && <span className="text-fnt">含当天</span>}
         </div>
 
-        <div className="mt-3 rounded bg-neutral-50 px-2.5 py-2 text-xs">
+        <div className="mt-3 rounded bg-inset px-2.5 py-2 text-xs">
           {pv === null ? (
-            <span className="text-neutral-400">…</span>
+            <span className="text-fnt">…</span>
           ) : pv.error !== undefined ? (
-            <span className="text-red-600">{pv.error}</span>
+            <span className="text-danger-ink">{pv.error}</span>
           ) : pv.next.length === 0 ? (
-            <span className="text-amber-600">结束日早于第一次发生 —— 这个循环一次都不会发生</span>
+            <span className="text-warn-ink">结束日早于第一次发生 —— 这个循环一次都不会发生</span>
           ) : (
-            <span className="text-neutral-600">接下来:{pv.next.join('、')}</span>
+            <span className="text-mut">接下来:{pv.next.join('、')}</span>
           )}
         </div>
 
@@ -281,7 +279,7 @@ export function RepeatCustomDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hov"
           >
             取消
           </button>
@@ -289,7 +287,7 @@ export function RepeatCustomDialog({
             type="button"
             disabled={invalid}
             onClick={() => onSave(input)}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-40"
+            className="rounded-lg bg-acc px-3 py-1.5 text-sm text-on-acc hover:bg-acc-strong disabled:opacity-40"
           >
             保存
           </button>

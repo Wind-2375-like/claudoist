@@ -33,6 +33,7 @@ import type {
   RepeatPresetVM,
   RepeatPreviewVM,
 } from '../shared/viewModels';
+import type { AppearanceVM } from '../shared/appearance';
 
 /** 类型化 IPC 桥(docs/DESIGN.md §4.1)。 */
 const gtdApi = {
@@ -276,6 +277,15 @@ const agentApi = {
   },
 };
 
+const appearanceApi = {
+  get: (): Promise<AppearanceVM> => ipcRenderer.invoke('app:appearance.get'),
+  set: (v: AppearanceVM): Promise<void> => ipcRenderer.invoke('app:appearance.set', v),
+  openLogs: (): Promise<void> => ipcRenderer.invoke('app:logs.open'),
+  logError: (source: string, message: string): void =>
+    void ipcRenderer.invoke('app:logs.error', { source, message }),
+};
+
 contextBridge.exposeInMainWorld('gtd', gtdApi);
+contextBridge.exposeInMainWorld('appearance', appearanceApi);
 contextBridge.exposeInMainWorld('google', googleApi);
 contextBridge.exposeInMainWorld('agent', agentApi);

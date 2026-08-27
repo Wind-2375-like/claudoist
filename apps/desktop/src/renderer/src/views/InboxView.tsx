@@ -16,9 +16,9 @@ export function InboxView(): React.JSX.Element {
   return (
     <div className="px-8 py-6">
       <h1 className="mb-4 text-2xl font-bold">Inbox</h1>
-      {isLoading && <p className="text-sm text-neutral-400">加载中…</p>}
+      {isLoading && <p className="text-sm text-fnt">加载中…</p>}
       {data && data.length === 0 && !adding && (
-        <p className="mb-2 text-sm text-neutral-400">收件箱是空的 — 头脑清爽 ✨</p>
+        <p className="mb-2 text-sm text-fnt">收件箱是空的 — 头脑清爽 ✨</p>
       )}
       {data && data.length > 0 && <TaskTree nodes={data} onDetail={setDetailId} />}
       <div className="mt-2">
@@ -28,7 +28,7 @@ export function InboxView(): React.JSX.Element {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-neutral-400 hover:text-red-600"
+            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-fnt hover:text-brand"
           >
             <span className="text-lg leading-none">＋</span> Add task
           </button>

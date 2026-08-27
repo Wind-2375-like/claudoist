@@ -54,35 +54,33 @@ export function SearchPalette({
   const q = query.trim();
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/30 pt-24"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-scrim pt-24"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[60vh] w-[640px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl"
+        className="flex max-h-[60vh] w-[640px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-3">
-          <span className="text-neutral-400">🔍</span>
+        <div className="flex items-center gap-2 border-b border-line-soft px-4 py-3">
+          <span className="text-fnt">🔍</span>
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="搜索任务、项目…"
-            className="min-w-0 flex-1 text-sm outline-none placeholder:text-neutral-400"
+            className="min-w-0 flex-1 text-sm outline-none placeholder:text-fnt"
           />
-          <kbd className="rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-400">
-            Esc
-          </kbd>
+          <kbd className="rounded border border-line px-1.5 py-0.5 text-[10px] text-fnt">Esc</kbd>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {q === '' ? (
-            <p className="px-4 py-6 text-center text-xs text-neutral-400">
+            <p className="px-4 py-6 text-center text-xs text-fnt">
               输入关键词搜索任务标题与描述、项目名称。
             </p>
           ) : hits.length === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-neutral-400">
+            <p className="px-4 py-6 text-center text-xs text-fnt">
               {isFetching ? '搜索中…' : `没有匹配「${q}」的任务或项目。`}
             </p>
           ) : (
@@ -92,7 +90,7 @@ export function SearchPalette({
                   <button
                     type="button"
                     className={`flex w-full items-center gap-2 px-4 py-2 text-left ${
-                      i === cursor ? 'bg-red-50' : 'hover:bg-neutral-50'
+                      i === cursor ? 'bg-brand-soft' : 'hover:bg-hov'
                     }`}
                     onMouseEnter={() => setCursor(i)}
                     onClick={() => onPick(h)}
@@ -100,13 +98,11 @@ export function SearchPalette({
                     <span className="shrink-0 text-xs">{h.kind === 'project' ? '📁' : '○'}</span>
                     <span className="min-w-0 flex-1">
                       <span
-                        className={`block truncate text-sm ${h.done ? 'text-neutral-400 line-through' : ''}`}
+                        className={`block truncate text-sm ${h.done ? 'text-fnt line-through' : ''}`}
                       >
                         {h.title}
                       </span>
-                      <span className="block truncate text-[11px] text-neutral-400">
-                        {h.subtitle}
-                      </span>
+                      <span className="block truncate text-[11px] text-fnt">{h.subtitle}</span>
                     </span>
                   </button>
                 </li>
@@ -116,7 +112,7 @@ export function SearchPalette({
         </div>
 
         {q !== '' && hits.length > 0 && (
-          <div className="border-t border-neutral-100 px-4 py-1.5 text-[11px] text-neutral-400">
+          <div className="border-t border-line-soft px-4 py-1.5 text-[11px] text-fnt">
             {data && data.totalMatched > hits.length
               ? `显示 ${hits.length} / ${data.totalMatched} 条(含未在此列出的等待项)`
               : `${hits.length} 条结果`}

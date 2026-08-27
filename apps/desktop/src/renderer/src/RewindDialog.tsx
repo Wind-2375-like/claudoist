@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from './toast';
 import type { RewindAnchorVM, RewindPreviewVM } from '../../shared/viewModels';
 
@@ -55,21 +56,21 @@ export function RewindDialog({
 
   const hasConflict = (pv?.conflicts.length ?? 0) > 0;
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/40 pt-24">
-      <div className="w-[520px] max-w-[92vw] rounded-xl border border-neutral-700 bg-neutral-900 p-4 text-neutral-100 shadow-2xl">
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-scrim pt-24">
+      <div className="w-[520px] max-w-[92vw] rounded-xl border border-line bg-raised p-4 text-ink shadow-2xl">
         <h2 className="text-sm font-semibold">{alsoFork ? '分叉并回滚到这里' : '回滚到这里'}</h2>
 
         {pv === null ? (
-          <p className="mt-3 text-xs text-neutral-500">正在核对会撤销哪些改动…</p>
+          <p className="mt-3 text-xs text-fnt">正在核对会撤销哪些改动…</p>
         ) : pv.entryCount === 0 ? (
           <>
-            <p className="mt-2 text-xs text-neutral-400">这一轮之后 agent 没有改过任何数据。</p>
+            <p className="mt-2 text-xs text-mut">这一轮之后 agent 没有改过任何数据。</p>
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-800"
+                className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hov"
               >
                 知道了
               </button>
@@ -77,32 +78,32 @@ export function RewindDialog({
           </>
         ) : (
           <>
-            <p className="mt-2 text-xs leading-relaxed text-neutral-300">
+            <p className="mt-2 text-xs leading-relaxed text-mut">
               将撤销这一轮及其之后 agent 做的 <strong>{pv.entryCount}</strong> 次改动,
               把任务数据恢复到你发那条消息之前的样子。
-              <strong className="text-amber-300">这个操作没有撤销。</strong>
+              <strong className="text-warn-ink">这个操作没有撤销。</strong>
             </p>
 
-            <ul className="mt-2 space-y-0.5 rounded bg-neutral-950/60 px-2.5 py-2 text-[11px] text-neutral-400">
+            <ul className="mt-2 space-y-0.5 rounded bg-inset px-2.5 py-2 text-[11px] text-mut">
               {pv.tools.map((t) => (
                 <li key={t.name}>
-                  · <span className="font-mono text-neutral-300">{t.name}</span> ×{t.count}
+                  · <span className="font-mono text-ink">{t.name}</span> ×{t.count}
                 </li>
               ))}
               {pv.hardDeleteCount > 0 && (
-                <li className="mt-1 text-red-300">
+                <li className="mt-1 text-danger-ink">
                   · ⚠ 其中 {pv.hardDeleteCount} 条是 agent **新建**的东西,回滚 = 整行删除, 拿不回来
                 </li>
               )}
               {pv.foreignEntryCount > 0 && (
-                <li className="text-amber-300">
+                <li className="text-warn-ink">
                   · 链里有 {pv.foreignEntryCount} 条来自**别的会话**,会一并撤销
                 </li>
               )}
             </ul>
 
             {hasConflict && (
-              <div className="mt-2 rounded border border-amber-800 bg-amber-950/50 px-2.5 py-2 text-[11px] text-amber-200">
+              <div className="mt-2 rounded border border-warn-line bg-warn-soft px-2.5 py-2 text-[11px] text-warn-ink">
                 <p className="font-medium">
                   这些改动之后有人又动过 —— 回滚会把这些后来的改动一起抹掉:
                 </p>
@@ -119,9 +120,7 @@ export function RewindDialog({
                 type="button"
                 onClick={onClose}
                 className={`rounded-lg px-3 py-1.5 text-sm ${
-                  hasConflict
-                    ? 'bg-neutral-200 text-neutral-900'
-                    : 'border border-neutral-700 hover:bg-neutral-800'
+                  hasConflict ? 'bg-ink text-app' : 'border border-line hover:bg-hov'
                 }`}
               >
                 取消
@@ -130,7 +129,7 @@ export function RewindDialog({
                 type="button"
                 disabled={busy}
                 onClick={run}
-                className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-40"
+                className="rounded-lg bg-danger px-3 py-1.5 text-sm text-on-danger hover:bg-danger-strong disabled:opacity-40"
               >
                 {hasConflict ? '仍然回滚(连同上面的改动)' : '回滚'}
               </button>
@@ -138,6 +137,7 @@ export function RewindDialog({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
