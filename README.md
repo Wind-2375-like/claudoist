@@ -10,6 +10,14 @@ Todoist 风格的 macOS 桌面 GTD 应用,内嵌 Claude agent:左栏导航 / 中
 
 ---
 
+## 许可与免责声明
+
+**⚠️ 本项目绝大部分代码由 [Claude Code](https://claude.com/claude-code) 编写**(人类负责提需求、做裁决、试用验收),按里程碑流程逐步开发,过程与决策记录在 [docs/ROADMAP.md](docs/ROADMAP.md)。
+
+本仓库内所有代码的授权方式为 [The Unlicense](LICENSE)(公有领域)。但是,**我不对本仓库内代码的正确性负责**。
+
+**非官方、非商业**:这是一个个人业余项目,不销售、不收费、不提供任何形式的商业服务,与 Anthropic 和 Doist(Todoist)均**无关联、未获授权或背书**。"Claude" 名称与标志是 Anthropic 的商标,本项目仅在描述兼容性时使用("内嵌 Claude agent"= 通过官方 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 调用你自己的 Claude 订阅或 API key);"Todoist 风格"仅指交互范式的致敬。使用本应用产生的 Claude 用量计入你自己的订阅/账单,与本项目无关。
+
 ## 安装(普通用户)
 
 **前置条件(重要):**
@@ -114,19 +122,3 @@ pnpm --silent cli projects                              # 平面项目 + 进度�
 ```
 
 DB 定位:`CLAUDOIST_DB` 环境变量 > `--db=` > `--prod`/`--dev` > 自动(dev 库存在且 prod 库不存在则用 dev)。
-
-## 原则
-
-- 源码仓库不含任何用户数据与凭据;运行数据全部在系统 userData 目录(dev 环境自动使用 `-dev` 后缀目录),Google OAuth token 与 API key 经 safeStorage 加密、永不进 SQLite、永不进渲染进程。
-- 业务规则先写文档、再写测试、后写实现;`@gtd/domain` 对 INVARIANTS.md 的每条不变量有同名测试。
-- agent 与 UI 共用同一批 use-case;一切级联操作必须征询用户,绝不自动连锁;agent 的每次写入记逆命令日志,可整轮回滚。
-
-本项目的前身是一个单文件 Python GTD CLI,其全部行为已固化进 INVARIANTS.md。
-
-## 许可与免责声明
-
-**本项目绝大部分代码由 [Claude Code](https://claude.com/claude-code) 编写**(人类负责提需求、做裁决、试用验收),按里程碑流程逐步开发,过程与决策记录在 [docs/ROADMAP.md](docs/ROADMAP.md)。
-
-本仓库内所有代码的授权方式为 [The Unlicense](LICENSE)(公有领域)。但是,**我不对本仓库内代码的正确性负责**。
-
-**非官方、非商业**:这是一个个人业余项目,不销售、不收费、不提供任何形式的商业服务,与 Anthropic 和 Doist(Todoist)均**无关联、未获授权或背书**。"Claude" 名称与标志是 Anthropic 的商标,本项目仅在描述兼容性时使用("内嵌 Claude agent"= 通过官方 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 调用你自己的 Claude 订阅或 API key);"Todoist 风格"仅指交互范式的致敬。使用本应用产生的 Claude 用量计入你自己的订阅/账单,与本项目无关。
