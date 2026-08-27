@@ -401,6 +401,15 @@ body {
   font-family: var(--font-ui);
 }
 
+/* 隐藏原生标题栏后的自绘拖拽区(titleBarStyle: hiddenInset):
+   顶部一条随主题着色的带子,既是"标题栏"也是窗口拖拽把手 */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 code,
 pre,
 kbd {

@@ -54,6 +54,10 @@ function createWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 600,
     title: 'Claudoist',
+    // 原生标题栏只有系统深/浅两档,吃不了主题色(2026-08-27 用户圈图)——
+    // 藏掉它,三栏内容画到窗口顶端,红绿灯浮在侧栏左上,顶部 36px 是拖拽区(App.tsx)
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 12 },
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

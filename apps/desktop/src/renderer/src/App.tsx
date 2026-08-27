@@ -352,8 +352,10 @@ export function App(): React.JSX.Element {
       {/* 左栏:menu */}
       <aside
         style={{ width: left.width }}
-        className="flex shrink-0 flex-col overflow-y-auto border-r border-line bg-side p-3"
+        className="flex shrink-0 flex-col overflow-y-auto border-r border-line bg-side p-3 pt-0"
       >
+        {/* 红绿灯所在带(hiddenInset):侧栏顶部让位 + 兼作窗口拖拽把手 */}
+        <div className="app-drag -mx-3 h-10 shrink-0" />
         <button
           className="mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-left font-medium text-brand hover:bg-hov"
           type="button"
@@ -456,9 +458,10 @@ export function App(): React.JSX.Element {
 
       {/* 中栏:content(@container 供视图做容器查询降级) */}
       <main className="@container relative min-w-0 flex-1 overflow-y-auto">
+        <div className="app-drag sticky top-0 z-20 h-9 shrink-0 bg-app" />
         {/* 导航后退/前进:点进过滤器、标签、项目后要退得回来(⌘[ / ⌘] 与鼠标侧键同效) */}
         {(canBack || canForward) && (
-          <div className="sticky top-0 z-10 flex gap-1 bg-app/85 px-8 pt-4 backdrop-blur">
+          <div className="sticky top-9 z-10 flex gap-1 bg-app/85 px-8 pt-4 backdrop-blur">
             <button
               type="button"
               disabled={!canBack}
@@ -526,6 +529,7 @@ export function App(): React.JSX.Element {
         style={{ width: right.width }}
         className="theme-panel flex shrink-0 flex-col border-l border-line bg-app text-ink"
       >
+        <div className="app-drag h-9 shrink-0" />
         {/* 标题栏由 AgentPanel 自己画(它要显示登录态与新会话按钮) */}
         <ErrorBoundary label="Agent 面板">
           <AgentPanel />
