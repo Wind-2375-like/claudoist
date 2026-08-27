@@ -2,6 +2,8 @@
 
 <p align="center"><img src="apps/desktop/build/icon.png" width="128" alt="Claudoist icon"></p>
 
+<p align="center"><a href="https://claudoist.github.io"><b>claudoist.github.io</b></a> —— 官网:功能演示 · 截图 · 图文安装指南</p>
+
 Todoist 风格的 macOS 桌面 GTD 应用,内嵌 Claude agent:左栏导航 / 中栏内容 / 右栏 agent 聊天面板。agent 通过 MCP 工具与 UI 读写同一份 GTD 数据,变更实时联动、可审计、可控权限、可回滚。
 
 主要能力:捕捉与理清(Todoist 式快速添加)、平面项目 + 子任务树、日历(本地周视图 + Google 日历双向)、循环任务(含 custom repeat)、过滤器查询语言、⌘K 搜索、主题(内置 Solarized)与分部位中英文字体自定义、agent 写入审批 / 审计 / 对话分叉与数据回滚。
@@ -19,6 +21,8 @@ Todoist 风格的 macOS 桌面 GTD 应用,内嵌 Claude agent:左栏导航 / 中
 **非官方、非商业**:这是一个个人业余项目,不销售、不收费、不提供任何形式的商业服务,与 Anthropic 和 Doist(Todoist)均**无关联、未获授权或背书**。"Claude" 名称与标志是 Anthropic 的商标,本项目仅在描述兼容性时使用("内嵌 Claude agent"= 通过官方 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 调用你自己的 Claude 订阅或 API key);"Todoist 风格"仅指交互范式的致敬。使用本应用产生的 Claude 用量计入你自己的订阅/账单,与本项目无关。
 
 ## 安装(普通用户)
+
+> 更直观的图文版见官网:[claudoist.github.io](https://claudoist.github.io)
 
 **前置条件(重要):**
 
