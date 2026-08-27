@@ -1,0 +1,18 @@
+# 打包配置(docs/DESIGN.md §9.3)。M0 仅本地未签名 dmg;notarization 在 M11。
+appId: com.windlike.claudoist
+productName: Claudoist
+directories:
+  output: release
+files:
+  - out/**
+asar: true
+# Agent SDK 捆绑的 CLI 与平台二进制必须解包(M1 依赖,提前落位)
+asarUnpack:
+  - '**/node_modules/@anthropic-ai/**'
+mac:
+  target:
+    - dmg
+    - zip
+  # M0–M10:本地未签名构建;M11 接 hardened runtime + notarization(凭据走 CI secrets)
+  identity: null
+npmRebuild: false
