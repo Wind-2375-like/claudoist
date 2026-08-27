@@ -178,6 +178,10 @@ if (agentSmokeArg) {
     watchDbForExternalWrites(() => broadcastChanged('agent'));
     const win = createWindow();
     applyNativeAppearance(currentAppearance(settingsStore()));
+    // dev 的 dock 图标(打包版由 bundle icns 提供;isPackaged 时别覆盖,免得干扰角标)
+    if (!app.isPackaged && process.platform === 'darwin') {
+      app.dock?.setIcon(join(__dirname, '../../build/icon.png'));
+    }
     if (screenshotArg) {
       const path = screenshotArg.slice('--screenshot='.length);
       win.webContents.once('did-finish-load', () => {
