@@ -348,193 +348,196 @@ export function App(): React.JSX.Element {
   );
 
   return (
-    <div className="flex h-screen bg-app text-ink">
-      {/* 左栏:menu */}
-      <aside
-        style={{ width: left.width }}
-        className="flex shrink-0 flex-col overflow-y-auto border-r border-line bg-side p-3 pt-0"
-      >
-        {/* 红绿灯所在带(hiddenInset):侧栏顶部让位 + 兼作窗口拖拽把手 */}
-        <div className="app-drag -mx-3 h-10 shrink-0" />
-        <button
-          className="mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-left font-medium text-brand hover:bg-hov"
-          type="button"
-          title="快速添加(⌘N)"
-          onClick={() => setQuickAddOpen(true)}
+    <div className="flex h-screen flex-col bg-app text-ink">
+      {/* 自绘通栏标题栏(VSCode 式,D-38):原生栏吃不了主题色,这条的颜色是独立 token
+          (--t-titlebar,设置·外观可改);整条是窗口拖拽把手,红绿灯浮在左端 */}
+      <header className="app-drag flex h-9 shrink-0 items-center justify-center border-b border-line bg-titlebar">
+        <span className="text-xs font-medium text-titlebar-ink select-none">Claudoist</span>
+      </header>
+      <div className="flex min-h-0 flex-1">
+        {/* 左栏:menu */}
+        <aside
+          style={{ width: left.width }}
+          className="flex shrink-0 flex-col overflow-y-auto border-r border-line bg-side p-3"
         >
-          <span className="text-lg leading-none">＋</span> Add task
-        </button>
-        <nav className="space-y-0.5">
-          {navItem('inbox', '📥', 'Inbox', inbox.data?.length)}
-          {navItem('today', '📅', 'Today', todayBadge)}
-          {navItem('calendar', '🗓️', 'Calendar')}
           <button
+            className="mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-left font-medium text-brand hover:bg-hov"
             type="button"
-            data-testid="search-open"
-            onClick={() => setSearchOpen(true)}
-            title="搜索(⌘K)"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-hov"
+            title="快速添加(⌘N)"
+            onClick={() => setQuickAddOpen(true)}
           >
-            <span>🔍</span>
-            Search
-            <kbd className="ml-auto text-[10px] text-fnt">⌘K</kbd>
+            <span className="text-lg leading-none">＋</span> Add task
           </button>
-          {navItem('filters', '🏷️', 'Filters & Labels')}
-        </nav>
-
-        {/* My Projects 组头:点文字 → 总览;+ 新建;箭头折叠 */}
-        <div className="mt-6 flex items-center gap-1 px-2">
-          <button
-            type="button"
-            onClick={() => setView({ kind: 'myprojects' })}
-            className={`flex-1 text-left text-xs font-semibold ${
-              view.kind === 'myprojects' ? 'text-brand' : 'text-mut hover:text-ink'
-            }`}
-            title="项目总览(进度)"
-          >
-            My Projects
-          </button>
-          <button
-            type="button"
-            className="rounded px-1 text-sm text-fnt hover:bg-hov hover:text-ink"
-            title="新建项目"
-            onClick={() => setProjectModal('add')}
-          >
-            ＋
-          </button>
-          <button
-            type="button"
-            className="rounded px-1 text-xs text-fnt hover:bg-hov hover:text-ink"
-            title={projectsCollapsed ? '展开项目列表' : '折叠项目列表'}
-            onClick={() => setProjectsCollapsed((v) => !v)}
-          >
-            {projectsCollapsed ? '▸' : '▾'}
-          </button>
-        </div>
-        {!projectsCollapsed && (
-          <ul className="mt-1 space-y-0.5">
-            {projects.data?.map((p) => (
-              <SidebarProject
-                key={p.id}
-                project={p}
-                active={view.kind === 'project' && view.id === p.id}
-                onOpen={() => setView({ kind: 'project', id: p.id })}
-                onEdit={() => setProjectModal(p)}
-                onCompleted={() => {
-                  // 正在看这个项目 → 回总览,避免停留在已完成项目里继续操作
-                  if (view.kind === 'project' && view.id === p.id) {
-                    setView({ kind: 'myprojects' });
-                  }
-                }}
-              />
-            ))}
-          </ul>
-        )}
-
-        <div className="mt-6 px-2 text-xs font-semibold text-mut">GTD</div>
-        <nav className="mt-1 space-y-0.5">
-          {/* Upstream(Google 镜像)不进侧栏:条目太多,徽章长期是个大数字,喧宾夺主。
-              镜像任务本来就在 Calendar/Today 上各就各位;这个容器视图保留,经 ⌘K 命中可达。 */}
-          {navItem('someday', '🌙', 'Someday/Maybe', bucketCounts.data?.someday)}
-          {navItem('reference', '📚', 'Reference', bucketCounts.data?.reference)}
-          {navItem('completed', '☑️', 'Completed')}
-        </nav>
-        <button
-          type="button"
-          className="mt-auto flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-hov"
-          onClick={() => setSettingsOpen(true)}
-          title="设置(Google 日历连接)"
-        >
-          <span>⚙️</span> Settings
-        </button>
-        <div className="px-2 pt-2 text-[11px] leading-relaxed text-fnt">
-          {info
-            ? `v${info.version} · Electron ${info.electron} · ${info.packaged ? 'packaged' : 'dev'}`
-            : 'IPC…'}
-        </div>
-      </aside>
-
-      <PaneHandle onPointerDown={left.onPointerDown} />
-
-      {/* 中栏:content(@container 供视图做容器查询降级) */}
-      <main className="@container relative min-w-0 flex-1 overflow-y-auto">
-        <div className="app-drag sticky top-0 z-20 h-9 shrink-0 bg-app" />
-        {/* 导航后退/前进:点进过滤器、标签、项目后要退得回来(⌘[ / ⌘] 与鼠标侧键同效) */}
-        {(canBack || canForward) && (
-          <div className="sticky top-9 z-10 flex gap-1 bg-app/85 px-8 pt-4 backdrop-blur">
+          <nav className="space-y-0.5">
+            {navItem('inbox', '📥', 'Inbox', inbox.data?.length)}
+            {navItem('today', '📅', 'Today', todayBadge)}
+            {navItem('calendar', '🗓️', 'Calendar')}
             <button
               type="button"
-              disabled={!canBack}
-              onClick={back}
-              title="后退(⌘[)"
-              className="rounded px-1.5 py-0.5 text-sm text-mut hover:bg-hov disabled:opacity-30"
+              data-testid="search-open"
+              onClick={() => setSearchOpen(true)}
+              title="搜索(⌘K)"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-hov"
             >
-              ‹
+              <span>🔍</span>
+              Search
+              <kbd className="ml-auto text-[10px] text-fnt">⌘K</kbd>
+            </button>
+            {navItem('filters', '🏷️', 'Filters & Labels')}
+          </nav>
+
+          {/* My Projects 组头:点文字 → 总览;+ 新建;箭头折叠 */}
+          <div className="mt-6 flex items-center gap-1 px-2">
+            <button
+              type="button"
+              onClick={() => setView({ kind: 'myprojects' })}
+              className={`flex-1 text-left text-xs font-semibold ${
+                view.kind === 'myprojects' ? 'text-brand' : 'text-mut hover:text-ink'
+              }`}
+              title="项目总览(进度)"
+            >
+              My Projects
             </button>
             <button
               type="button"
-              disabled={!canForward}
-              onClick={forward}
-              title="前进(⌘])"
-              className="rounded px-1.5 py-0.5 text-sm text-mut hover:bg-hov disabled:opacity-30"
+              className="rounded px-1 text-sm text-fnt hover:bg-hov hover:text-ink"
+              title="新建项目"
+              onClick={() => setProjectModal('add')}
             >
-              ›
+              ＋
+            </button>
+            <button
+              type="button"
+              className="rounded px-1 text-xs text-fnt hover:bg-hov hover:text-ink"
+              title={projectsCollapsed ? '展开项目列表' : '折叠项目列表'}
+              onClick={() => setProjectsCollapsed((v) => !v)}
+            >
+              {projectsCollapsed ? '▸' : '▾'}
             </button>
           </div>
+          {!projectsCollapsed && (
+            <ul className="mt-1 space-y-0.5">
+              {projects.data?.map((p) => (
+                <SidebarProject
+                  key={p.id}
+                  project={p}
+                  active={view.kind === 'project' && view.id === p.id}
+                  onOpen={() => setView({ kind: 'project', id: p.id })}
+                  onEdit={() => setProjectModal(p)}
+                  onCompleted={() => {
+                    // 正在看这个项目 → 回总览,避免停留在已完成项目里继续操作
+                    if (view.kind === 'project' && view.id === p.id) {
+                      setView({ kind: 'myprojects' });
+                    }
+                  }}
+                />
+              ))}
+            </ul>
+          )}
+
+          <div className="mt-6 px-2 text-xs font-semibold text-mut">GTD</div>
+          <nav className="mt-1 space-y-0.5">
+            {/* Upstream(Google 镜像)不进侧栏:条目太多,徽章长期是个大数字,喧宾夺主。
+              镜像任务本来就在 Calendar/Today 上各就各位;这个容器视图保留,经 ⌘K 命中可达。 */}
+            {navItem('someday', '🌙', 'Someday/Maybe', bucketCounts.data?.someday)}
+            {navItem('reference', '📚', 'Reference', bucketCounts.data?.reference)}
+            {navItem('completed', '☑️', 'Completed')}
+          </nav>
+          <button
+            type="button"
+            className="mt-auto flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-hov"
+            onClick={() => setSettingsOpen(true)}
+            title="设置(Google 日历连接)"
+          >
+            <span>⚙️</span> Settings
+          </button>
+          <div className="px-2 pt-2 text-[11px] leading-relaxed text-fnt">
+            {info
+              ? `v${info.version} · Electron ${info.electron} · ${info.packaged ? 'packaged' : 'dev'}`
+              : 'IPC…'}
+          </div>
+        </aside>
+
+        <PaneHandle onPointerDown={left.onPointerDown} />
+
+        {/* 中栏:content(@container 供视图做容器查询降级) */}
+        <main className="@container relative min-w-0 flex-1 overflow-y-auto">
+          {/* 导航后退/前进:点进过滤器、标签、项目后要退得回来(⌘[ / ⌘] 与鼠标侧键同效) */}
+          {(canBack || canForward) && (
+            <div className="sticky top-0 z-10 flex gap-1 bg-app/85 px-8 pt-4 backdrop-blur">
+              <button
+                type="button"
+                disabled={!canBack}
+                onClick={back}
+                title="后退(⌘[)"
+                className="rounded px-1.5 py-0.5 text-sm text-mut hover:bg-hov disabled:opacity-30"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                disabled={!canForward}
+                onClick={forward}
+                title="前进(⌘])"
+                className="rounded px-1.5 py-0.5 text-sm text-mut hover:bg-hov disabled:opacity-30"
+              >
+                ›
+              </button>
+            </div>
+          )}
+          {view.kind === 'inbox' && <InboxView />}
+          {view.kind === 'today' && <TodayView />}
+          {view.kind === 'calendar' && <CalendarView />}
+          {view.kind === 'upstream' && <UpstreamView />}
+          {view.kind === 'myprojects' && (
+            <MyProjectsView onOpenProject={(id) => setView({ kind: 'project', id })} />
+          )}
+          {view.kind === 'project' && <ProjectView projectId={view.id} />}
+          {view.kind === 'someday' && <BucketView kind="someday" />}
+          {view.kind === 'reference' && <BucketView kind="reference" />}
+          {view.kind === 'completed' && <CompletedView />}
+          {view.kind === 'filters' && (
+            <FiltersLabelsView
+              onOpenFilter={(query, title) => setView({ kind: 'query', query, title })}
+              onOpenLabel={(name) =>
+                setView({
+                  kind: 'query',
+                  query: /[\s()&|!,:"]/.test(name) ? `@"${name}"` : `@${name}`,
+                  title: `@${name}`,
+                })
+              }
+            />
+          )}
+          {view.kind === 'query' && <FilterResultView title={view.title} query={view.query} />}
+        </main>
+
+        {quickAddOpen && <TaskCard mode="add" onClose={() => setQuickAddOpen(false)} />}
+        {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onPick={openHit} />}
+        {searchDetailId !== null && (
+          <TaskDetailModal taskId={searchDetailId} onClose={() => setSearchDetailId(null)} />
         )}
-        {view.kind === 'inbox' && <InboxView />}
-        {view.kind === 'today' && <TodayView />}
-        {view.kind === 'calendar' && <CalendarView />}
-        {view.kind === 'upstream' && <UpstreamView />}
-        {view.kind === 'myprojects' && (
-          <MyProjectsView onOpenProject={(id) => setView({ kind: 'project', id })} />
-        )}
-        {view.kind === 'project' && <ProjectView projectId={view.id} />}
-        {view.kind === 'someday' && <BucketView kind="someday" />}
-        {view.kind === 'reference' && <BucketView kind="reference" />}
-        {view.kind === 'completed' && <CompletedView />}
-        {view.kind === 'filters' && (
-          <FiltersLabelsView
-            onOpenFilter={(query, title) => setView({ kind: 'query', query, title })}
-            onOpenLabel={(name) =>
-              setView({
-                kind: 'query',
-                query: /[\s()&|!,:"]/.test(name) ? `@"${name}"` : `@${name}`,
-                title: `@${name}`,
-              })
-            }
+        <Toasts />
+        {projectModal !== null && (
+          <ProjectModal
+            {...(projectModal === 'add' ? {} : { project: projectModal })}
+            onClose={() => setProjectModal(null)}
           />
         )}
-        {view.kind === 'query' && <FilterResultView title={view.title} query={view.query} />}
-      </main>
+        {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
-      {quickAddOpen && <TaskCard mode="add" onClose={() => setQuickAddOpen(false)} />}
-      {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onPick={openHit} />}
-      {searchDetailId !== null && (
-        <TaskDetailModal taskId={searchDetailId} onClose={() => setSearchDetailId(null)} />
-      )}
-      <Toasts />
-      {projectModal !== null && (
-        <ProjectModal
-          {...(projectModal === 'add' ? {} : { project: projectModal })}
-          onClose={() => setProjectModal(null)}
-        />
-      )}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+        <PaneHandle onPointerDown={right.onPointerDown} />
 
-      <PaneHandle onPointerDown={right.onPointerDown} />
-
-      {/* 右栏:agent */}
-      <aside
-        style={{ width: right.width }}
-        className="theme-panel flex shrink-0 flex-col border-l border-line bg-app text-ink"
-      >
-        <div className="app-drag h-9 shrink-0" />
-        {/* 标题栏由 AgentPanel 自己画(它要显示登录态与新会话按钮) */}
-        <ErrorBoundary label="Agent 面板">
-          <AgentPanel />
-        </ErrorBoundary>
-      </aside>
+        {/* 右栏:agent */}
+        <aside
+          style={{ width: right.width }}
+          className="theme-panel flex shrink-0 flex-col border-l border-line bg-app text-ink"
+        >
+          {/* 标题栏由 AgentPanel 自己画(它要显示登录态与新会话按钮) */}
+          <ErrorBoundary label="Agent 面板">
+            <AgentPanel />
+          </ErrorBoundary>
+        </aside>
+      </div>
     </div>
   );
 }

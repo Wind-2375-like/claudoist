@@ -53,6 +53,7 @@ export const TOKEN_GROUPS: { group: string; tokens: { v: string; label: string }
   {
     group: '背景',
     tokens: [
+      { v: '--t-titlebar', label: '标题栏' },
       { v: '--t-app', label: '窗口 / 中栏' },
       { v: '--t-side', label: '侧栏' },
       { v: '--t-surface', label: '卡片 / 输入框' },
@@ -66,6 +67,7 @@ export const TOKEN_GROUPS: { group: string; tokens: { v: string; label: string }
     group: '文字与边框',
     tokens: [
       { v: '--t-ink', label: '主文字' },
+      { v: '--t-titlebar-ink', label: '标题栏文字' },
       { v: '--t-mut', label: '次要文字' },
       { v: '--t-fnt', label: '提示文字' },
       { v: '--t-line', label: '边框' },

@@ -59,6 +59,9 @@
   /* 成功(默认绿) */
   --color-ok: var(--t-ok);
   --color-ok-soft: var(--t-ok-soft);
+  /* 标题栏(VSCode 式自绘通栏,D-38 追加;用户要求可改色而不是隐藏) */
+  --color-titlebar: var(--t-titlebar);
+  --color-titlebar-ink: var(--t-titlebar-ink);
   /* 进度条轨道(审查:用 surface/sel 当轨道在浅色主题下与底同色,量程不可读) */
   --color-track: var(--t-track);
   /* 遮罩 */
@@ -105,6 +108,8 @@
   --t-ok-soft: #f0fdf4;
   --t-scrim: rgb(0 0 0 / 0.35);
   --t-track: #e5e5e5;
+  --t-titlebar: #f0f0f0;
+  --t-titlebar-ink: #525252;
   /* 面板(agent 聊天):深色对撞是有意的设计身份 */
   --p-app: #171717;
   --p-side: #101010;
@@ -173,6 +178,8 @@
   --t-scrim: rgb(0 0 0 / 0.55);
   /* 深色主题下面板更深一档,保持左右分区感 */
   --t-track: #3a3a3a;
+  --t-titlebar: #111111;
+  --t-titlebar-ink: #a3a3a3;
   --p-app: #0d0d0d;
   --p-side: #0a0a0a;
   --p-surface: #1c1c1c;
@@ -240,6 +247,8 @@
   --t-ok-soft: rgb(133 153 0 / 0.12);
   --t-scrim: rgb(0 43 54 / 0.4);
   --t-track: #dcd4bc;
+  --t-titlebar: #eee8d5;
+  --t-titlebar-ink: #586e75;
   /* 面板浅色(base2 家族):用户裁决 —— 诉求就是**降对比**,浅主题里深青面板是对撞
      (2026-08-27 用户:「solarized light 的 agent 颜色不对」) */
   --p-app: #eee8d5; /* base2 */
@@ -308,6 +317,8 @@
   --t-ok-soft: rgb(133 153 0 / 0.15);
   --t-scrim: rgb(0 0 0 / 0.55);
   --t-track: #12505e;
+  --t-titlebar: #073642;
+  --t-titlebar-ink: #93a1a1;
   /* 面板再深一档(base03 之下),保持分区 */
   --p-app: #00212b;
   --p-side: #001b23;
