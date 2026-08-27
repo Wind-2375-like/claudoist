@@ -127,6 +127,6 @@ DB 定位:`CLAUDOIST_DB` 环境变量 > `--db=` > `--prod`/`--dev` > 自动(dev 
 
 **本项目绝大部分代码由 [Claude Code](https://claude.com/claude-code) 编写**(人类负责提需求、做裁决、试用验收),按里程碑流程逐步开发,过程与决策记录在 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
-本仓库内所有代码的授权方式为 [The Unlicense](LICENSE)(公有领域)。大家如果使用这里的代码开发自己的软件挣了大钱,或是参考这里的实现做出了更好的东西,我都会很高兴的。使用这里的代码之后,你可以自主选择是否公开源代码。总而言之,你可以把这里的代码当作你自己写的一样,无论怎样使用都是被允许的。但是,**我不对本仓库内代码的正确性负责**。大家要是使用这里的代码开发软件而导致程序崩溃或数据丢失,请不要向我抱怨(GTD 数据无价,记得备份 `~/Library/Application Support/Claudoist/`)。如果你愿意,遇到问题可以在 Issues 中提出来,我们共同解决。
+本仓库内所有代码的授权方式为 [The Unlicense](LICENSE)(公有领域)。但是,**我不对本仓库内代码的正确性负责**。
 
 **非官方、非商业**:这是一个个人业余项目,不销售、不收费、不提供任何形式的商业服务,与 Anthropic 和 Doist(Todoist)均**无关联、未获授权或背书**。"Claude" 名称与标志是 Anthropic 的商标,本项目仅在描述兼容性时使用("内嵌 Claude agent"= 通过官方 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 调用你自己的 Claude 订阅或 API key);"Todoist 风格"仅指交互范式的致敬。使用本应用产生的 Claude 用量计入你自己的订阅/账单,与本项目无关。
