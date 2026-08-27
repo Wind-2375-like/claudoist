@@ -1,12 +1,12 @@
 #!/bin/bash
 # 图标构建:build/icon.svg → build/icon.icns + build/icon.png(dev dock 用)
-# 渲染必须走 WebKit(qlmanage):ImageMagick 内置 SVG 渲染器不支持渐变/描边,会糊成黑块。
+# 渲染走 Electron 离屏(见 render-icon.cjs 头注):qlmanage 垫白底,ImageMagick 缺渐变/描边。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-qlmanage -t -s 1024 -o "$TMP" build/icon.svg >/dev/null
-SRC="$TMP/icon.svg.png"
+env -u ELECTRON_RUN_AS_NODE npx electron scripts/render-icon.cjs build/icon.svg "$TMP/icon-1024.png" 1024
+SRC="$TMP/icon-1024.png"
 ICONSET="$TMP/icon.iconset"
 mkdir -p "$ICONSET"
 for s in 16 32 128 256 512; do
