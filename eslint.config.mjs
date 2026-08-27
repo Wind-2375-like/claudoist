@@ -19,7 +19,16 @@ const restrict = (patterns) => ({
 });
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/release/**', 'docs/**'] },
+  {
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/out/**',
+      '**/release/**',
+      'docs/**',
+      'apps/desktop/scripts/render-icon.cjs',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
