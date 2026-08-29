@@ -368,7 +368,10 @@ export function AgentPanel(): React.JSX.Element {
 
   const ensureSession = useCallback(async (): Promise<void> => {
     const s = (await window.agent.status()) as AgentStatusVM;
-    if (!s.alive) await window.agent.startSession({ resume: s.lastConversationId !== null });
+    // 面板是空白的(用户看到的是"新对话")就必须真开新对话 —— 2026-08-29 用户实测:
+    // 这里曾经 resume 上一条,消息静默落进历史会话,而界面上什么都看不出来。
+    // 想续聊旧会话的路径是历史列表点进去(那会加载出正文,所见即所得)。
+    if (!s.alive) await window.agent.startSession({});
   }, []);
 
   const submit = useCallback(

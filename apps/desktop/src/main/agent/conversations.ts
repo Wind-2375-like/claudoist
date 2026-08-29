@@ -127,7 +127,11 @@ export async function transcript(sdkSessionId: string): Promise<TranscriptItem[]
         name?: string;
         source?: { type?: string; media_type?: string; data?: string };
       }[]) {
-        if (b.type === 'text' && typeof b.text === 'string') text += b.text;
+        if (b.type === 'text' && typeof b.text === 'string') {
+          // 换行拼接:排队消息会被 harness 合并成一条 user 消息(多个 text 块),
+          // 直接串接会出现 "hihi" 这种粘连
+          text += (text !== '' ? '\n' : '') + b.text;
+        }
         if (b.type === 'tool_use' && typeof b.name === 'string') tools.push(b.name);
         if (
           b.type === 'image' &&
@@ -139,8 +143,13 @@ export async function transcript(sdkSessionId: string): Promise<TranscriptItem[]
         }
       }
     }
-    // 我们给每条用户消息前置的 [此刻 …] 时间戳块不该出现在历史气泡里
-    text = text.replace(/^\[此刻[^\]]*\]\s*/, '').trim();
+    // 我们给每条用户消息前置的 [此刻 …] 时间戳块不该出现在历史气泡里。
+    // **全局剥而不是只剥开头**:排队消息被 harness 合并成一条后,第二条的时间戳块
+    // 落在正文中间(2026-08-29 用户截图:「hi[此刻 …]hi」)
+    text = text.replace(/\[此刻[^\]]*\]\s*/g, '').trim();
+    // harness 的控制标记不是对话内容(中断/工具中断提示)
+    if (/^\[Request interrupted by user[^\]]*\]$/.test(text)) continue;
+    text = text.replace(/\[Request interrupted by user[^\]]*\]\s*/g, '').trim();
     if (text === '' && tools.length === 0 && images.length === 0) continue;
     out.push({ role, uuid: m.uuid ?? null, text, tools, images });
   }
