@@ -242,7 +242,13 @@ const agentApi = {
   transcript: (
     id: string,
   ): Promise<{
-    items: { role: 'user' | 'assistant'; uuid: string | null; text: string; tools: string[] }[];
+    items: {
+      role: 'user' | 'assistant';
+      uuid: string | null;
+      text: string;
+      tools: string[];
+      images: string[];
+    }[];
   }> => ipcRenderer.invoke('agent:conversations.transcript', { id }),
   deleteConversation: (id: string): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:conversations.delete', { id }),

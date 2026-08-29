@@ -34,6 +34,10 @@ type Item =
       kind: 'user';
       text: string;
       imageCount: number;
+      /** 图片缩略(data URI;live 发送与历史恢复都填,2026-08-27 用户反馈历史丢图) */
+      images?: string[];
+      /** 上一轮还在跑时排队发出的(UI 上标「排队中」,轮到它时标记消失) */
+      queued?: boolean;
       attachments: string[];
       /** INV-35 回滚锚点(本地生成,一回合一个) */
       turnId?: string;
@@ -319,7 +323,16 @@ export function AgentPanel(): React.JSX.Element {
       }
 
       if (type === 'result') {
-        setBusy(false);
+        // 有排队消息时主进程的 busy 不落(下一轮马上开始)—— 以主进程为准,别在这盲设 false
+        void window.agent.status().then((st) => {
+          setBusy((st as { busy?: boolean }).busy === true);
+        });
+        // 最早那条「排队中」现在接棒开跑,把标记摘掉
+        setItems((prev) => {
+          const qi = prev.findIndex((x) => x.kind === 'user' && x.queued === true);
+          if (qi < 0) return prev;
+          return prev.map((x, k) => (k === qi ? ({ ...x, queued: false } as Item) : x));
+        });
         textBuf.current = '';
         thinkBuf.current = '';
         void refreshStatus();
@@ -361,7 +374,9 @@ export function AgentPanel(): React.JSX.Element {
   const submit = useCallback(
     async (text: string) => {
       const t = text.trim();
-      if (t === '' || busy) return;
+      // busy 不再拦截:忙时照发,主进程排进 streaming 队列(对齐 Claude Code 的缓冲)
+      if (t === '') return;
+      const wasBusy = busy;
       await ensureSession();
       const localKey = crypto.randomUUID();
       setItems((p) => [
@@ -370,6 +385,8 @@ export function AgentPanel(): React.JSX.Element {
           kind: 'user',
           text: t,
           imageCount: images.length,
+          images: images.map((im) => `data:${im.mediaType};base64,${im.data}`),
+          ...(wasBusy ? { queued: true } : {}),
           attachments: attachments.map((a) => a.name),
           localKey,
         } as Item,
@@ -391,6 +408,7 @@ export function AgentPanel(): React.JSX.Element {
                   ...it,
                   ...(r.turnId !== undefined ? { turnId: r.turnId } : {}),
                   ...(r.messageUuid !== undefined ? { messageUuid: r.messageUuid } : {}),
+                  queued: (r as { queued?: boolean }).queued === true,
                 } as Item)
               : it,
           ),
@@ -480,7 +498,8 @@ export function AgentPanel(): React.JSX.Element {
             ? {
                 kind: 'user' as const,
                 text: x.text,
-                imageCount: 0,
+                imageCount: x.images.length,
+                images: x.images,
                 attachments: [],
                 ...(x.uuid !== null ? { messageUuid: x.uuid } : {}),
               }
@@ -591,8 +610,23 @@ export function AgentPanel(): React.JSX.Element {
                 }}
               >
                 <div className="max-w-[85%] rounded-2xl bg-acc px-3 py-1.5 text-sm whitespace-pre-wrap text-on-acc select-text">
+                  {(it.images?.length ?? 0) > 0 && (
+                    <div className="mb-1 flex flex-wrap gap-1">
+                      {it.images!.map((src, k) => (
+                        <img
+                          key={k}
+                          src={src}
+                          alt=""
+                          className="max-h-40 max-w-full rounded-lg border border-line-soft/40"
+                        />
+                      ))}
+                    </div>
+                  )}
                   {it.text}
-                  {it.imageCount > 0 && (
+                  {it.queued === true && (
+                    <span className="ml-1 text-[11px] opacity-80">⏳ 排队中</span>
+                  )}
+                  {it.imageCount > 0 && (it.images?.length ?? 0) === 0 && (
                     <span className="ml-1 text-[11px] opacity-80">+{it.imageCount} 图</span>
                   )}
                   {it.attachments.length > 0 && (

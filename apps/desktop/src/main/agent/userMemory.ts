@@ -1,5 +1,6 @@
 import { app } from 'electron';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
@@ -75,4 +76,23 @@ export function readUserMemory(): string {
 
 export function writeUserMemory(body: string): void {
   writeFileSync(userMemoryPath(), body, 'utf8');
+}
+
+/**
+ * harness 的 auto-memory 目录(~/.claude/projects/<encoded cwd>/memory/)。
+ *
+ * SDK 的系统提示会引导 agent 去这里读写跨会话记忆,但目录由 harness 惰性创建 ——
+ * 用户第一句「看看你的记忆」会撞上 Read 一个不存在的文件(2026-08-27 用户实测)。
+ * 我们在会话启动时把骨架建好:agent 的第一次回忆读到的是一份空索引而不是报错,
+ * 之后它自己往里写,记忆就跨会话活了。路径编码规则与 harness 一致(非字母数字 → '-')。
+ * 只建缺失的,永不覆盖 —— 内容是 agent/用户的。
+ */
+export function ensureHarnessMemory(): { dir: string; created: boolean } {
+  const encoded = app.getPath('userData').replace(/[^a-zA-Z0-9]/g, '-');
+  const dir = join(homedir(), '.claude', 'projects', encoded, 'memory');
+  const index = join(dir, 'MEMORY.md');
+  if (existsSync(index)) return { dir, created: false };
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(index, '# Memory Index\n\n(还没有记忆。每条记忆一个文件,在这里加一行索引。)\n');
+  return { dir, created: true };
 }

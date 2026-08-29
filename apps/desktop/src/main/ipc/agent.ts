@@ -96,6 +96,9 @@ type ThinkingMode = 'off' | 'hidden' | 'shown';
 let currentTurn: { conversationId: string; turnId: string; anchorUuid: string | null } | null =
   null;
 
+/** 排队消息的回合上下文:上一轮 result 到达时按序接棒(见 agent:send 与事件转发) */
+const pendingTurnCtx: { conversationId: string; turnId: string; anchorUuid: string | null }[] = [];
+
 /**
  * 读护栏值。**`null` 表示"不限",要翻译成"不传这个选项"** ——
  * 不能翻成 0:`maxBudgetUsd: 0` 会让会话一开口就熄火,`maxTurns: 0` 则被 SDK 当 falsy 丢掉
@@ -448,6 +451,7 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
               currentTurn === null ? null : { ...currentTurn, toolUseId: null },
           };
 
+    pendingTurnCtx.length = 0; // 新会话:旧的排队回合作废
     startSession(
       {
         deps: { store, clock },
@@ -474,7 +478,13 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
         ...(p.fork === true && resumeSdkId !== null ? { forkSession: true } : {}),
       },
       (ev) => {
-        if (ev.type === 'message') recordSdkMessage(conversationId, ev.payload);
+        if (ev.type === 'message') {
+          recordSdkMessage(conversationId, ev.payload);
+          // 一轮结束 → 排队的下一轮接棒回合上下文(与 sessionManager.pendingTurns 同步)
+          if ((ev.payload as { type?: string }).type === 'result' && pendingTurnCtx.length > 0) {
+            currentTurn = pendingTurnCtx.shift()!;
+          }
+        }
         broadcast('agent:stream', ev);
       },
     );
@@ -505,14 +515,20 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
       const r = send(p.text, p.images ?? [], p.attachments ?? []);
       // 每条用户消息开一个新回合。turnId 本地生成(不依赖 SDK 的任何未公开行为),
       // anchorUuid 是我们自己塞给 SDK 的那个 uuid —— 它同时是 forkSession 的 upToMessageId。
+      // **排队消息不能立刻顶掉 currentTurn**:上一轮还在跑,写工具的逆命令日志会被
+      // 记到错误的回合上(INV-35)。排进 pendingTurnCtx,等上一轮 result 到达再接棒。
+      let turnId: string | undefined;
       if (convId !== null && r.error === undefined) {
-        currentTurn = {
+        const ctx = {
           conversationId: convId,
           turnId: crypto.randomUUID(),
           anchorUuid: r.messageUuid ?? null,
         };
+        turnId = ctx.turnId;
+        if (r.queued === true) pendingTurnCtx.push(ctx);
+        else currentTurn = ctx;
       }
-      return { ...r, turnId: currentTurn?.turnId };
+      return { ...r, turnId, queued: r.queued === true };
     },
   );
 

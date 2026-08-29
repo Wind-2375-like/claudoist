@@ -178,7 +178,13 @@ declare global {
       auditList: (conversationId?: string | null) => Promise<AuditRowVM[]>;
       conversations: () => Promise<ConversationVM[]>;
       transcript: (id: string) => Promise<{
-        items: { role: 'user' | 'assistant'; uuid: string | null; text: string; tools: string[] }[];
+        items: {
+          role: 'user' | 'assistant';
+          uuid: string | null;
+          text: string;
+          tools: string[];
+          images: string[];
+        }[];
       }>;
       deleteConversation: (id: string) => Promise<{ error?: string }>;
       usageTotals: () => Promise<{

@@ -11,11 +11,12 @@ import type {
   SDKUserMessage,
   ThinkingConfig,
 } from '@anthropic-ai/claude-agent-sdk';
-import { createGtdServer, nowLine, statusSnapshot } from '@gtd/agent-tools';
+import { createMetaServer, createGtdServer, nowLine, statusSnapshot } from '@gtd/agent-tools';
 import type { ReadToolDeps, WriteToolDeps } from '@gtd/agent-tools';
 import { resolveClaudeBinary } from './cliPath';
 import { skillsOption } from './skills';
-import { ensureUserMemory } from './userMemory';
+import { ensureHarnessMemory, ensureUserMemory } from './userMemory';
+import { buildMetaDeps } from './metaDeps';
 import { buildSystemPrompt } from './systemPrompt';
 import { rejectAllPending } from './permissions';
 import { sdkPermissionMode, type PermissionModeId } from '@gtd/agent-tools';
@@ -59,6 +60,10 @@ interface LiveSession {
   /** SDK 侧会话 id,首条 system/init 到达后填 */
   sdkSessionId: string | null;
   busy: boolean;
+  /** 忙时又推进来的消息数(2026-08-27 用户要求「忙时也能继续发」):
+      每个 result 消费一个;>0 时 busy 不落 —— 排队的马上会开下一轮 */
+  pendingTurns: number;
+  drain: () => void;
   conversationId: string;
 }
 
@@ -115,6 +120,8 @@ function pushableStream(): {
   iterable: AsyncIterable<SDKUserMessage>;
   push: (m: SDKUserMessage) => void;
   close: () => void;
+  /** 清空尚未被 SDK 消费的排队消息(「停止」= 连排队的一起停) */
+  drain: () => void;
 } {
   const queue: SDKUserMessage[] = [];
   let resolveNext: ((r: IteratorResult<SDKUserMessage>) => void) | null = null;
@@ -154,6 +161,9 @@ function pushableStream(): {
         resolveNext = null;
         r({ value: undefined as never, done: true });
       }
+    },
+    drain() {
+      queue.length = 0;
     },
   };
 }
@@ -206,6 +216,8 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
   // 用户可调的那层 prompt:SDK 会从 cwd 读 CLAUDE.md(settingSources 含 'project')。
   // 只在缺失时创建,之后是用户的文件,我们不碰。
   ensureUserMemory();
+  // 记忆目录(harness 的 auto-memory 指向这里;不建的话 agent 第一次「回忆」就 Read 失败)
+  ensureHarnessMemory();
   const stream = pushableStream();
   const abort = new AbortController();
 
@@ -222,6 +234,8 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
     tools: ['Skill', 'Read'],
     mcpServers: {
       gtd: createGtdServer({ ...input.deps, ...(input.write ? { write: input.write } : {}) }),
+      // 会话元数据(2026-08-27 用户反馈「看我们其他的对话」):列出/读取历史会话
+      claudoist: createMetaServer(buildMetaDeps(input.conversationId)),
     },
     // 只用我们注入的 MCP,不加载 .mcp.json / 用户设置里的服务器
     strictMcpConfig: true,
@@ -258,6 +272,8 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
     abort,
     sdkSessionId: null,
     busy: false,
+    pendingTurns: 0,
+    drain: stream.drain,
     conversationId: input.conversationId,
   };
 
@@ -268,7 +284,10 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
         if (m.type === 'system' && m.subtype === 'init' && typeof m.session_id === 'string') {
           if (live) live.sdkSessionId = m.session_id;
         }
-        if (m.type === 'result' && live) live.busy = false;
+        if (m.type === 'result' && live) {
+          if (live.pendingTurns > 0) live.pendingTurns -= 1;
+          else live.busy = false;
+        }
         onEvent({ type: 'message', payload: m });
       }
       onEvent({ type: 'ended' });
@@ -315,19 +334,24 @@ export function send(
   text: string,
   images: AgentImage[],
   attachments: string[] = [],
-): { error?: string; messageUuid?: string } {
+): { error?: string; messageUuid?: string; queued?: boolean } {
   if (!live) return { error: '会话未启动' };
-  if (live.busy) return { error: '上一条消息还在处理中' };
-  live.busy = true;
+  // 忙时不拒绝,排进 streaming-input 队列(2026-08-27 用户要求,对齐 Claude Code 的缓冲):
+  // SDK 消费完当前轮会立刻取下一条 —— 对模型呈现为紧随其后的下一条用户消息
+  const queued = live.busy;
+  if (queued) live.pendingTurns += 1;
+  else live.busy = true;
   const messageUuid = crypto.randomUUID();
   live.push(userMessage(text, images, attachments, messageUuid));
-  return { messageUuid };
+  return { messageUuid, queued };
 }
 
 /** 只停当前 turn —— 会话继续存活,可以接着聊。 */
 export async function interruptTurn(): Promise<void> {
   if (!live) return;
   try {
+    live.drain(); // 先清排队:用户按「停止」指的是全部,不只是正在跑的这轮
+    live.pendingTurns = 0;
     await live.q.interrupt();
   } finally {
     if (live) live.busy = false;

@@ -374,7 +374,10 @@ function ModelSection({
                 void window.agent.setModel(m.value).then((r) => {
                   // 先落盘再热切:落盘保证下次起会话用它,热切保证当前会话立刻变
                   if (r.error !== undefined) toast(`已保存,但当前会话切换失败:${r.error}`);
-                  else if (!r.applied) toast('已保存 —— 下次开会话时生效');
+                  else if (r.applied) toast('已切换 —— 当前会话立即生效');
+                  // applied=false 只发生在还没起会话时 —— 会话本来就会带着新模型启动,
+                  // 对用户而言同样是"马上生效",别再吓唬人说要重开对话
+                  else toast('已切换 —— 从下一条消息起生效');
                   onChanged();
                 });
               }}

@@ -94,6 +94,9 @@ export interface TranscriptItem {
   text: string;
   /** 该条里出现的工具名(用来在历史里也显示 chip) */
   tools: string[];
+  /** 消息里的图片(data URI)。2026-08-27 用户反馈:发过的截图在历史里消失了 ——
+      此前这里只取文本,image 块被静默丢掉。上限 6 张/条,防单条灌爆 IPC */
+  images: string[];
 }
 
 /**
@@ -115,17 +118,31 @@ export async function transcript(sdkSessionId: string): Promise<TranscriptItem[]
     const content = m.message?.content;
     let text = '';
     const tools: string[] = [];
+    const images: string[] = [];
     if (typeof content === 'string') text = content;
     else if (Array.isArray(content)) {
-      for (const b of content as { type?: string; text?: string; name?: string }[]) {
+      for (const b of content as {
+        type?: string;
+        text?: string;
+        name?: string;
+        source?: { type?: string; media_type?: string; data?: string };
+      }[]) {
         if (b.type === 'text' && typeof b.text === 'string') text += b.text;
         if (b.type === 'tool_use' && typeof b.name === 'string') tools.push(b.name);
+        if (
+          b.type === 'image' &&
+          b.source?.type === 'base64' &&
+          typeof b.source.data === 'string' &&
+          images.length < 6
+        ) {
+          images.push(`data:${b.source.media_type ?? 'image/png'};base64,${b.source.data}`);
+        }
       }
     }
     // 我们给每条用户消息前置的 [此刻 …] 时间戳块不该出现在历史气泡里
     text = text.replace(/^\[此刻[^\]]*\]\s*/, '').trim();
-    if (text === '' && tools.length === 0) continue;
-    out.push({ role, uuid: m.uuid ?? null, text, tools });
+    if (text === '' && tools.length === 0 && images.length === 0) continue;
+    out.push({ role, uuid: m.uuid ?? null, text, tools, images });
   }
   return out;
 }
