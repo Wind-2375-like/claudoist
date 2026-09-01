@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '../src/index';
-import { applyToSnapshot, reorderTodayTask, todayList, updateTask } from '../src/index';
+import {
+  applyToSnapshot,
+  calendarDay,
+  moveTask,
+  reorderTodayTask,
+  todayList,
+  updateTask,
+} from '../src/index';
 import { TODAY, deps, snapshot, task } from './helpers';
 
 /**
@@ -146,5 +153,65 @@ describe('INV-38.3 手动序的生命周期', () => {
     const r = updateTask(sorted, deps(), { id: t.C.id, patch: { priority: 5 } });
     if ('error' in r) throw new Error(r.error);
     expect('dayOrder' in (r.commands[0] as { patch: object }).patch).toBe(false);
+  });
+
+  it('整包回传但值没变,不作废:再点一次「今天」/只改时长,序都还在', () => {
+    const { snap, t } = fixture();
+    const sorted = move(snap, t.C.id, t.A.id);
+    // ① 已经是今天了,详情页的「今天」按钮照样写一遍
+    const again = updateTask(sorted, deps(), { id: t.C.id, patch: { scheduledDate: TODAY } });
+    if ('error' in again) throw new Error(again.error);
+    expect('dayOrder' in (again.commands[0] as { patch: object }).patch).toBe(false);
+    expect(list(applyToSnapshot(sorted, again.commands))).toEqual([
+      'C',
+      'A',
+      'B',
+      '过期截止',
+      '会议',
+    ]);
+    // ② 时间编辑器一次发 {startTime, durationMinutes, timeZone},只有时长真的变了
+    const dur = updateTask(sorted, deps(), {
+      id: t.C.id,
+      patch: { startTime: null, durationMinutes: 45, timeZone: null },
+    });
+    if ('error' in dur) throw new Error(dur.error);
+    expect('dayOrder' in (dur.commands[0] as { patch: object }).patch).toBe(false);
+    expect(list(applyToSnapshot(sorted, dur.commands))).toEqual([
+      'C',
+      'A',
+      'B',
+      '过期截止',
+      '会议',
+    ]);
+  });
+
+  it('挪进 someday 会清掉手动序(离开 Today 就不再是那一段的成员)', () => {
+    const { snap, t } = fixture();
+    const sorted = move(snap, t.C.id, t.A.id);
+    const r = moveTask(sorted, deps(), { id: t.C.id, to: { bucket: 'someday' } });
+    if ('error' in r) throw new Error(r.error);
+    const away = applyToSnapshot(sorted, r.commands);
+    expect(away.tasks.find((x) => x.id === t.C.id)?.dayOrder).toBeNull();
+    // 挪回来回队尾,不带着旧的 0 号位插队
+    const back = moveTask(away, deps(), { id: t.C.id, to: { bucket: 'inbox' } });
+    if ('error' in back) throw new Error(back.error);
+    expect(list(applyToSnapshot(away, back.commands))).toEqual(['A', 'B', '过期截止', 'C', '会议']);
+  });
+});
+
+describe('INV-28.2 Calendar 全天段与 Today 未定时段同序', () => {
+  it('在 Today 拖完,今天的全天条跟着变(两个视图一个答案)', () => {
+    const { snap, t } = fixture();
+    const before = calendarDay(snap, TODAY);
+    expect(before.allDay.map((x) => x.title)).toEqual(['A', 'B', 'C']);
+    const sorted = move(snap, t.C.id, t.A.id);
+    const after = calendarDay(sorted, TODAY);
+    expect(after.allDay.map((x) => x.title)).toEqual(['C', 'A', 'B']);
+    // 与 Today 未定时段(去掉不上日历的 due 项)逐字一致
+    expect(after.allDay.map((x) => x.title)).toEqual(
+      todayList(sorted, TODAY)
+        .untimed.filter((x) => x.scheduledDate !== null)
+        .map((x) => x.title),
+    );
   });
 });

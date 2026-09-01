@@ -1,6 +1,7 @@
 import type { IsoDate, IsoTime } from '../entities/common';
 import type { Task } from '../entities/task';
 import type { GtdSnapshot } from '../ports/gtdStore';
+import { byDayOrder } from './todayList';
 
 /**
  * 日历网格规则(D-23/INV-28,M6b):把"带时间任务"投影成日历 block 的纯函数。
@@ -103,10 +104,16 @@ export function isCalendarTask(t: Task, date: IsoDate): boolean {
   );
 }
 
-/** 全天段排序:与 Today 计划段同口径(createdAt)—— sortOrder 只在同级组内有定义,
- *  跨容器比较会让别处的拖拽排序改变日历顺序、并与 Today 相互矛盾(INV-28)。 */
-const byCreated = (a: Task, b: Task): number =>
-  a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
+/**
+ * 全天段排序:与 Today 的未定时段同口径(INV-28.2)—— 即 `byDayOrder`(手排过的在前,
+ * 其余按创建序兜底)。
+ *
+ * 这条曾经写死成 createdAt,理由是"sortOrder 只在同级组内有定义,跨容器比较会让别处的
+ * 拖拽改变日历顺序"。那个理由对 `sortOrder` 成立、对 `dayOrder` **不成立**:dayOrder 就是
+ * 为跨容器的 Today 列表定义的(D-40),它唯一的来源正是用户在 Today 里拖出来的序。
+ * 继续用 createdAt 的后果是:在 Today 拖完,切到 Calendar 发现今天的全天条还是旧序 ——
+ * 同一天的同一批任务,两个视图两个答案。
+ */
 
 const byStart = (a: Task, b: Task): number => {
   const am = minutesOfDay(a.startTime ?? '00:00');
@@ -121,7 +128,7 @@ const byStart = (a: Task, b: Task): number => {
 export function calendarDay(snap: GtdSnapshot, date: IsoDate): { allDay: Task[]; timed: Task[] } {
   const on = snap.tasks.filter((t) => isCalendarTask(t, date));
   return {
-    allDay: on.filter((t) => t.startTime === null).sort(byCreated),
+    allDay: on.filter((t) => t.startTime === null).sort(byDayOrder),
     timed: on.filter((t) => t.startTime !== null).sort(byStart),
   };
 }

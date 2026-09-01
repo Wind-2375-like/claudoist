@@ -247,6 +247,13 @@ export function moveTask(
     }
     // INV-10(move 版):挪入有 deadline 的项目时,无 deadline 的成员静默复制
     if (t.deadline === null && projectDeadline !== null) patch.deadline = projectDeadline;
+    // INV-38.3:someday/reference 不参与 Today(见 rules/todayList.ts),挪进去就离开了那个
+    // 未定时段 —— 位置作废。不清的话,过几周再挪回来,它会带着一个早已被别人占用的序号
+    // 插回队伍中间(那一段这期间已被 materialize 成 0..N-1),撞号后按兜底序落点,
+    // 表现为"我没排过它,它却自己有位置"。
+    if ((bucket === 'someday' || bucket === 'reference') && t.dayOrder !== null) {
+      patch.dayOrder = null;
+    }
     return patch;
   };
   if (task.parentTaskId !== null) consequences.detachedFromParent = true;
@@ -647,10 +654,15 @@ export function updateTask(
   // INV-38.3 手动位置失效,只有一条规则:**不再是同一个未定时段的成员,位置就作废**。
   // 两种触发:改计划日(换了一天的列表)、改时刻(全天 ↔ 日历块,换了段)。
   // 不清的话:推迟到明天再挪回今天,它会带着上次的序号插回队伍中间 —— 用户没排过却"有位置"。
-  if (
-    (clean.scheduledDate !== undefined || clean.startTime !== undefined) &&
-    task.dayOrder !== null
-  ) {
+  //
+  // **判"值真的变了",不是判"这个 key 在 patch 里"**:调用方常把一组字段整包回传 ——
+  // 时间编辑器一次发 {startTime, durationMinutes, timeZone}(只改时长也会带上 startTime),
+  // 详情页的「今天」按钮在任务已经是今天时照样写一遍 scheduledDate。按 key 判会让这些
+  // 与分段无关的编辑静默抹掉用户排好的序,而用户根本无从把两件事联系起来。
+  const scheduleMoved =
+    clean.scheduledDate !== undefined && clean.scheduledDate !== task.scheduledDate;
+  const timeMoved = clean.startTime !== undefined && clean.startTime !== task.startTime;
+  if ((scheduleMoved || timeMoved) && task.dayOrder !== null) {
     clean.dayOrder = null;
   }
   // ---- 循环(D-37/INV-36)。改动后的口径先算出来,守卫才能对"补丁后的状态"判定
