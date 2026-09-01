@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyToSnapshot, emptySnapshot } from '@gtd/domain';
+import { applyToSnapshot, emptySnapshot, todayList } from '@gtd/domain';
 import type { GtdSnapshot, GtdStore, RepeatRule, Task } from '@gtd/domain';
 import * as R from '../src/readTools';
 
@@ -96,5 +96,25 @@ describe('search 工具:折叠次数透传(INV-36.14c)', () => {
     const r = R.search(harness([base({ id: 'p1', title: '写报告' })]), '报告');
     if ('error' in r) throw new Error(r.error);
     expect(r.tasks[0]!.occurrenceCount).toBeUndefined();
+  });
+});
+
+describe('list_today 与桌面/CLI 同一口径(INV-20.6 / INV-38)', () => {
+  const TODAY = '2026-08-13';
+
+  it('两段序 + dayOrder 都与 domain todayList 逐字一致', () => {
+    // 用户在 Today 里把 b 拖到了 a 前面;另有一条 09:00 的定时行和一条未排期的过期截止项。
+    const tasks = [
+      base({ id: 'a', title: 'a', scheduledDate: TODAY, dayOrder: 1 }),
+      base({ id: 'b', title: 'b', scheduledDate: TODAY, dayOrder: 0 }),
+      base({ id: 'm', title: '会议', scheduledDate: TODAY, startTime: '09:00' }),
+      base({ id: 'd', title: '过期截止', deadline: '2026-08-01' }),
+    ];
+    const d = harness(tasks);
+    const agent = R.listToday(d).tasks.map((t) => t.title);
+    const domain = todayList(d.store.snapshot(), TODAY).all.map((t) => t.title);
+    expect(agent).toEqual(domain);
+    // 具体形状也钉住:拖过的 b 在 a 前,过期截止项在未定时段内,定时行垫底
+    expect(agent).toEqual(['b', 'a', '过期截止', '会议']);
   });
 });

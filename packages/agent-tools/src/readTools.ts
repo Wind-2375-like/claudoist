@@ -13,6 +13,7 @@ import {
   taskView,
   todaysTimedTasks,
   unknownNames,
+  todayList,
 } from '@gtd/domain';
 import type { Clock, GtdSnapshot, GtdStore, Task } from '@gtd/domain';
 import { timeContext, withRelativeTime } from './timeContext';
@@ -90,28 +91,11 @@ export function listBucket(
  */
 export function listToday(d: ReadToolDeps): { today: string; tasks: TimedTaskView[] } {
   const { snap, today } = snapAnd(d);
-  const engageable = (t: Task): boolean =>
-    t.status === 'active' && t.bucket !== 'someday' && t.bucket !== 'reference';
-  const scheduled = snap.tasks
-    .filter((t) => engageable(t) && t.scheduledDate !== null && t.scheduledDate <= today)
-    .sort((a, b) => {
-      if (a.scheduledDate !== b.scheduledDate) return a.scheduledDate! < b.scheduledDate! ? -1 : 1;
-      if ((a.startTime === null) !== (b.startTime === null)) return a.startTime === null ? -1 : 1;
-      if (a.startTime !== b.startTime) return (a.startTime ?? '') < (b.startTime ?? '') ? -1 : 1;
-      return a.createdAt < b.createdAt ? -1 : 1;
-    });
-  const seen = new Set(scheduled.map((t) => t.id));
-  const due = snap.tasks
-    .filter(
-      (t) =>
-        engageable(t) &&
-        t.deadline !== null &&
-        t.deadline <= today &&
-        t.scheduledDate === null &&
-        !seen.has(t.id),
-    )
-    .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1));
-  return { today, tasks: views(snap, [...scheduled, ...due], today) };
+  // INV-20.6 单一口径:Today 的成员与顺序只由 rules/todayList.ts 说了算(D-40)。
+  // 这里曾经自排一遍(scheduled ++ due),于是 agent 看到的"今天"和用户屏幕上的
+  // 是两个顺序 —— 用户拖到第一位的那条,agent 眼里可能还在中间。它会照着自己
+  // 看到的顺序回答"第一件事是什么"、按序号勾完成,错的行会被真的改掉。
+  return { today, tasks: views(snap, todayList(snap, today).all, today) };
 }
 
 /** D-23:日历 = 任务按 scheduledDate + startTime 的投影,无独立实体。 */

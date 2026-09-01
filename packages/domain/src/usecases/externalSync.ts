@@ -74,6 +74,10 @@ export function syncExternalTasks(
           startTime: ev.startTime,
           durationMinutes: ev.durationMinutes,
           externalCalendarId: ev.externalCalendarId,
+          // INV-38.4:复活 = 重新写一遍日期与时刻,旧的 Today 手动位置一律作废。
+          // 这里不判"值变没变" —— 任务在外面消失过一段时间,那一段这期间早被
+          // materialize 成 0..N-1,旧号码要么撞别人、要么是个孤号。回队尾才是诚实的。
+          dayOrder: null,
         },
       });
       updated += 1;

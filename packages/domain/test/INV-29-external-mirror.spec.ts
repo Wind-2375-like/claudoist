@@ -139,6 +139,23 @@ describe('INV-29 外部镜像:同步为任务', () => {
     expect(after.tasks.filter((x) => x.externalId === KEY)).toHaveLength(1);
   });
 
+  it('复活会清掉 Today 手动位置(INV-38.4:它在外面消失过,那一段早被重排过)', () => {
+    const snap = snapshot({
+      tasks: [
+        task({
+          id: 'old',
+          externalId: KEY,
+          externalCalendarId: 'cal1',
+          status: 'deleted',
+          deletedAt: '2026-08-10T00:00:00',
+          dayOrder: 0,
+        }),
+      ],
+    });
+    const after = applyToSnapshot(snap, sync(snap, [ev()]).commands);
+    expect(after.tasks.find((x) => x.id === 'old')!.dayOrder).toBeNull();
+  });
+
   it('窗口外的镜像不被误退休', () => {
     const snap = snapshot({
       tasks: [

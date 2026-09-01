@@ -154,6 +154,18 @@ export function applyPulledEvents(
       patch.durationMinutes = ev.durationMinutes;
     }
     if (Object.keys(patch).length === 0) continue;
+    // INV-38.4:这里是**第二个**绕过 updateTask、直接构造 updateTask 命令改
+    // scheduledDate/startTime 的写入口(第一个是 externalSync),失效规则必须自己带一份。
+    // 处理的恰恰是本地任务(镜像任务在上面被 continue 掉),也就是能进 Today 未定时段、
+    // 能被拖、会有 dayOrder 的那一类。漏掉的后果:在 Google 的 Claudoist 日历上把 block
+    // 拖成定时再拖回全天,任务会带着旧的 dayOrder 插回队首(甚至与别人撞号插进队伍中间)。
+    // 上面每个字段都已经判过"值真的变了"才进 patch,所以这里只要判 key 就够。
+    if (
+      (patch.scheduledDate !== undefined || patch.startTime !== undefined) &&
+      task.dayOrder !== null
+    ) {
+      patch.dayOrder = null;
+    }
     // 改期后指纹必然变化 → 下轮推送会把本地值再推上去,这里顺手更新指纹避免来回抖动
     commands.push({
       kind: 'updateTask',

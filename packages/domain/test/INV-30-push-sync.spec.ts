@@ -78,6 +78,36 @@ describe('INV-30 回同步(Google 侧改动 → 任务)', () => {
     return { r, after: applyToSnapshot(snap, r.commands) };
   };
 
+  it('回同步改期会清 Today 手动位置(INV-38.4:第二个绕过 updateTask 的写入口)', () => {
+    const snap = snapshot({ tasks: [{ ...pushed({ startTime: null }), dayOrder: 0 }] });
+    const { r } = run(snap, [
+      {
+        eventId: 'ev1',
+        taskId: null,
+        cancelled: false,
+        date: '2026-08-12',
+        startTime: '09:00',
+        durationMinutes: 30,
+      },
+    ]);
+    expect((r.commands[0] as { patch: { dayOrder?: number | null } }).patch.dayOrder).toBeNull();
+  });
+
+  it('回同步什么都没变时不发命令,自然也不会误清手动位置', () => {
+    const snap = snapshot({ tasks: [{ ...pushed(), dayOrder: 0 }] });
+    const { r } = run(snap, [
+      {
+        eventId: 'ev1',
+        taskId: null,
+        cancelled: false,
+        date: '2026-08-12',
+        startTime: '09:00',
+        durationMinutes: 30,
+      },
+    ]);
+    expect(r.commands).toEqual([]);
+  });
+
   it('在 Google 里拖动 block → 任务改期', () => {
     const snap = snapshot({ tasks: [pushed()] });
     const { r, after } = run(snap, [

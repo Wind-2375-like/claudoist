@@ -582,7 +582,7 @@ tasks/waiting_for/comments/labels —— 那是 D-01 否决过的"一次确认�
 
 #### INV-38 Today 手动排序(D-40,2026-08-29)
 
-**两段模型**(`rules/todayList.ts` —— Today 列表的**唯一口径**,桌面与 CLI 共用):
+**两段模型**(`rules/todayList.ts` —— Today 列表的**唯一口径**,桌面 / CLI / agent `list_today` 三处共用,INV-20.6)。agent 那一份曾经自排一遍,后果是用户拖到第一位的那条在 agent 眼里还在中间 —— 它会照着自己看到的顺序回答「第一件事是什么」、按序号勾完成,**错的行会被真的改掉**:
 
 | 段 | 成员 | 排序 | 可手动拖 |
 |---|---|---|---|
@@ -594,14 +594,14 @@ tasks/waiting_for/comments/labels —— 那是 D-01 否决过的"一次确认�
 3. **拖拽 = 整段 materialize 0..N-1**:只写被拖的那一条不行 —— 别人都还是 `null`(垫底),它会跳到最前面,而用户明明把它放在中间。**顺序没变则零命令**。
 4. **手动位置失效只有一条规则:不再是同一个未定时段的成员,位置就作废**(`dayOrder := null`,回队尾)。三种触发:改计划日(换了一天的列表)、改时刻(全天 ↔ 日历块,换了段)、`moveTask` 挪进 someday/reference(整个离开 Today)。完成 / reopen / 软删 / 恢复 **都不清**:那些没有改变「哪一天、哪一段」。
 
-   **判「值真的变了」,不是判「这个 key 在 patch 里」**。调用方常把一组字段整包回传:时间编辑器一次发 `{startTime, durationMinutes, timeZone}`(只改时长也会带上 `startTime`),详情页的「今天」按钮在任务已经是今天时照样写一遍 `scheduledDate`,Google 轮询每轮都回传一份同值 patch。按 key 判会让这些与分段无关的编辑静默抹掉用户排好的序,而用户根本无从把两件事联系起来。`externalSync` 直接构造 patch、不经 `updateTask`,**自带一份同款失效**。
+   **判「值真的变了」,不是判「这个 key 在 patch 里」**。调用方常把一组字段整包回传:时间编辑器一次发 `{startTime, durationMinutes, timeZone}`(只改时长也会带上 `startTime`),详情页的「今天」按钮在任务已经是今天时照样写一遍 `scheduledDate`,Google 轮询每轮都回传一份同值 patch。按 key 判会让这些与分段无关的编辑静默抹掉用户排好的序,而用户根本无从把两件事联系起来。**绕过 `updateTask` 直接构造 updateTask 命令的写入口都要自带一份同款失效**,目前有三处:`externalSync` 的常规更新分支(判值)、`externalSync` 的**镜像复活**分支(不判值 —— 它在外面消失过一段时间,那一段早被重排,旧号码要么撞别人要么是孤号,回队尾才诚实)、`pushSync.applyPulledEvents`(D-26 专用日历回同步,处理的正是能进未定时段的本地任务:在 Google 里把 block 拖成定时再拖回全天,漏了就会带着旧 `dayOrder` 插回队首)。
 5. **循环生成的下一次不继承 `dayOrder`**(`{...task}` 展开会带着旧值,必须显式清):新的一次是新面孔,回队尾。
 6. **跨零点用主进程时钟**:`reorderTodayTask` 取 `deps.clock.today()`,不接受渲染层传日期 —— 渲染层缓存的 `data.today` 跨零点后可能是昨天(既有的「推迟到明天」已踩过这个坑)。
 7. **与升级前的唯一可见差异**:未排期的过期截止项(due)从「列表最后」移到了未定时段内,因此可能显示在定时任务之前。这是有意的 —— 过期的东西更该被看见,而且现在用户可以自己拖。
 
 **代价(明写)**:一次拖拽会把当时未定时段的**全部**行定死为 0..N-1,包括用户没碰过的那些;此后它们不再随派生序(计划日/截止日)自动上浮。这是手动排序的固有价格,INV-27.2 已经付过一次。
 
-**验收**:`INV-38-today-order.spec.ts`(两段口径、定时段按计划日+时刻、someday/已完成/未来计划不入、materialize 整段、拖到末尾/自身/原位、过期截止项可拖、定时任务被拒且理由可读、新任务垫底、改期清位置、改别的字段不清、**同值整包回传不清**、**挪进 someday 清**)+ `INV-28.2` 同序用例(在 Today 拖完,今天的全天条跟着变)。
+**验收**:`INV-38-today-order.spec.ts`(两段口径、定时段按计划日+时刻、someday/已完成/未来计划不入、materialize 整段、拖到末尾/自身/原位、过期截止项可拖、定时任务被拒且理由可读、新任务垫底、改期清位置、改别的字段不清、**同值整包回传不清**、**挪进 someday 清**)+ `INV-28.2` 同序用例(在 Today 拖完,今天的全天条跟着变)+ `INV-30-push-sync.spec.ts`(回同步改期清位、无变化不发命令)+ `INV-29-external-mirror.spec.ts`(镜像复活清位)+ `read-tools.spec.ts`(agent `list_today` 与 `todayList` 逐字对拍)。
 
 ---
 
