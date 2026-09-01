@@ -5,6 +5,7 @@ import type { FlowDeps } from '../flows/framework';
 import { isValidIsoDate } from '../rules/dates';
 import { tasksWithInheritedDeadline } from '../rules/deadlineInheritance';
 import { projectDeletionPreview } from '../rules/projectDeletion';
+import { byProjectSort, nextProjectSortOrder } from '../rules/projectOrder';
 import type { UsecaseResult } from './types';
 
 /** Project 域 usecases(D-21 平面模型:无父子、无孤儿概念)。 */
@@ -38,11 +39,67 @@ export function createProjectDirect(
     createdAt: deps.clock.now(),
     completedAt: null,
     deletedAt: null,
+    sortOrder: nextProjectSortOrder(snap), // INV-37.1:新项目排到末尾
   };
   return {
     commands: [{ kind: 'createProject', project }],
     consequences: { projectId: project.id },
   };
+}
+
+// -------------------------------------------------------------- reorderProject
+
+export interface ReorderProjectInput {
+  id: Id;
+  /** 插到该项目之前;省略 = 移到列表末尾 */
+  beforeId?: Id;
+}
+
+export interface ReorderProjectConsequences {
+  projectId: Id;
+}
+
+/**
+ * 侧栏 / My Projects 的手动拖拽排序(D-39/INV-37)。
+ *
+ * 与 `reorderTask` 同规:取目标组(**全部活跃项目**,项目是平面的,只有一个组)按当前序
+ * 排好 → 在 beforeId 前插入 → 整组重编号 0..N-1。只发**真的变了**的那些 updateProject:
+ * 拖回原位就是零命令(工具层据此回报 changed: false),也少给 INV-35 的回滚日志添无用行。
+ *
+ * 已完成/已删除的项目不参与:它们不在列表里,重编号不该动它们的值(将来恢复时
+ * byProjectSort 的 createdAt 兜底会把它们放到合理位置)。
+ */
+export function reorderProject(
+  snap: GtdSnapshot,
+  _deps: FlowDeps,
+  input: ReorderProjectInput,
+): UsecaseResult<ReorderProjectConsequences> {
+  const project = snap.projects.find((p) => p.id === input.id);
+  if (!project) return { error: `项目不存在: ${input.id}` };
+  if (project.status !== 'active') return { error: '只能拖拽活跃项目' };
+  // beforeId === 自身 = 拖到自己头上:**原地不动**(零命令)。
+  // 注意别学 reorderTask 那样折成 undefined —— undefined 的含义是"移到末尾",
+  // 于是"拖回原位"会把项目甩到列表最后,是最反直觉的一种失败。
+  if (input.beforeId === input.id) return { commands: [], consequences: { projectId: project.id } };
+  const beforeId = input.beforeId;
+  const group = snap.projects
+    .filter((p) => p.status === 'active' && p.id !== project.id)
+    .sort(byProjectSort);
+  if (beforeId !== undefined && !group.some((p) => p.id === beforeId)) {
+    return { error: `beforeId 不是活跃项目: ${beforeId}` };
+  }
+  const ordered: Project[] = [];
+  for (const p of group) {
+    if (p.id === beforeId) ordered.push(project);
+    ordered.push(p);
+  }
+  if (beforeId === undefined) ordered.push(project);
+  const commands: Command[] = [];
+  ordered.forEach((p, i) => {
+    if (p.sortOrder !== i)
+      commands.push({ kind: 'updateProject', id: p.id, patch: { sortOrder: i } });
+  });
+  return { commands, consequences: { projectId: project.id } };
 }
 
 // --------------------------------------------------------------- updateProject

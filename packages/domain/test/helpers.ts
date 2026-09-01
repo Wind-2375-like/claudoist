@@ -57,6 +57,7 @@ export function task(over: Partial<Task> = {}): Task {
     pushedFingerprint: null,
     repeat: null,
     seriesId: null,
+    dayOrder: null,
     timeZone: null,
     ...over,
   };
@@ -75,6 +76,7 @@ export function project(over: Partial<Project> = {}): Project {
     createdAt: '2026-08-01T00:00:00',
     completedAt: null,
     deletedAt: null,
+    sortOrder: 0,
     ...over,
   };
 }

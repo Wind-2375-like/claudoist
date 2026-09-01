@@ -14,4 +14,10 @@ export interface Project {
   completedAt: Timestamp | null;
   /** INV-34:软删时刻;null = 不在回收站。与 Task.deletedAt 同语义(INV-22) */
   deletedAt: Timestamp | null;
+  /**
+   * 手动排序(D-39/INV-37):侧栏与 My Projects 的显示序。与 Task.sortOrder 同规
+   * (INV-27):新建追加到末尾、拖拽后整组重编号 0..N-1、createdAt 兜底保证反对称。
+   * **必填不可省** —— 写成可选的话构造点漏了 tsc 不报,项目会静默跑到列表最前面。
+   */
+  sortOrder: number;
 }

@@ -45,6 +45,7 @@ const base = (over: Partial<Task>): Task => ({
   timeZone: null,
   repeat: null,
   seriesId: null,
+  dayOrder: null,
   ...over,
 });
 

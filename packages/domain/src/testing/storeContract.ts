@@ -72,6 +72,7 @@ function batches(): Command[][] {
           createdAt: T0,
           completedAt: null,
           deletedAt: null,
+          sortOrder: 0,
         },
       },
       {
@@ -84,6 +85,7 @@ function batches(): Command[][] {
           createdAt: T0,
           completedAt: null,
           deletedAt: null,
+          sortOrder: 1,
         },
       },
       {
@@ -114,6 +116,7 @@ function batches(): Command[][] {
           timeZone: null,
           repeat: null,
           seriesId: null,
+          dayOrder: null,
         },
       },
       {
@@ -144,6 +147,7 @@ function batches(): Command[][] {
           timeZone: null,
           repeat: null,
           seriesId: null,
+          dayOrder: null,
         },
       },
       {
@@ -174,6 +178,7 @@ function batches(): Command[][] {
           timeZone: null,
           repeat: null,
           seriesId: null,
+          dayOrder: null,
         },
       },
       {

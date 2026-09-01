@@ -27,6 +27,10 @@ import {
   restoreProject,
   projectStats,
   quickAddTask,
+  byProjectSort,
+  reorderProject,
+  todayList,
+  reorderTodayTask,
   formatRepeat,
   foldDoneTasks,
   nextOccurrences,
@@ -242,20 +246,23 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
     },
     projectsList() {
       const snap = store.snapshot();
-      return snap.projects
-        .filter((p) => p.status === 'active')
-        .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
-        .map((p) => {
-          const stats = projectStats(snap, p.id);
-          return {
-            id: p.id,
-            name: p.outcome,
-            deadline: p.deadline,
-            activeCount: stats.activeCount,
-            doneCount: stats.doneCount,
-            progressPct: Math.round(stats.progress * 100),
-          };
-        });
+      return (
+        snap.projects
+          .filter((p) => p.status === 'active')
+          // INV-37:显示序 = 手动 sortOrder(createdAt 兜底),比较器在 domain 一份
+          .sort(byProjectSort)
+          .map((p) => {
+            const stats = projectStats(snap, p.id);
+            return {
+              id: p.id,
+              name: p.outcome,
+              deadline: p.deadline,
+              activeCount: stats.activeCount,
+              doneCount: stats.doneCount,
+              progressPct: Math.round(stats.progress * 100),
+            };
+          })
+      );
     },
     projectView(id) {
       const snap = store.snapshot();
@@ -497,41 +504,15 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
     today() {
       const snap = store.snapshot();
       const today = clock.today();
-      // 统一列表(D-21/D-23 日历统一):计划 ≤ 今天 ∪ 截止 ≤ 今天;someday/reference 不入
-      // (D-20);子任务同样计入。计划项在前 —— 按计划日,再全天在前 / startTime 升序
-      // (原 hard-landscape §2.5 排序语义并入,无独立日程段);其余按 deadline。
-      const engageable = (t: Task): boolean =>
-        t.status === 'active' && t.bucket !== 'someday' && t.bucket !== 'reference';
-      const scheduled = snap.tasks
-        .filter((t) => engageable(t) && t.scheduledDate !== null && t.scheduledDate <= today)
-        .sort((a, b) => {
-          if (a.scheduledDate !== b.scheduledDate) {
-            return a.scheduledDate! < b.scheduledDate! ? -1 : 1;
-          }
-          if ((a.startTime === null) !== (b.startTime === null)) {
-            return a.startTime === null ? -1 : 1;
-          }
-          if (a.startTime !== b.startTime)
-            return (a.startTime ?? '') < (b.startTime ?? '') ? -1 : 1;
-          return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
-        });
-      const scheduledIds = new Set(scheduled.map((t) => t.id));
-      // due 仅收未计划的过期项:计划到未来(scheduledDate>today)= 用户显式推迟,
-      // 不再因过期 deadline 留在 Today(否则「推迟到明天」对过期截止项无效);
-      // deadline 徽标仍在各视图标红,硬承诺不丢失。(计划≤今天的已在 scheduled 集)
-      const due = snap.tasks
-        .filter(
-          (t) =>
-            engageable(t) &&
-            t.deadline !== null &&
-            t.deadline <= today &&
-            t.scheduledDate === null &&
-            !scheduledIds.has(t.id),
-        )
-        .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1));
+      // 口径全在 domain 的 todayList(D-40/INV-20.6):未定时段(可手动拖)+ 定时段(按时刻)
+      const { all, untimed } = todayList(snap, today);
+      const sortableIds = new Set(untimed.map((t) => t.id));
       return {
         today,
-        tasks: [...scheduled, ...due].map((t) => taskVM(snap, t, today)),
+        tasks: all.map((t) => ({
+          ...taskVM(snap, t, today),
+          todaySortable: sortableIds.has(t.id),
+        })),
       };
     },
     calendarRange(from, days) {
@@ -671,6 +652,9 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   ipcMain.handle('gtd:tasks.move', (_e, input) =>
     applyResult(moveTask(store.snapshot(), deps, input)),
   );
+  ipcMain.handle('gtd:tasks.reorderToday', (_e, input: { id: string; beforeId?: string }) =>
+    applyResult(reorderTodayTask(store.snapshot(), deps, input)),
+  );
   ipcMain.handle(
     'gtd:tasks.reorder',
     (_e, input: { id: string; parentTaskId: string | null; beforeId?: string }) =>
@@ -698,6 +682,9 @@ export function registerGtdIpc(views: GtdViews, store: GtdStore, deps: FlowDeps)
   );
   ipcMain.handle('gtd:projects.complete', (_e, input: { id: string }) =>
     applyResult(completeProject(store.snapshot(), deps, input)),
+  );
+  ipcMain.handle('gtd:projects.reorder', (_e, input: { id: string; beforeId?: string }) =>
+    applyResult(reorderProject(store.snapshot(), deps, input)),
   );
   ipcMain.handle('gtd:projects.deletionPreview', (_e, input: { id: string }) =>
     views.projectDeletionPreview(input.id),

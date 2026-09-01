@@ -13,6 +13,7 @@ import { hasActiveNextAction } from '../rules/projectHealth';
 import { projectBreadcrumb } from '../rules/projectTree';
 import { isValidTimeZone } from '../rules/dates';
 import { isExternalTask } from '../rules/externalMirror';
+import { todayList } from '../rules/todayList';
 import {
   bySortOrder,
   descendantTaskIds,
@@ -167,6 +168,7 @@ export function quickAddTask(
     pushedFingerprint: null,
     repeat,
     seriesId: repeat !== null ? deps.idGen.next() : null, // 系列身份随首次设 repeat 诞生
+    dayOrder: null, // 新任务在 Today 里垫底(INV-38.2),用户拖过才有值
   };
   const commands: Command[] = [{ kind: 'createTask', task }];
   for (const labelId of input.labelIds ?? []) {
@@ -358,6 +360,64 @@ export function reorderTask(
   };
 }
 
+// ---------------------------------------------------------- reorderTodayTask
+
+export interface ReorderTodayTaskInput {
+  id: Id;
+  /** 插到该任务之前;省略 = 移到未定时段末尾 */
+  beforeId?: Id;
+}
+
+export interface ReorderTodayTaskConsequences {
+  taskId: Id;
+}
+
+/**
+ * Today 视图内的手动排序(D-40/INV-38)。
+ *
+ * 作用域是 `todayList().untimed` 那一段 —— 定时任务按时刻排(它同时画在 Calendar 上,
+ * 手动挪会让两个视图打架),故拒绝并给出可读理由,而不是静默无反应。
+ *
+ * 落地方式与 reorderProject 同规:整段重编号 0..N-1(**materialize**)。
+ * 为什么必须整段而不是只写被拖的那条:第一次拖动时别人都还是 null,只写一条的话
+ * 它会跳到最前面(null 垫底),而用户明明把它放在了中间。
+ */
+export function reorderTodayTask(
+  snap: GtdSnapshot,
+  deps: FlowDeps,
+  input: ReorderTodayTaskInput,
+): UsecaseResult<ReorderTodayTaskConsequences> {
+  const { untimed } = todayList(snap, deps.clock.today());
+  const task = untimed.find((t) => t.id === input.id);
+  if (!task) {
+    const exists = snap.tasks.find((t) => t.id === input.id);
+    if (exists?.startTime != null) {
+      return { error: '带时间的任务在日历段按时刻排;要换位置请改它的时间' };
+    }
+    return { error: `该任务不在今天的可排序列表里: ${input.id}` };
+  }
+  if (input.beforeId === input.id) return { commands: [], consequences: { taskId: task.id } };
+  if (input.beforeId !== undefined && !untimed.some((t) => t.id === input.beforeId)) {
+    return { error: `落点不在今天的可排序列表里: ${input.beforeId}` };
+  }
+  const rest = untimed.filter((t) => t.id !== task.id);
+  const ordered: Task[] = [];
+  for (const t of rest) {
+    if (t.id === input.beforeId) ordered.push(task);
+    ordered.push(t);
+  }
+  if (input.beforeId === undefined) ordered.push(task);
+  // 顺序没变就一条命令都不发(哪怕大家的 dayOrder 还是 null):拖回原位是无副作用手势,
+  // 不该产生一批"看不出任何变化"的写入,更不该往 INV-35 的回滚日志里塞噪音。
+  const unchanged = ordered.every((t, i) => t.id === untimed[i]?.id);
+  if (unchanged) return { commands: [], consequences: { taskId: task.id } };
+  const commands: Command[] = [];
+  ordered.forEach((t, i) => {
+    if (t.dayOrder !== i) commands.push({ kind: 'updateTask', id: t.id, patch: { dayOrder: i } });
+  });
+  return { commands, consequences: { taskId: task.id } };
+}
+
 // ------------------------------------------------------------------ addSubtask
 
 export interface AddSubtaskInput {
@@ -458,6 +518,7 @@ export function addSubtask(
     pushedFingerprint: null,
     repeat: null, // INV-36.1:循环只挂在根任务上(子任务的"下一次"由父任务复制子树产生)
     seriesId: null,
+    dayOrder: null,
   };
   const commands: Command[] = [{ kind: 'createTask', task }];
   for (const labelId of input.labelIds ?? []) {
@@ -582,6 +643,15 @@ export function updateTask(
       return { error: `无效时区 ${p.timeZone}(须为 IANA 名,如 America/New_York)` };
     }
     clean.timeZone = p.timeZone;
+  }
+  // INV-38.3 手动位置失效,只有一条规则:**不再是同一个未定时段的成员,位置就作废**。
+  // 两种触发:改计划日(换了一天的列表)、改时刻(全天 ↔ 日历块,换了段)。
+  // 不清的话:推迟到明天再挪回今天,它会带着上次的序号插回队伍中间 —— 用户没排过却"有位置"。
+  if (
+    (clean.scheduledDate !== undefined || clean.startTime !== undefined) &&
+    task.dayOrder !== null
+  ) {
+    clean.dayOrder = null;
   }
   // ---- 循环(D-37/INV-36)。改动后的口径先算出来,守卫才能对"补丁后的状态"判定
   const nextScheduled =
@@ -742,6 +812,8 @@ function repeatSpawnCommands(
       pushedFingerprint: null,
       repeat: task.repeat, // 规则活在行上随行前移;anchor 不变(INV-36.3:推进引擎永不改锚点)
       seriesId: task.seriesId,
+      // 手动序不继承:下一次是新面孔,回 Today 队尾({...task} 展开会带着旧值,必须显式清)
+      dayOrder: null,
     },
   ];
   let copiedSubtaskCount = 0;
@@ -769,6 +841,7 @@ function repeatSpawnCommands(
       pushedFingerprint: null,
       repeat: null, // INV-36.1/36.8:循环只挂在根上
       seriesId: null,
+      dayOrder: null,
     });
     copiedSubtaskCount += 1;
   }

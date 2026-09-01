@@ -242,7 +242,10 @@ CREATE TABLE projects (                                 -- 平面列表(D-21,迁
   deadline TEXT,                                        -- YYYY-MM-DD;copy-on-create 流向行动(INV-10/12)
   status TEXT NOT NULL DEFAULT 'active'
     CHECK (status IN ('active','complete')),
-  created_at TEXT NOT NULL, completed_at TEXT
+  created_at TEXT NOT NULL, completed_at TEXT,
+  -- deleted_at(v16,INV-34 软删)见迁移;下面是 v19 追加
+  sort_order INTEGER NOT NULL DEFAULT 0                 -- 项目手动序(v19,D-39/INV-37):
+                                                        --   按 created_at 排名回填,升级前后同序
 );
 
 CREATE TABLE tasks (                                    -- 扁平表,取代 CLI 的 next_actions[ctx] 桶
@@ -282,7 +285,10 @@ CREATE TABLE tasks (                                    -- 扁平表,取代 CLI 
   repeat_until TEXT,                                    --   repeat_unit IS NULL ⟺ 不循环;
   repeat_anchor TEXT,                                   --   跨列 CHECK 钉死「全有或全无」;
                                                         --   anchor 只由人写,月末/闰日不漂移的载体
-  series_id TEXT                                        -- 系列身份:完成史按系列分组;关闭循环不清
+  series_id TEXT,                                       -- 系列身份:完成史按系列分组;关闭循环不清
+  day_order INTEGER                                     -- Today 手动序(v20,D-40/INV-38):
+                                                        --   NULL = 没排过(垫底);与 sort_order
+                                                        --   不可比(那是容器内位置,Today 混容器)
 );
 CREATE INDEX idx_tasks_project ON tasks(project_id, status);
 CREATE INDEX idx_tasks_parent ON tasks(parent_task_id);

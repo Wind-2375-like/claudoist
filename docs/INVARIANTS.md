@@ -567,6 +567,40 @@ tasks/waiting_for/comments/labels —— 那是 D-01 否决过的"一次确认�
 
 **验收**:`INV-36-repeat.spec.ts`(51 条推进用例:月末夹取、闰日回归、工作日、完成日推进、Ends 含当日、相位保持)+ `INV-36-complete-generates-next.spec.ts`(字段口径逐项、子树/标签/提醒复制、评论不复制、G1–G4、reopen 征询);完成带 startTime 的循环任务后旧日期的 block 仍在日历上(INV-28)。
 
+#### INV-37 项目手动排序(D-39,2026-08-29)
+
+**规则**:
+
+1. **显示序 = `Project.sortOrder` 升序,`createdAt` 兜底、`id` 收尾**(`rules/projectOrder.ts` 的 `byProjectSort`,保证全序且反对称)。侧栏、My Projects 总览、CLI `projects`、agent `list_projects` **全部用这一个比较器** —— 谁也不许自己再排一遍(INV-20.6 同款纪律)。
+2. **新建项目追加到末尾**(`nextProjectSortOrder` = 活跃项目 sortOrder 最大值 + 1;空列表 → 0),与 INV-27.1 同规。
+3. **拖拽 = 整组重编号 0..N-1**(`reorderProject`):目标组 = **全部活跃项目**(项目是平面的,只有一个组),按当前序排好 → 在 `beforeId` 前插入 → 重编号。只发**真的变了**的 `updateProject`;**顺序没变则零命令**(拖回原位是无副作用手势)。
+4. **`beforeId === 自身` = 原地不动**(零命令),**不可**折成 `undefined` —— undefined 的含义是「移到末尾」,那会让「拖回原位」把项目甩到列表最后,是最反直觉的一种失败。
+5. **已完成/已删除的项目不参与重编号**:它们不在列表里,值保持不动;将来恢复时由 `createdAt` 兜底落到合理位置。
+6. **迁移 v19 按 `created_at` 排名回填**:不回填的话存量项目全是 0,首次拖拽时整组会按兜底键洗一遍,顺序看起来「跳」。
+
+**验收**:`INV-37-project-order.spec.ts`(比较器反对称、新建位置、拖前/中/后、重编号稠密、拖回原位零命令、三类守卫、完成项目不被波及)。
+
+#### INV-38 Today 手动排序(D-40,2026-08-29)
+
+**两段模型**(`rules/todayList.ts` —— Today 列表的**唯一口径**,桌面与 CLI 共用):
+
+| 段 | 成员 | 排序 | 可手动拖 |
+|---|---|---|---|
+| **未定时** | 计划到今天/更早的全天任务 + 未排期的过期截止项 | `dayOrder` 优先,其余按派生序兜底 | **是** |
+| **定时** | `scheduledDate` 与 `startTime` 都非空的日历块 | 计划日 → 时刻 | 否 |
+
+1. **定时任务不参与手动序**:它同时画在 Calendar 周视图上,那里的位置由**时刻**决定(INV-28)。允许在 Today 把 15:00 的会拖到 09:00 之前,两个视图就会对同一批任务给出矛盾的顺序。要改顺序就改时间 —— 拖它时**明确拒绝并给出理由**,不静默无反应。
+2. **`Task.dayOrder`(可空整数,独立于 `sortOrder`)**:`sortOrder` 是「任务在自己容器里的位置」,Today 却把不同容器的任务混在一起,两者不可比,故独立一列(迁移 v20,**不回填** —— 全 NULL = 没人排过,顺序与升级前逐字一致)。`null` = 没排过,按派生序垫底(与 INV-27.1 新建追加末尾同规)。
+3. **拖拽 = 整段 materialize 0..N-1**:只写被拖的那一条不行 —— 别人都还是 `null`(垫底),它会跳到最前面,而用户明明把它放在中间。**顺序没变则零命令**。
+4. **手动位置失效只有一条规则:不再是同一个未定时段的成员,位置就作废**(`dayOrder := null`,回队尾)。两种触发:改计划日(换了一天的列表)、改时刻(全天 ↔ 日历块,换了段)。`externalSync` 直接构造 patch、不经 `updateTask`,**自带一份同款失效**,且只在值真的变了时清 —— 否则每轮 Google 轮询都会抹掉用户排好的序。完成 / reopen / 软删 / 恢复 / `moveTask` **都不清**:那些没有改变「哪一天、哪一段」。
+5. **循环生成的下一次不继承 `dayOrder`**(`{...task}` 展开会带着旧值,必须显式清):新的一次是新面孔,回队尾。
+6. **跨零点用主进程时钟**:`reorderTodayTask` 取 `deps.clock.today()`,不接受渲染层传日期 —— 渲染层缓存的 `data.today` 跨零点后可能是昨天(既有的「推迟到明天」已踩过这个坑)。
+7. **与升级前的唯一可见差异**:未排期的过期截止项(due)从「列表最后」移到了未定时段内,因此可能显示在定时任务之前。这是有意的 —— 过期的东西更该被看见,而且现在用户可以自己拖。
+
+**代价(明写)**:一次拖拽会把当时未定时段的**全部**行定死为 0..N-1,包括用户没碰过的那些;此后它们不再随派生序(计划日/截止日)自动上浮。这是手动排序的固有价格,INV-27.2 已经付过一次。
+
+**验收**:`INV-38-today-order.spec.ts`(两段口径、定时段按计划日+时刻、someday/已完成/未来计划不入、materialize 整段、拖到末尾/自身/原位、过期截止项可拖、定时任务被拒且理由可读、新任务垫底、改期清位置、改别的字段不清)。
+
 ---
 
 ## 4. 流程规格
@@ -906,6 +940,8 @@ Dashboard / `get_status_summary` 输出:inbox 条数与内容;active 项目树(I
 | D-36 | 无法回退 agent 的改动 | **对话分叉 + agent 改动回滚(2026-08-13 用户定案,INV-35)**:三项菜单挂在用户消息上 —— 从这里分叉(SDK `forkSession(upToMessageId)`,纯文件操作、零 token)/ 回滚到这里(**就地截断对话** + 撤销数据)/ 分叉并回滚。**回滚就地截断对话**是用户裁决:不截断的话 agent 会基于"说做了、其实没做"的上下文继续操作。实现是**逆命令日志**而非快照(用户要求 efficient:一次 update 的逆只存被改到的键的旧值)。**回滚不可撤销**(界面无 undo),但执行前强制 diff 预览 + 冲突显式裁决 + `VACUUM INTO` 整库备份作人工救援 | ✅ 已定 |
 | D-37 | 任务无「重复」概念,循环承诺只能靠每次手动重建 | **任务循环(2026-08-13 用户诉求「加入 repeat,且支持 custom repeat」,INV-36)**:Todoist 式预设菜单 + Custom 对话框(Based on / Every N / 星期 / Ends),CLI `--repeat=` 三 flag,agent `create_task`/`update_task` 带三态 `repeat`。**完成 = 当前这次照常 done + 同一事务生成下一次**(否决就地推进:INV-28.1 已裁「完成的任务仍留在日历上」,就地推进会让过去每天的 block 凭空消失,且本仓 Completed 没有第二套事件流兜底)。规则**存 6 个结构化列**而非 RRULE(表达不了 Based on: Completed;UNTIL 是 UTC 与 INV-03 冲突;解析失败 = 静默不推进),跨列 CHECK 把「半套规则」变成响亮回滚。`repeat_anchor` 只由人写,是月末/闰日不漂移的载体(锚 1/31 → 02-28 → **03-31**)。停掉循环 = `repeat:null`/`--repeat=none`,不是 complete(完成反而生成下一次)。迁移 v18 | ✅ 已定 |
 | D-38 | 界面硬编码浅色调色板,无主题/字体自定义;agent 面板与全窗弹层写死深色,与主区对比刺眼 | **外观系统(2026-08-13 用户诉求「Solarized 主题 + 对话框对比度 + 分部位/分中英文字体自定义」,M11-B)**:组件只写**语义 token 类**(bg-surface/text-ink/border-line…),token 值由 `:root[data-theme]` 的主题赋值提供;内置 claudoist-light(默认)/claudoist-dark/solarized-light/solarized-dark 四套。**`.theme-panel` 是作用域覆盖**:agent 面板整体换一组 token 值,组件同一套类名两边自动换色;全窗弹层(AgentSettings/RewindDialog)portal 到 body 脱离面板作用域 → 永远吃主题主色(对比度失衡的根治)。自定义 = 基于预设的 token 差量(内联 CSS 变量,settings 表持久化,写入侧 sanitize 白名单);字体 = 界面/聊天/等宽三部位 × 英文+中文双栏字体栈(拉丁命中前者、CJK 落到后者)。错误面:主进程 uncaughtException/unhandledRejection 与渲染层 ErrorBoundary 统一落 `<userData>/logs/errors.log`,设置页有入口 | ✅ 已定 |
+| D-39 | 项目顺序由 `createdAt` 定死,用户没法把常用项目提到前面 | **项目手动排序(2026-08-29 用户诉求「project 的顺序是可以挪动的」,INV-37)**:`Project.sortOrder`(迁移 v19,按 created_at 排名回填,升级前后顺序一致)+ `reorderProject`(整组重编号 0..N-1,顺序没变则零命令)。侧栏与 My Projects 两处拖拽共用 `useReorderDrag` 一个手势实现;侧栏/总览/CLI/agent 四处显示共用 `byProjectSort` 一个比较器。**`beforeId === 自身` 必须是原地不动**,不能折成「移到末尾」(那会让拖回原位把项目甩到最后) | ✅ 已定 |
+| D-40 | Today 顺序完全派生,用户没法安排「今天先做哪件」 | **Today 手动排序(同上诉求,INV-38)**:两段 —— 未定时段可手动拖(`Task.dayOrder`,迁移 v20,不回填),定时段锚在时刻上不可拖(它同时画在 Calendar 上,手动挪会让两个视图对同一批任务给出矛盾顺序)。顺带把 Today 的排序口径从「桌面与 CLI 各排一遍、靠注释说『改动需同步』」收拢进 `rules/todayList.ts` 一份(INV-20.6)。失效规则只有一条:不再是同一个未定时段的成员(改了日期或时刻),手动位置作废回队尾 —— 一条才记得住 | ✅ 已定 |
 | D-35 | 项目只能"完成",没有删除 | **项目软删除(2026-08-12 用户诉求「project 没办法删除」,INV-34)**:`ProjectStatus` 加 `'deleted'` + `deletedAt`,与 Task 的软删同规。**不硬删**的三条理由:① 外键开着时 `DELETE FROM projects` 直接被拒,要硬删就得级联硬删 tasks/waiting_for/comments/labels —— 那正是 D-01 否决过的"一次确认蒸发整张清单、无 undo";② 已完成任务保留 `projectId` 是既定设计(与 INV-26.2 同源:删除不洗完成史),硬删会让"这件事当初属于哪个项目"永久消失;③ 误删撤销是软删唯一不可替代的价值。**项目内容的去向由用户显式二选**(`contents: 'delete' \| 'toInbox'`,无默认值):活跃任务**绝不能留在已删项目里** —— 留下的话它们在任何容器视图都不显示,却照样进 Today、择事与日历。配套:⌘K 仍返回已删项目(排最后)+ 只读项目视图 + 恢复按钮,否则软删对用户等于不可见的硬删。迁移 v16 重建 projects 表 | ✅ 已定 |
 | D-34 | 账号/模型/用量只能在"用户发过消息、有了活会话"之后读取(界面上写着「先发一条消息,再回来切换模型」) | **改为零 token 探针(2026-08-12,M11-A)**:SDK 那句 "only supported when streaming input/output is used" 说的是 **prompt 必须是 AsyncIterable**,**不是**"必须先发过一条消息"。给它一个**永不 yield** 的 AsyncIterable,子进程照常起、控制通道照常可用,而模型一次都不会被调用(实测 `session.total_cost_usd === 0`、`model_usage === {}`,端到端 0.8–1.7s)。于是 `initializationResult()`(账号 + 模型列表)与 `usage_EXPERIMENTAL_…()`(订阅额度 + 消耗归因)都能在没聊过天时读到。三条硬纪律:探针用**自己的** AbortController、**绝不**调 `startSession()`/`destroySession()`、有活会话且不忙时优先蹭活会话(探针与长驻会话并存已实测安全,两个独立子进程)。附带定案:护栏(`maxTurns`/`maxBudgetUsd`)是 spawn 期 CLI flag,**没有**热改途径 —— ⚠ `applyFlagSettings({maxTurns})` 会返回成功但什么都不做,是静默陷阱;改完只能显式重起会话(resume 保留上下文) | ✅ 已定 |
 | D-33 | 权限放行按 Claude Code 的原生机制:读工具进 `allowedTools` 自动放行、Bypass 用 `permissionMode: 'bypassPermissions'` | **改为「一切放行都经 `canUseTool`」(2026-08-11,M9 实现时定案)**:`allowedTools` 与 `bypassPermissions` 都会让调用**绕过** `canUseTool`,那条调用因此不进 `agent_audit` —— 审计缺了自动放行的那一半就等于没有审计(排查"它到底改了什么"时,恰恰是自动放行的那批最需要看)。改为工具面只由 `tools` + `mcpServers` 决定,放行一律在 `canUseTool` 里按策略表判定;"全部放行"实现为该函数一律返回 allow,于是连 `allowDangerouslySkipPermissions` 都不需要。代价:每次工具调用多一次进程内函数调用(可忽略)。另外两处随之调整:① **只读模式下写工具根本不注册**(纵深防御:审批逻辑写错了工具也不存在);② `complete_task` 是**动态**破坏性 —— 目标有活跃子任务时才升级,因为级联数量只在返回值里、事后才知道 | ✅ 已定 |

@@ -7,6 +7,7 @@ import {
   isUsecaseError,
   parseFilterQuery,
   projectStats,
+  byProjectSort,
   runFilterQuery,
   searchAll,
   taskView,
@@ -149,6 +150,8 @@ export function listProjects(d: ReadToolDeps): {
   return {
     projects: snap.projects
       .filter((p) => p.status === 'active')
+      // INV-37:与界面同序 —— agent 说"第一个项目"时指的应当是用户看到的第一个
+      .sort(byProjectSort)
       .map((p) => {
         const st = projectStats(snap, p.id);
         return {

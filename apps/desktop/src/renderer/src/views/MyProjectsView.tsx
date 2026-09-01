@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ProjectModal } from '../ProjectModal';
 import { useProjects } from '../hooks';
+import { toast } from '../toast';
+import { useReorderDrag } from '../useReorderDrag';
 
 /**
  * My Projects 总览(D-21):平面项目列表 + 进度条(done/(done+active))。
@@ -13,6 +15,16 @@ export function MyProjectsView({
 }): React.JSX.Element {
   const { data, isLoading } = useProjects();
   const [addOpen, setAddOpen] = useState(false);
+  // 与侧栏同一套手势与同一个 usecase(D-39):两处拖的是同一个 sortOrder
+  const drag = useReorderDrag(
+    'project',
+    (data ?? []).map((p) => p.id),
+    (id, beforeId) => {
+      void window.gtd.projectReorder(id, beforeId).then((r) => {
+        if ('error' in r) toast(`排序失败:${r.error}`);
+      });
+    },
+  );
 
   return (
     <div className="px-8 py-6">
@@ -30,7 +42,15 @@ export function MyProjectsView({
       {data && data.length === 0 && <p className="text-sm text-fnt">还没有项目。</p>}
       <ul className="max-w-2xl space-y-1">
         {data?.map((p) => (
-          <li key={p.id} className="flex items-center gap-4 rounded-md px-2 py-2 hover:bg-hov">
+          <li
+            key={p.id}
+            {...drag.rowProps(p.id)}
+            className={`flex items-center gap-4 rounded-md px-2 py-2 hover:bg-hov ${
+              drag.dragId === p.id ? 'opacity-40' : ''
+            } ${drag.hint(p.id) === 'before' ? 'border-t-2 border-acc' : ''} ${
+              drag.hint(p.id) === 'after' ? 'border-b-2 border-acc' : ''
+            }`}
+          >
             <button
               type="button"
               onClick={() => onOpenProject(p.id)}
@@ -55,7 +75,8 @@ export function MyProjectsView({
         ))}
       </ul>
       <p className="mt-5 text-xs text-fnt">
-        进度 = 已完成任务 / (已完成 + 未完成);侧栏项目名右侧数字 = 未完成任务数
+        进度 = 已完成任务 / (已完成 + 未完成);侧栏项目名右侧数字 = 未完成任务数。
+        拖动行可调整顺序,侧栏同步。
       </p>
       {addOpen && <ProjectModal onClose={() => setAddOpen(false)} />}
     </div>

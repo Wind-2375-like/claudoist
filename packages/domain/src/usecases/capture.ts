@@ -59,6 +59,7 @@ export function captureToInbox(
       timeZone: null,
       repeat: null, // capture 只写标题
       seriesId: null,
+      dayOrder: null,
     };
     commands.push({ kind: 'createTask', task });
     createdIds.push(task.id);

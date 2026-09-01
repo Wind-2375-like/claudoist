@@ -47,6 +47,7 @@ const rowToProject = (r: Row): Project => ({
   createdAt: s(r['created_at']),
   completedAt: sn(r['completed_at']),
   deletedAt: sn(r['deleted_at']),
+  sortOrder: r['sort_order'] as number,
 });
 
 const rowToTask = (r: Row): Task => ({
@@ -86,6 +87,7 @@ const rowToTask = (r: Row): Task => ({
           anchor: s(r['repeat_anchor']),
         },
   seriesId: sn(r['series_id']),
+  dayOrder: (r['day_order'] ?? null) as number | null,
 });
 
 const rowToWaiting = (r: Row): WaitingFor => ({
@@ -183,6 +185,7 @@ const COLS: Record<string, ColumnSpec> = {
     completedAt: { col: 'completed_at' },
     // ⚠ 不在白名单里的字段会被 update() 静默丢弃 —— 漏了它,软删项目会写不进 deleted_at
     deletedAt: { col: 'deleted_at' },
+    sortOrder: { col: 'sort_order' },
   },
   tasks: {
     title: { col: 'title' },
@@ -210,6 +213,7 @@ const COLS: Record<string, ColumnSpec> = {
     // ⚠ 漏了这两条,update() 会静默丢弃:用户在 UI 设了循环、界面显示成功、重启后规则消失
     repeat: { cols: REPEAT_COLS, enc: encRepeat },
     seriesId: { col: 'series_id' },
+    dayOrder: { col: 'day_order' },
   },
   waiting_for: {
     description: { col: 'description' },

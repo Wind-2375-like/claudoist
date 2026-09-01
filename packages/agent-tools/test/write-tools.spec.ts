@@ -111,6 +111,7 @@ describe('M9 写工具:后果原样透出', () => {
           createdAt: '2026-08-01T00:00:00',
           completedAt: null,
           deletedAt: null,
+          sortOrder: 0,
         },
       ],
     });
@@ -142,6 +143,7 @@ describe('M9 写工具:后果原样透出', () => {
           createdAt: '2026-08-01T00:00:00',
           completedAt: null,
           deletedAt: null,
+          sortOrder: 0,
         },
       ],
       tasks: [{ ...base(), id: 'a', projectId: 'p1', bucket: 'project' }],
@@ -181,6 +183,7 @@ describe('M9 写工具:名字解析', () => {
       createdAt: '2026-08-01T00:00:00',
       completedAt: null,
       deletedAt: null,
+      sortOrder: 0,
     });
     const h = harness({ projects: [proj('aaa-1', '搬家计划'), proj('aaa-2', '搬家预算')] });
     expect(W.createTask(h, { title: 'x', project: '搬家计划' }).ok).toBe(true);
@@ -225,6 +228,7 @@ function base(): GtdSnapshot['tasks'][number] {
     timeZone: null,
     repeat: null,
     seriesId: null,
+    dayOrder: null,
   };
 }
 

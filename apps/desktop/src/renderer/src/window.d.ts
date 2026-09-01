@@ -94,6 +94,8 @@ declare global {
         propagateDeadline?: boolean;
       }) => Promise<WriteResultVM>;
       projectComplete: (id: string) => Promise<WriteResultVM>;
+      todayReorder: (id: string, beforeId?: string) => Promise<WriteResultVM>;
+      projectReorder: (id: string, beforeId?: string) => Promise<WriteResultVM>;
       projectDeletionPreview: (id: string) => Promise<ProjectDeletionPreviewVM>;
       projectDelete: (id: string, contents: 'delete' | 'toInbox') => Promise<WriteResultVM>;
       projectRestore: (id: string, restoreContents: boolean) => Promise<WriteResultVM>;

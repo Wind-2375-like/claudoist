@@ -30,6 +30,8 @@ import {
   isValidIsoDate,
   moveTask,
   projectStats,
+  byProjectSort,
+  todayList,
   quickAddTask,
   reopenTask,
   reorderTask,
@@ -506,34 +508,8 @@ const list: Handler = (store, deps, args) => {
 const today: Handler = (store, deps, _args) => {
   const snap = store.snapshot();
   const day = deps.clock.today();
-  // D-23/M6a:hard-landscape 并入任务(带时间任务即日历 block);计划段排序 =
-  // 计划日升序 → 全天在前 → startTime 升序(与桌面 today() 同口径,改动需同步)
-  const engageable = (t: Task): boolean =>
-    t.status === 'active' && t.bucket !== 'someday' && t.bucket !== 'reference';
-  const scheduledToday = snap.tasks
-    .filter((t) => engageable(t) && t.scheduledDate !== null && t.scheduledDate <= day)
-    .sort((a, b) => {
-      if (a.scheduledDate !== b.scheduledDate) return a.scheduledDate! < b.scheduledDate! ? -1 : 1;
-      if ((a.startTime === null) !== (b.startTime === null)) return a.startTime === null ? -1 : 1;
-      if (a.startTime !== b.startTime) return (a.startTime ?? '') < (b.startTime ?? '') ? -1 : 1;
-      return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
-    })
-    .map((t) => taskView(snap, t, day));
-  const scheduledIds = new Set(scheduledToday.map((t) => t.id));
-  // due 仅收未计划的过期项(与桌面 today() 同口径):计划到未来 = 显式推迟,不留 Today
-  const due = snap.tasks
-    .filter(
-      (t) =>
-        engageable(t) &&
-        t.deadline !== null &&
-        t.deadline <= day &&
-        t.scheduledDate === null &&
-        !scheduledIds.has(t.id),
-    )
-    .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1))
-    .map((t) => taskView(snap, t, day));
-  // 统一列表(D-21/D-23,与 App Today 同构):计划项在前,其余按 deadline
-  const tasks = [...scheduledToday, ...due];
+  // 口径全在 domain 的 todayList(D-40)—— 桌面与 CLI 从此共用一份,不再靠注释"同步"
+  const tasks = todayList(snap, day).all.map((t) => taskView(snap, t, day));
   return {
     data: { today: day, tasks },
     text: [`Today ${day}`, taskSection('待办', tasks)].join('\n\n'),
@@ -779,7 +755,8 @@ const projects: Handler = (store, _deps, _args) => {
   const snap = store.snapshot();
   const rows = snap.projects
     .filter((p) => p.status === 'active')
-    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+    // INV-37:与侧栏同一个显示序(用户拖出来的顺序,CLI 也照着显示)
+    .sort(byProjectSort)
     .map((p) => {
       const stats = projectStats(snap, p.id);
       return {

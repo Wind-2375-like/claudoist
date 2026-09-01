@@ -29,6 +29,8 @@ export * from './rules/projectDeletion';
 export * from './rules/projectHealth';
 export * from './rules/projectTree';
 export * from './rules/projectStats';
+export * from './rules/projectOrder';
+export * from './rules/todayList';
 export * from './rules/subtasks';
 export * from './rules/taskView';
 export * from './rules/repeat';

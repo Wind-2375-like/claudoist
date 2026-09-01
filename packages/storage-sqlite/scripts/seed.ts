@@ -95,6 +95,7 @@ commands.push(
       createdAt: T,
       completedAt: null,
       deletedAt: null,
+      sortOrder: 0,
     },
   },
   {
@@ -107,6 +108,7 @@ commands.push(
       createdAt: T,
       completedAt: null,
       deletedAt: null,
+      sortOrder: 1,
     },
   },
   {
@@ -119,6 +121,7 @@ commands.push(
       createdAt: T,
       completedAt: T,
       deletedAt: null,
+      sortOrder: 2,
     },
   },
 );
@@ -233,6 +236,7 @@ for (const [ti, t] of seedTasks.entries()) {
       timeZone: null,
       repeat: null,
       seriesId: null,
+      dayOrder: null,
     },
   });
   // D-30:原 context 现在就是一个标签(去掉 '@');与 t.labels 去重由 assignLabel 幂等保证
@@ -273,6 +277,7 @@ const subtask = (tid: string, title: string, parent: string | null, done = false
     timeZone: null,
     repeat: null,
     seriesId: null,
+    dayOrder: null,
   },
 });
 commands.push(
@@ -319,6 +324,7 @@ function seedBucketTask(title: string, bucket: 'someday' | 'reference'): void {
       timeZone: null,
       repeat: null,
       seriesId: null,
+      dayOrder: null,
     },
   });
 }
@@ -352,6 +358,7 @@ for (const [ri, title] of rawThoughts.entries()) {
       timeZone: null,
       repeat: null,
       seriesId: null,
+      dayOrder: null,
     },
   });
 }
@@ -392,6 +399,7 @@ const timed = (
     timeZone: null,
     repeat: null,
     seriesId: null,
+    dayOrder: null,
   },
 });
 commands.push(

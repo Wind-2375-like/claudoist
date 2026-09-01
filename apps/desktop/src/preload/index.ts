@@ -126,6 +126,16 @@ const gtdApi = {
   }): Promise<WriteResultVM> => ipcRenderer.invoke('gtd:projects.update', input),
   projectComplete: (id: string): Promise<WriteResultVM> =>
     ipcRenderer.invoke('gtd:projects.complete', { id }),
+  todayReorder: (id: string, beforeId?: string): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:tasks.reorderToday', {
+      id,
+      ...(beforeId !== undefined ? { beforeId } : {}),
+    }),
+  projectReorder: (id: string, beforeId?: string): Promise<WriteResultVM> =>
+    ipcRenderer.invoke('gtd:projects.reorder', {
+      id,
+      ...(beforeId !== undefined ? { beforeId } : {}),
+    }),
   projectDeletionPreview: (id: string): Promise<ProjectDeletionPreviewVM> =>
     ipcRenderer.invoke('gtd:projects.deletionPreview', { id }),
   /** contents 必填:项目里的活跃任务是一并删掉,还是退回 Inbox(INV-34) */

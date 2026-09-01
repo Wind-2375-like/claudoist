@@ -8,6 +8,7 @@ import { SearchPalette } from './SearchPalette';
 import { TaskDetailModal } from './TaskDetailModal';
 import { ErrorBoundary } from './ErrorBoundary';
 import { toast, useToasts } from './toast';
+import { useReorderDrag, type ReorderRowProps } from './useReorderDrag';
 import { useBucketCounts, useInbox, useProjects, useToday } from './hooks';
 import { InboxView } from './views/InboxView';
 import { TodayView } from './views/TodayView';
@@ -96,12 +97,17 @@ function PaneHandle({
 function SidebarProject({
   project,
   active,
+  drag,
+  hint,
   onOpen,
   onEdit,
   onCompleted,
 }: {
   project: ProjectListItemVM;
   active: boolean;
+  /** 拖拽重排(D-39):手势与落点计算在 useReorderDrag,这里只摊 props */
+  drag: ReorderRowProps;
+  hint: 'before' | 'after' | null;
   onOpen: () => void;
   onEdit: () => void;
   onCompleted: () => void;
@@ -126,7 +132,12 @@ function SidebarProject({
     onCompleted();
   };
   return (
-    <li className="relative">
+    <li
+      className={`relative ${hint === 'before' ? 'border-t-2 border-acc' : ''} ${
+        hint === 'after' ? 'border-b-2 border-acc' : ''
+      }`}
+      {...drag}
+    >
       <button
         type="button"
         data-testid="project-row"
@@ -252,6 +263,16 @@ export function App(): React.JSX.Element {
   const today = useToday();
   const projects = useProjects();
   const bucketCounts = useBucketCounts();
+  // 侧栏项目拖拽重排(D-39/INV-37);落库走 domain 的 reorderProject,渲染层不自己排
+  const projectDrag = useReorderDrag(
+    'project',
+    (projects.data ?? []).map((p) => p.id),
+    (id, beforeId) => {
+      void window.gtd.projectReorder(id, beforeId).then((r) => {
+        if ('error' in r) toast(`排序失败:${r.error}`);
+      });
+    },
+  );
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [projectModal, setProjectModal] = useState<'add' | ProjectListItemVM | null>(null);
@@ -421,6 +442,8 @@ export function App(): React.JSX.Element {
                 <SidebarProject
                   key={p.id}
                   project={p}
+                  drag={projectDrag.rowProps(p.id)}
+                  hint={projectDrag.hint(p.id)}
                   active={view.kind === 'project' && view.id === p.id}
                   onOpen={() => setView({ kind: 'project', id: p.id })}
                   onEdit={() => setProjectModal(p)}

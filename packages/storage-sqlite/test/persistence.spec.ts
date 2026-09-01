@@ -44,6 +44,7 @@ describe('文件持久化', () => {
             timeZone: null,
             repeat: null,
             seriesId: null,
+            dayOrder: null,
           },
         },
       ];

@@ -576,4 +576,30 @@ CREATE INDEX idx_tasks_repeat ON tasks(repeat_unit) WHERE repeat_unit IS NOT NUL
 CREATE INDEX idx_tasks_series ON tasks(series_id) WHERE series_id IS NOT NULL;
 `,
   },
+  {
+    version: 19,
+    name: 'project-sort-order',
+    // D-39/INV-37:项目手动排序。与 tasks.sort_order 同规(INV-27)。
+    // **回填按 created_at 排名**:不回填的话存量项目全是 0,首次拖拽时整组重编号会按
+    // 兜底键(createdAt)洗一遍,顺序看起来"跳" —— 现在一开始就等于用户当前看到的顺序。
+    // 相关子查询即"比我早创建的有几个",created_at 相同时用 rowid 破平,结果是 0..N-1 的稠密秩。
+    sql: `
+ALTER TABLE projects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+UPDATE projects SET sort_order = (
+  SELECT COUNT(*) FROM projects p2
+   WHERE p2.created_at < projects.created_at
+      OR (p2.created_at = projects.created_at AND p2.rowid < projects.rowid)
+);
+`,
+  },
+  {
+    version: 20,
+    name: 'task-day-order',
+    // D-40/INV-38:Today 视图的手动序。**不回填**:全 NULL = "没人排过",Today 照默认口径
+    // 显示,与升级前逐字一致;用户第一次拖动时才 materialize 那一段(见 reorderTodayTask)。
+    // 独立于 tasks.sort_order —— 后者是容器内的位置,Today 混合多个容器,两者不可比。
+    sql: `
+ALTER TABLE tasks ADD COLUMN day_order INTEGER;
+`,
+  },
 ];

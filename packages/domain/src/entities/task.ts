@@ -74,6 +74,14 @@ export interface Task {
    * 关闭 repeat **不清**它 —— 完成史仍按系列归堆(INV-36.9)。
    */
   seriesId: Id | null;
+  /**
+   * Today 视图的手动序(D-40/INV-38);`null` = 没手动排过,按默认口径垫底。
+   *
+   * **与 `sortOrder` 是两回事**:sortOrder 是"任务在自己容器里的位置"(Inbox / 某项目内),
+   * Today 却把不同容器的任务混在一起显示,两者的 sortOrder 之间不可比 —— 所以要独立一列。
+   * 只对未定时任务有意义(定时任务按时刻排,见 rules/todayList.ts)。
+   */
+  dayOrder: number | null;
 }
 
 export type RepeatUnit = 'day' | 'week' | 'month' | 'year';
