@@ -504,16 +504,8 @@ export function createGtdViews(store: GtdStore, clock: Clock): GtdViews {
     today() {
       const snap = store.snapshot();
       const today = clock.today();
-      // 口径全在 domain 的 todayList(D-40/INV-20.6):未定时段(可手动拖)+ 定时段(按时刻)
-      const { all, untimed } = todayList(snap, today);
-      const sortableIds = new Set(untimed.map((t) => t.id));
-      return {
-        today,
-        tasks: all.map((t) => ({
-          ...taskVM(snap, t, today),
-          todaySortable: sortableIds.has(t.id),
-        })),
-      };
+      // 口径全在 domain 的 todayList(D-40/D-41/INV-20.6):一条扁平列表,每一行都能拖
+      return { today, tasks: todayList(snap, today).map((t) => taskVM(snap, t, today)) };
     },
     calendarRange(from, days) {
       const snap = store.snapshot();

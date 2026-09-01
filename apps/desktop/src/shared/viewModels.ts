@@ -177,12 +177,11 @@ export interface TodayVM {
   today: string;
   /**
    * 统一列表(D-21/D-23):scheduledDate ≤ 今天 ∪(deadline ≤ 今天 且未计划)的 active 任务
-   * (someday/reference 不入)。计划段内:全天在前,再按 startTime(原 hard-landscape 已并入)。
+   * (someday/reference 不入)。**已排好序**,顺序由 domain 的 `todayList` 说了算
+   * (D-41:手动拖过的按 dayOrder,没拖过的按派生序垫底)。每一行都可以拖 ——
+   * 这里曾经有个 `todaySortable` 标记区分"定时行不可拖",D-41 之后不存在这种行了。
    */
-  tasks: (TaskVM & {
-    /** INV-38:能不能手动拖(定时任务按时刻排,拖不动)—— 判定在 domain,渲染层只读这个标记 */
-    todaySortable: boolean;
-  })[];
+  tasks: TaskVM[];
 }
 
 /** 日历某日(D-23/INV-28/M6b):全天段 + 定时段(按时刻序)。done 任务仍在,显示为完成态。 */

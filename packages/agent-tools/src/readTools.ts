@@ -95,7 +95,7 @@ export function listToday(d: ReadToolDeps): { today: string; tasks: TimedTaskVie
   // 这里曾经自排一遍(scheduled ++ due),于是 agent 看到的"今天"和用户屏幕上的
   // 是两个顺序 —— 用户拖到第一位的那条,agent 眼里可能还在中间。它会照着自己
   // 看到的顺序回答"第一件事是什么"、按序号勾完成,错的行会被真的改掉。
-  return { today, tasks: views(snap, todayList(snap, today).all, today) };
+  return { today, tasks: views(snap, todayList(snap, today), today) };
 }
 
 /** D-23:日历 = 任务按 scheduledDate + startTime 的投影,无独立实体。 */

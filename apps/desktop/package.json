@@ -1,7 +1,7 @@
 {
   "name": "@gtd/desktop",
   "productName": "Claudoist",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Claudoist — Todoist-style GTD desktop app with an embedded Claude agent",
   "author": "Wind_like <yiyang.feng.2375@gmail.com>",

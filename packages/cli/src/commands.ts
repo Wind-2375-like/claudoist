@@ -508,8 +508,8 @@ const list: Handler = (store, deps, args) => {
 const today: Handler = (store, deps, _args) => {
   const snap = store.snapshot();
   const day = deps.clock.today();
-  // 口径全在 domain 的 todayList(D-40)—— 桌面与 CLI 从此共用一份,不再靠注释"同步"
-  const tasks = todayList(snap, day).all.map((t) => taskView(snap, t, day));
+  // 口径全在 domain 的 todayList(D-40/D-41)—— 桌面与 CLI 从此共用一份,不再靠注释"同步"
+  const tasks = todayList(snap, day).map((t) => taskView(snap, t, day));
   return {
     data: { today: day, tasks },
     text: [`Today ${day}`, taskSection('待办', tasks)].join('\n\n'),

@@ -28,11 +28,11 @@ export function TodayView(): React.JSX.Element {
   const [adding, setAdding] = useState(false);
   const [overPostpone, setOverPostpone] = useState(false);
   // D-25:Google 事件已镜像成任务,直接出现在下面的任务列表里;这里只保证"看 Today 时同步一次"
-  // 手动排序(D-40/INV-38):只有未定时任务参与落点计算,定时任务按时刻锚在下半段。
+  // 手动排序(D-40/D-41/INV-38):**整个列表**参与落点计算,带时间的日历块也能拖。
   // hook 必须在早退之前调用(React 规则),所以用 data?. 兜底。
   const drag = useReorderDrag(
     'today',
-    (data?.tasks ?? []).filter((t) => t.todaySortable).map((t) => t.id),
+    (data?.tasks ?? []).map((t) => t.id),
     (id, beforeId) => {
       void window.gtd.todayReorder(id, beforeId).then((r) => {
         if ('error' in r) toast(r.error);
@@ -69,38 +69,11 @@ export function TodayView(): React.JSX.Element {
       {data.tasks.length === 0 && !adding && (
         <p className="mb-2 text-sm text-fnt">今天没有待办任务 🎉</p>
       )}
-      {/* 落到定时段(那些行不收落点)时冒泡到这里:钳到未定时段末尾,而不是静默无反应。
-          未定时行自己 stopPropagation,不会走到这儿 */}
-      <ul
-        className="space-y-0.5"
-        onDragOver={(e) => {
-          if (drag.dragId !== null) e.preventDefault();
-        }}
-        onDrop={(e) => {
-          if (drag.dragId === null) return;
-          e.preventDefault();
-          const id = drag.dragId;
-          drag.reset();
-          // **只有落点确实在"最后一条可排序行的下方"才算"想放到末尾"**。
-          // 冒泡到 ul 的不止定时段:行间 2px 的 margin(在 border-box 之外)、某行正处于
-          // 内联编辑态时那张几十上百像素高的卡片,都会走到这里。那些是"瞄着某一行、
-          // 差几像素没落上"的手势 —— 此时把任务甩到段末是最坏的回答,而且全程没有任何
-          // 落点线预告过。这种情况静默不动,用户重拖一次即可。
-          const rows = e.currentTarget.querySelectorAll('[data-sortable="1"]');
-          const last = rows[rows.length - 1]?.getBoundingClientRect();
-          if (last !== undefined && e.clientY <= last.bottom) return;
-          const sortable = data.tasks.filter((x) => x.todaySortable);
-          // 已经在末尾就别写了(零动作)。注意**不能**再加 `sortable.length > 0`:
-          // 未定时段为空时(今天只有日历事件)那半个条件会把整条短路掉,于是拖动定时行
-          // 完全静默 —— 而 domain 专门备了一句可读的拒绝理由,能不能看到它不该取决于
-          // "今天恰好有没有别的全天任务"这种无关状态。
-          if (sortable[sortable.length - 1]?.id !== id) {
-            void window.gtd.todayReorder(id).then((r) => {
-              if ('error' in r) toast(r.error);
-            });
-          }
-        }}
-      >
+      {/* 没有 ul 级的兜底落点:每一行都收落点(D-41),任何位置都能用行内落点表达,
+          包括"放到最末尾"= 落在最后一行的下半区。落在行间 2px 缝隙或内联编辑卡片上
+          的手势因此**什么都不做** —— 那是"瞄着某一行、差几像素没落上",把任务甩到
+          列表末尾是最坏的回答,而且全程没有任何落点线预告过。 */}
+      <ul className="space-y-0.5">
         {data.tasks.map((t) => (
           <li key={t.id}>
             {editId === t.id ? (
@@ -108,8 +81,7 @@ export function TodayView(): React.JSX.Element {
             ) : (
               // 拖到别的行 = 换顺序(仅未定时);拖到底部区块 = 推迟到明天
               <div
-                {...drag.rowProps(t.id, t.todaySortable)}
-                data-sortable={t.todaySortable ? '1' : undefined}
+                {...drag.rowProps(t.id)}
                 onDragEnd={() => {
                   drag.reset();
                   setOverPostpone(false);

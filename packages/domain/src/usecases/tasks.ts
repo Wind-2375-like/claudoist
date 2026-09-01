@@ -380,13 +380,14 @@ export interface ReorderTodayTaskConsequences {
 }
 
 /**
- * Today 视图内的手动排序(D-40/INV-38)。
+ * Today 视图内的手动排序(D-40/D-41/INV-38)。
  *
- * 作用域是 `todayList().untimed` 那一段 —— 定时任务按时刻排(它同时画在 Calendar 上,
- * 手动挪会让两个视图打架),故拒绝并给出可读理由,而不是静默无反应。
+ * 作用域是**整个 Today 列表**,带时间的日历块也在内(D-41,用户裁决:「today 的顺序能拖,
+ * 不是按照时间来排」)。这里不再有"这一行不许拖"的分支 —— 那条拒绝理由连同它背后的
+ * 两段模型一起删掉了。
  *
- * 落地方式与 reorderProject 同规:整段重编号 0..N-1(**materialize**)。
- * 为什么必须整段而不是只写被拖的那条:第一次拖动时别人都还是 null,只写一条的话
+ * 落地方式与 reorderProject 同规:整列表重编号 0..N-1(**materialize**)。
+ * 为什么必须整列表而不是只写被拖的那条:第一次拖动时别人都还是 null,只写一条的话
  * 它会跳到最前面(null 垫底),而用户明明把它放在了中间。
  */
 export function reorderTodayTask(
@@ -394,20 +395,14 @@ export function reorderTodayTask(
   deps: FlowDeps,
   input: ReorderTodayTaskInput,
 ): UsecaseResult<ReorderTodayTaskConsequences> {
-  const { untimed } = todayList(snap, deps.clock.today());
-  const task = untimed.find((t) => t.id === input.id);
-  if (!task) {
-    const exists = snap.tasks.find((t) => t.id === input.id);
-    if (exists?.startTime != null) {
-      return { error: '带时间的任务在日历段按时刻排;要换位置请改它的时间' };
-    }
-    return { error: `该任务不在今天的可排序列表里: ${input.id}` };
-  }
+  const list = todayList(snap, deps.clock.today());
+  const task = list.find((t) => t.id === input.id);
+  if (!task) return { error: `该任务不在今天的列表里: ${input.id}` };
   if (input.beforeId === input.id) return { commands: [], consequences: { taskId: task.id } };
-  if (input.beforeId !== undefined && !untimed.some((t) => t.id === input.beforeId)) {
-    return { error: `落点不在今天的可排序列表里: ${input.beforeId}` };
+  if (input.beforeId !== undefined && !list.some((t) => t.id === input.beforeId)) {
+    return { error: `落点不在今天的列表里: ${input.beforeId}` };
   }
-  const rest = untimed.filter((t) => t.id !== task.id);
+  const rest = list.filter((t) => t.id !== task.id);
   const ordered: Task[] = [];
   for (const t of rest) {
     if (t.id === input.beforeId) ordered.push(task);
@@ -416,7 +411,7 @@ export function reorderTodayTask(
   if (input.beforeId === undefined) ordered.push(task);
   // 顺序没变就一条命令都不发(哪怕大家的 dayOrder 还是 null):拖回原位是无副作用手势,
   // 不该产生一批"看不出任何变化"的写入,更不该往 INV-35 的回滚日志里塞噪音。
-  const unchanged = ordered.every((t, i) => t.id === untimed[i]?.id);
+  const unchanged = ordered.every((t, i) => t.id === list[i]?.id);
   if (unchanged) return { commands: [], consequences: { taskId: task.id } };
   const commands: Command[] = [];
   ordered.forEach((t, i) => {
@@ -651,18 +646,23 @@ export function updateTask(
     }
     clean.timeZone = p.timeZone;
   }
-  // INV-38.3 手动位置失效,只有一条规则:**不再是同一个未定时段的成员,位置就作废**。
-  // 两种触发:改计划日(换了一天的列表)、改时刻(全天 ↔ 日历块,换了段)。
-  // 不清的话:推迟到明天再挪回今天,它会带着上次的序号插回队伍中间 —— 用户没排过却"有位置"。
+  // INV-38.3 手动位置失效,只有一条规则:**不再是今天这张列表的成员,位置就作废**。
+  // 唯一触发是改计划日 —— 换了一天就是换了一张列表。不清的话:推迟到明天再挪回今天,
+  // 它会带着上次的序号插回队伍中间,用户没排过却"有位置"。
+  //
+  // **改时刻不再清位置**(D-41):扁平化之后没有"段"了,把会议从 15:00 挪到 16:00
+  // 不改变它是不是今天的事,凭什么把用户排好的位置作废?Google 那边改个会议时间就把
+  // 你今早排的顺序打乱一格,是最难联系起因果的一类失序。
   //
   // **判"值真的变了",不是判"这个 key 在 patch 里"**:调用方常把一组字段整包回传 ——
-  // 时间编辑器一次发 {startTime, durationMinutes, timeZone}(只改时长也会带上 startTime),
-  // 详情页的「今天」按钮在任务已经是今天时照样写一遍 scheduledDate。按 key 判会让这些
-  // 与分段无关的编辑静默抹掉用户排好的序,而用户根本无从把两件事联系起来。
-  const scheduleMoved =
-    clean.scheduledDate !== undefined && clean.scheduledDate !== task.scheduledDate;
-  const timeMoved = clean.startTime !== undefined && clean.startTime !== task.startTime;
-  if ((scheduleMoved || timeMoved) && task.dayOrder !== null) {
+  // 详情页的「今天」按钮在任务已经是今天时照样写一遍 scheduledDate,Google 每轮轮询也
+  // 回传同值 patch。按 key 判会让这些什么都没改的编辑静默抹掉用户排好的序,
+  // 而用户根本无从把两件事联系起来。
+  if (
+    clean.scheduledDate !== undefined &&
+    clean.scheduledDate !== task.scheduledDate &&
+    task.dayOrder !== null
+  ) {
     clean.dayOrder = null;
   }
   // ---- 循环(D-37/INV-36)。改动后的口径先算出来,守卫才能对"补丁后的状态"判定

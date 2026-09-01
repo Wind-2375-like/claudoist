@@ -126,13 +126,12 @@ export function syncExternalTasks(
       patch.externalCalendarId = ev.externalCalendarId;
     }
     if (Object.keys(patch).length > 0) {
-      // INV-38.3:外部把日期/时刻改了 = 换了段或换了天,Today 手动位置作废。
+      // INV-38.3:外部把**计划日**改了 = 换了一天的列表,Today 手动位置作废。
       // 这里直接构造 patch、不经 updateTask,失效规则必须自己带上一份(**只在真的变了时清** ——
       // 否则每轮轮询都会抹掉用户排好的序)。
-      if (
-        (patch.scheduledDate !== undefined || patch.startTime !== undefined) &&
-        prev.dayOrder !== null
-      ) {
+      // 改时刻不清(D-41):Google 把会议从 15:00 挪到 16:00,它仍然是今天的事,
+      // 没理由把用户排好的位置作废。
+      if (patch.scheduledDate !== undefined && prev.dayOrder !== null) {
         patch.dayOrder = null;
       }
       commands.push({ kind: 'updateTask', id: prev.id, patch });
