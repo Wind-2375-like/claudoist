@@ -352,7 +352,10 @@ function ModelSection({
 }): React.JSX.Element {
   // 没选过模型时,高亮 SDK 的默认那一行(而不是谁都不亮)
   const selected = status.model ?? models.find((m) => m.value === 'default')?.value ?? null;
-  const current = models.find((m) => m.value === selected) ?? models[0];
+  const current = models.find((m) => m.value === selected);
+  // 保存的模型不在当前目录里(SDK 升级后把旧型号移出了列表):**如实显示**,不能悄悄把
+  // 高亮退到第一个按钮 —— 那会让用户看着「Default」亮着,以为自己选的是 Default。
+  const orphan = selected !== null && current === undefined ? selected : null;
   return (
     <section>
       <h3 className="mb-1 text-xs font-semibold text-mut">模型</h3>
@@ -360,6 +363,14 @@ function ModelSection({
         <p className="text-[11px] text-fnt">读取模型列表失败,点上面的「刷新」重试。</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
+          {orphan !== null && (
+            <span
+              className="rounded-md border border-dashed border-acc px-2 py-1 text-xs text-acc"
+              title="这个型号已不在当前模型目录里;仍会按它起会话,换一个即可"
+            >
+              {orphan}(目录外)
+            </span>
+          )}
           {models.map((m) => (
             <button
               key={m.value}
@@ -406,7 +417,7 @@ function ModelSection({
                   ? '思考已关闭,effort 不生效'
                   : supported
                     ? undefined
-                    : `${current?.displayName ?? '当前模型'}不支持 ${e}`
+                    : `${current?.displayName ?? orphan ?? '当前模型'}不支持 ${e}`
               }
               className={`rounded-md border px-2 py-1 text-xs disabled:opacity-30 ${
                 status.effort === e

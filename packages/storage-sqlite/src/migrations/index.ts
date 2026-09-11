@@ -602,4 +602,19 @@ UPDATE projects SET sort_order = (
 ALTER TABLE tasks ADD COLUMN day_order INTEGER;
 `,
   },
+  {
+    version: 21,
+    name: 'agent-model-fable-5-to-5-1',
+    // 2026-09-11 用户要求「更新 fable 5 到 5.1」。SDK 0.3.269 的模型目录里 Fable 5 已被移出、
+    // 只剩 5.1;旧的 claude-fable-5 后端仍接受,但设置面板里再也找不到它那一行,用户就会看到
+    // "我明明选了 Fable,面板却亮着 Default"。一次性把保存的选择改写到 5.1 —— 这是用户
+    // 明确要的方向,而且 5.1 是 5 的直接后继。只改这一个键;对话表里的 model 列是历史记录
+    // (那条对话当时用的是什么),不改写,也不用于起会话。
+    sql: `
+UPDATE settings SET value_json = '"claude-fable-5-1[1m]"'
+ WHERE key = 'agent.model' AND value_json = '"claude-fable-5[1m]"';
+UPDATE settings SET value_json = '"claude-fable-5-1"'
+ WHERE key = 'agent.model' AND value_json = '"claude-fable-5"';
+`,
+  },
 ];

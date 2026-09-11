@@ -144,9 +144,12 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
     readOnlyOk: builtins.every((t) => ALLOWED_BUILTINS.includes(t)) && builtins.includes('Skill'),
     toolsCalled,
     calledGtdTool: toolsCalled.some((t) => t.startsWith('mcp__gtd__')),
-    // 每一次工具调用都必须经过 canUseTool;漏一次就等于开了一个不受权限管的后门
+    // 每一次 **GTD 工具**调用都必须经过 canUseTool;漏一次就等于开了一个不受权限管的后门。
+    // 只盯 mcp__gtd__*:内置的 Read / Skill 是只读工具,SDK 在 default 模式下自动放行、
+    // **根本不调 canUseTool** —— 0.3.226 与 0.3.269 实测一致(2026-09-11 A/B),不是升级
+    // 引入的。早先写成 toolsCalled.every(...) 能过,只是因为那几次模型碰巧没调 Skill。
     gatedCount: gated.length,
-    allGated: toolsCalled.every((t) => gated.includes(t)),
+    allGated: toolsCalled.filter((t) => t.startsWith('mcp__')).every((t) => gated.includes(t)),
     auditRows: audit.length,
     // 放行的调用必须有结果摘要 —— 没有就说明 toolUseID → 审计行的关联断了
     auditWithResult: audit.filter((a) => a.resultSummary !== null).length,
