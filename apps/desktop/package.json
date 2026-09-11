@@ -1,7 +1,7 @@
 {
   "name": "@gtd/desktop",
   "productName": "Claudoist",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Claudoist — Todoist-style GTD desktop app with an embedded Claude agent",
   "author": "Wind_like <yiyang.feng.2375@gmail.com>",
@@ -20,6 +20,7 @@
     "@gtd/domain": "workspace:*",
     "@gtd/storage-sqlite": "workspace:*",
     "@tanstack/react-query": "^5.101.4",
+    "katex": "0.18.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.4.3"

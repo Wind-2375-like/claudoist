@@ -56,6 +56,7 @@
 | 拖拽 | (自研,原生事件) | — | 列表重排/缩进用 HTML5 DnD(M5R6);日历网格建块/拖动/拉伸用鼠标事件(M6b,网格内定位需精确到像素,HTML5 DnD 不可靠)。@dnd-kit 未引入 |
 | 长列表 | react-window | 最新 stable | Completed / 搜索结果虚拟化 |
 | 自然日期 | chrono-node | 最新 stable | 快速添加对话框的自然语言日期解析 |
+| 数学公式 | katex | 0.18.7(pin) | agent 回复里的 `$…$` / `$$…$$`。选 KaTeX 而非 MathJax:同步渲染、无网络、包小;**不违反「绝不 innerHTML」**——它把 TeX 词法解析成自己的语法树再生成 DOM,输入文本全部经它转义,`trust:false` 下 `\href` `\url` `\html*` 禁用,渲染走 `katex.render(tex, el)` 往一个 React 不管理子节点的空 span 里写。CSS 与字体随 Vite 打包(CSP `default-src 'self'` 已覆盖 font-src)。Markdown 表格仍是自研解析(见 markdown.tsx) |
 | 数据库 | **`node:sqlite`(运行时内置)** | Node ≥23.4 / Electron 43(Node 24) | **M3 定案(2026-08-08),启用原风险表预留的逃生通道**:零原生编译,dev(Electron 的 Node 24)、测试(系统 Node)、CI 三个运行时同一份代码——better-sqlite3 的双 ABI 问题(Electron 编译产物与系统 Node 互不可载)在 M4 是结构性爆发点,就地消解。同步 API 保持"main 单写者"串行化语义 |
 | 数据访问 | 手写 SQL + `PRAGMA user_version` 迁移 | — | drizzle 无 node:sqlite 驱动;本应用查询极简单,正确性由 domain 的 store-contract 套件(对拍 `applyToSnapshot` 参照实现)保证;迁移以 TS 常量内嵌 SQL 提交(打包无资产解包问题) |
 | Agent | @anthropic-ai/claude-agent-sdk | 0.3.269(2026-09-11 自 0.3.226 升级,为跑 Fable 5.1 —— 后端要求内嵌 Claude Code ≥ 2.1.251;peers:zod ^4、@anthropic-ai/sdk >=0.93.0、@modelcontextprotocol/sdk ^1.29.0) | 官方 SDK;in-process MCP server(`createSdkMcpServer`)让 GTD 工具直连同一 store 实例 |

@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* 数学公式(agent 回复里的 $…$ / $$…$$);字体文件随 Vite 一起打进包里,不走网络 */
+@import 'katex/dist/katex.min.css';
 
 /**
  * 外观系统(M11-B / D-38)。

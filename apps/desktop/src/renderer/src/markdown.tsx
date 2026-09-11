@@ -1,4 +1,6 @@
+import katex from 'katex';
 import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 /**
  * 极小的 Markdown 渲染器(agent 回复用)。
@@ -15,14 +17,23 @@ import type { ReactNode } from 'react';
  *
  * 每个叶子 `<span>` 带 `data-ms`(source start)与 `data-me`(source end)。
  * 纯文本叶子的渲染文本与源码**逐字符对应**(长度相等),所以选区偏移可以精确换算;
- * 带标记的叶子(粗体、行内代码、链接)渲染文本比源码短,无法逐字符对应 ——
+ * 带标记的叶子(粗体、行内代码、链接、公式)渲染文本比源码短,无法逐字符对应 ——
  * 这类叶子标 `data-mx="1"`(inexact),复制时**整段取用**。
  * 结果:纯文本部分字符级精确,样式片段最多多带上它自己的标记符,不会少给。
  *
  * ## 支持的子集
  *
- * 标题、粗体、斜体、行内代码、围栏代码块、无序/有序列表、引用、分隔线、链接、段落。
- * 表格与嵌套列表不支持 —— agent 的回复里几乎不出现,不值得为它们把这份代码变复杂。
+ * 标题、粗体、斜体、行内代码、围栏代码块、无序/有序列表、引用、分隔线、链接、段落、
+ * **表格**(GFM 管道表)、**数学公式**(行内 `$…$` / `\(…\)`,块级 `$$…$$` / `\[…\]`)。
+ * 嵌套列表不支持。
+ *
+ * ## 公式为什么能过第 1 条约束
+ *
+ * KaTeX 不是把输入当 HTML:它把 TeX **词法解析**成自己的语法树再生成 DOM,输入里的文本
+ * 全部经它转义;`trust: false`(默认)下 `\href` `\url` `\includegraphics` `\html*` 这些
+ * 能碰 URL / class / style 的命令一律禁用。所以模型输出到这里仍然只是"一段要排版的公式",
+ * 不是"一段要执行的标记"。渲染走 `katex.render(tex, el)` 往一个 React **不管理子节点**
+ * 的空 span 里写 —— React 树里从头到尾没有 innerHTML 字符串经手。
  */
 
 /** 叶子:一段可见文本 + 它在源码里的区间 */
@@ -36,6 +47,37 @@ export interface Leaf {
   bold?: boolean;
   italic?: boolean;
   href?: string;
+  /** 数学公式:text 即 TeX 源;display = 独占一行的块级公式 */
+  math?: { display: boolean };
+}
+
+/** KaTeX 落点。React 不渲染它的子节点,KaTeX 自己往里写;tex 变了就重排。 */
+function MathSpan({
+  tex,
+  display,
+  ...rest
+}: {
+  tex: string;
+  display: boolean;
+  [k: `data-${string}`]: string | number | undefined;
+}): ReactNode {
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    if (ref.current === null) return;
+    katex.render(tex, ref.current, {
+      displayMode: display,
+      throwOnError: false, // 语法错的公式原样红字显示,不炸整条消息
+      trust: false,
+      strict: 'ignore',
+    });
+  }, [tex, display]);
+  return (
+    <span
+      ref={ref}
+      {...rest}
+      className={display ? 'my-1 block overflow-x-auto py-0.5' : 'mx-0.5'}
+    />
+  );
 }
 
 const leafSpan = (l: Leaf, key: number): ReactNode => {
@@ -50,6 +92,18 @@ const leafSpan = (l: Leaf, key: number): ReactNode => {
     ...(l.inexact === true ? { 'data-mx': '1' } : {}),
     ...(cls !== '' ? { className: cls.trim() } : {}),
   };
+  if (l.math !== undefined) {
+    return (
+      <MathSpan
+        key={key}
+        tex={l.text}
+        display={l.math.display}
+        data-ms={l.start}
+        data-me={l.end}
+        data-mx="1"
+      />
+    );
+  }
   if (l.href !== undefined) {
     return (
       <a {...props} href={l.href} className={`${cls} text-acc underline`.trim()}>
@@ -60,7 +114,43 @@ const leafSpan = (l: Leaf, key: number): ReactNode => {
   return <span {...props}>{l.text}</span>;
 };
 
-/** 行内解析:**粗**、*斜*、`码`、[文](url)。返回带源码区间的叶子序列。导出供测试。 */
+/**
+ * 从 `from` 起找 `close`,跳过被反斜杠转义的位置。返回 close 的起始下标,找不到 -1。
+ * 公式里 `\$` 很常见(`\$100`),不能拿它当结束符。
+ */
+function findClose(src: string, from: number, close: string): number {
+  let k = from;
+  while (k < src.length) {
+    // 先认闭合符、再跳转义:`\)` `\]` 这类闭合符自己就以反斜杠开头,
+    // 反过来写会把它当"转义的 )"跳过去,于是 \(…\) 永远闭合不了。
+    if (src.startsWith(close, k)) return k;
+    if (src[k] === '\\') {
+      k += 2;
+      continue;
+    }
+    k += 1;
+  }
+  return -1;
+}
+
+/**
+ * 行内数学的分隔规则(与 Pandoc 同):`$` 后面不能是空白,闭合 `$` 前面不能是空白、
+ * 后面不能紧跟数字。这样 "花了 $5 和 $10" 不会被当成公式。
+ */
+function inlineDollar(src: string, i: number): { tex: string; end: number } | null {
+  const first = src[i + 1];
+  if (first === undefined || first === '$' || /\s/.test(first)) return null;
+  const j = findClose(src, i + 1, '$');
+  if (j < 0) return null;
+  if (/\s/.test(src[j - 1]!)) return null;
+  const after = src[j + 1];
+  if (after !== undefined && /\d/.test(after)) return null;
+  const tex = src.slice(i + 1, j);
+  if (tex === '') return null;
+  return { tex, end: j + 1 };
+}
+
+/** 行内解析:**粗**、*斜*、`码`、[文](url)、$公式$。返回带源码区间的叶子序列。导出供测试。 */
 export function parseInline(src: string, base: number): Leaf[] {
   const out: Leaf[] = [];
   let i = 0;
@@ -89,8 +179,55 @@ export function parseInline(src: string, base: number): Leaf[] {
     plainStart = i;
     return true;
   };
+  /** 公式:open…close 之间是 TeX;闭合符跳过 `\` 转义 */
+  const math = (open: string, close: string, display: boolean): boolean => {
+    if (!src.startsWith(open, i)) return false;
+    const j = findClose(src, i + open.length, close);
+    if (j < 0) return false;
+    const tex = src.slice(i + open.length, j);
+    if (tex.trim() === '') return false;
+    flush(i);
+    out.push({
+      text: tex,
+      start: base + i,
+      end: base + j + close.length,
+      inexact: true,
+      math: { display },
+    });
+    i = j + close.length;
+    plainStart = i;
+    return true;
+  };
 
   while (i < src.length) {
+    // 转义的美元号:显示 `$`,源码是 `\$`(不等长 → inexact)
+    if (src.startsWith('\\$', i)) {
+      flush(i);
+      out.push({ text: '$', start: base + i, end: base + i + 2, inexact: true });
+      i += 2;
+      plainStart = i;
+      continue;
+    }
+    // 公式放在链接之前:`\[` `\(` 的反斜杠不该被别的规则吃掉
+    if (math('$$', '$$', true) || math('\\[', '\\]', true) || math('\\(', '\\)', false)) {
+      continue;
+    }
+    if (src[i] === '$') {
+      const m = inlineDollar(src, i);
+      if (m !== null) {
+        flush(i);
+        out.push({
+          text: m.tex,
+          start: base + i,
+          end: base + m.end,
+          inexact: true,
+          math: { display: false },
+        });
+        i = m.end;
+        plainStart = i;
+        continue;
+      }
+    }
     // 链接放最前:它的 `[` 不该被别的标记吃掉
     if (src[i] === '[') {
       const close = src.indexOf('](', i);
@@ -124,8 +261,147 @@ export function parseInline(src: string, base: number): Leaf[] {
   return out;
 }
 
+// ------------------------------------------------------------------ 表格
+
+export type CellAlign = 'left' | 'center' | 'right';
+
+/** 一个单元格:去掉首尾空白后的文本 + 它在源码里的起始偏移 */
+export interface Cell {
+  text: string;
+  at: number;
+}
+
+/**
+ * 把一行按未转义、不在行内代码里的 `|` 切成单元格,并记下每格的源码偏移。
+ * 首尾的管道符是可选的(`| a | b |` 与 `a | b` 都合法)。
+ * `\|` 保留原样(显示为 `\|`,换取纯文本叶子的逐字符对应 —— 表格里极少出现)。
+ */
+export function splitRow(line: string, at: number): Cell[] {
+  const raw: { s: string; start: number }[] = [];
+  let cur = '';
+  let curStart = 0;
+  let inCode = false;
+  for (let k = 0; k < line.length; k += 1) {
+    const c = line[k]!;
+    if (c === '\\' && line[k + 1] === '|') {
+      cur += '\\|';
+      k += 1;
+      continue;
+    }
+    if (c === '`') inCode = !inCode;
+    if (c === '|' && !inCode) {
+      raw.push({ s: cur, start: curStart });
+      cur = '';
+      curStart = k + 1;
+      continue;
+    }
+    cur += c;
+  }
+  raw.push({ s: cur, start: curStart });
+  if (line.trimStart().startsWith('|') && raw.length > 0 && raw[0]!.s.trim() === '') raw.shift();
+  if (line.trimEnd().endsWith('|') && raw.length > 0 && raw[raw.length - 1]!.s.trim() === '') {
+    raw.pop();
+  }
+  return raw.map((r) => {
+    const lead = r.s.length - r.s.trimStart().length;
+    return { text: r.s.trim(), at: at + r.start + lead };
+  });
+}
+
+const SEP_CELL = /^:?-+:?$/;
+
+/** 分隔行:每格形如 `---` / `:--` / `:-:` / `--:`,且至少一格。 */
+function separatorAligns(line: string): CellAlign[] | null {
+  if (!line.includes('-')) return null;
+  const cells = splitRow(line, 0);
+  if (cells.length === 0 || !cells.every((c) => SEP_CELL.test(c.text))) return null;
+  return cells.map((c) => {
+    const l = c.text.startsWith(':');
+    const r = c.text.endsWith(':');
+    return l && r ? 'center' : r ? 'right' : 'left';
+  });
+}
+
+export interface Table {
+  header: Cell[];
+  aligns: CellAlign[];
+  rows: Cell[][];
+  /** 表格占用的行数(含表头与分隔行) */
+  lineCount: number;
+}
+
+/**
+ * 从第 i 行起尝试解析一张表:表头行(含 `|`)+ 分隔行 + 若干数据行(含 `|`、非空)。
+ * 不是表就返回 null。流式输出时表头刚打出来、分隔行还没到 → null,先按段落显示,
+ * 分隔行一到就变成表 —— 这是有意的,比"先按表画、再抖一下"稳。
+ */
+export function parseTable(lines: string[], i: number, lineStart: number[]): Table | null {
+  const head = lines[i];
+  const sep = lines[i + 1];
+  if (head === undefined || sep === undefined || !head.includes('|')) return null;
+  const aligns = separatorAligns(sep);
+  if (aligns === null) return null;
+  const header = splitRow(head, lineStart[i]!);
+  if (header.length === 0 || header.length !== aligns.length) return null;
+  const rows: Cell[][] = [];
+  let j = i + 2;
+  while (j < lines.length) {
+    const l = lines[j]!;
+    if (l.trim() === '' || !l.includes('|')) break;
+    const cells = splitRow(l, lineStart[j]!);
+    // 列数对齐表头:少的补空、多的截掉(GFM 同规)
+    while (cells.length < header.length) cells.push({ text: '', at: lineStart[j]! + l.length });
+    rows.push(cells.slice(0, header.length));
+    j += 1;
+  }
+  return { header, aligns, rows, lineCount: j - i };
+}
+
+// ------------------------------------------------------------------ 块级
+
 interface Block {
   render: (key: number) => ReactNode;
+}
+
+const DISPLAY_OPEN = /^\s*(\$\$|\\\[)(.*)$/;
+
+/**
+ * 块级公式:`$$` 或 `\[` 起头的行,到 `$$` / `\]` 结尾的行为止。
+ * 返回 [TeX, 占用行数, 源码起点, 源码终点];未闭合返回 null(先按段落显示原文,
+ * 闭合符一到再变公式 —— 流式时不会出现"打到一半的公式红字闪烁")。
+ */
+function parseDisplayMath(
+  lines: string[],
+  i: number,
+  lineStart: number[],
+): [string, number, number, number] | null {
+  const m = DISPLAY_OPEN.exec(lines[i]!);
+  if (!m) return null;
+  const close = m[1] === '$$' ? '$$' : '\\]';
+  const openAt = lineStart[i]! + lines[i]!.indexOf(m[1]!);
+  const rest = m[2]!;
+  // 同一行就闭合:`$$ E = mc^2 $$`
+  const same = findClose(rest, 0, close);
+  if (same >= 0) {
+    const tex = rest.slice(0, same);
+    if (tex.trim() === '') return null;
+    return [tex, 1, openAt, openAt + m[1]!.length + same + close.length];
+  }
+  const body: string[] = [rest];
+  let j = i + 1;
+  while (j < lines.length) {
+    const l = lines[j]!;
+    const k = findClose(l, 0, close);
+    if (k >= 0) {
+      body.push(l.slice(0, k));
+      const tex = body.join('\n');
+      if (tex.trim() === '') return null;
+      return [tex, j - i + 1, openAt, lineStart[j]! + k + close.length];
+    }
+    body.push(l);
+    j += 1;
+  }
+  return null;
 }
 
 /** 把源码切成块,逐块渲染。返回 React 节点数组。 */
@@ -143,6 +419,9 @@ export function renderMarkdown(src: string): ReactNode {
   let i = 0;
   const inl = (text: string, at: number): ReactNode[] =>
     parseInline(text, at).map((l, k) => leafSpan(l, k));
+  const listItem = (l: string): RegExpExecArray | null => /^\s*([-*]|\d+\.)\s+(.*)$/.exec(l);
+  const alignCls = (a: CellAlign): string =>
+    a === 'center' ? 'text-center' : a === 'right' ? 'text-right' : 'text-left';
 
   while (i < lines.length) {
     const line = lines[i]!;
@@ -177,6 +456,58 @@ export function renderMarkdown(src: string): ReactNode {
 
     if (line.trim() === '') {
       i += 1;
+      continue;
+    }
+
+    // 块级公式
+    const dm = parseDisplayMath(lines, i, lineStart);
+    if (dm !== null) {
+      const [tex, n, s, e] = dm;
+      blocks.push({
+        render: (k) => <MathSpan key={k} tex={tex} display data-ms={s} data-me={e} data-mx="1" />,
+      });
+      i += n;
+      continue;
+    }
+
+    // 表格
+    const table = parseTable(lines, i, lineStart);
+    if (table !== null) {
+      blocks.push({
+        render: (k) => (
+          <div key={k} className="my-1.5 overflow-x-auto">
+            <table className="border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  {table.header.map((c, n) => (
+                    <th
+                      key={n}
+                      className={`border border-line bg-inset/60 px-2 py-1 font-semibold ${alignCls(table.aligns[n]!)}`}
+                    >
+                      {inl(c.text, c.at)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {table.rows.map((r, rn) => (
+                  <tr key={rn}>
+                    {r.map((c, n) => (
+                      <td
+                        key={n}
+                        className={`border border-line px-2 py-1 align-top ${alignCls(table.aligns[n]!)}`}
+                      >
+                        {inl(c.text, c.at)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ),
+      });
+      i += table.lineCount;
       continue;
     }
 
@@ -224,7 +555,6 @@ export function renderMarkdown(src: string): ReactNode {
       continue;
     }
 
-    const listItem = (l: string): RegExpExecArray | null => /^\s*([-*]|\d+\.)\s+(.*)$/.exec(l);
     if (listItem(line)) {
       const items: [string, number, string][] = [];
       let j = i;
@@ -252,7 +582,8 @@ export function renderMarkdown(src: string): ReactNode {
       continue;
     }
 
-    // 普通段落:连续非空行合成一段(保留换行)
+    // 普通段落:连续非空行合成一段(保留换行)。
+    // 下一行若开启了别的块(表格 / 块级公式 / 代码 / 标题 …),段落到此为止。
     const para: [string, number][] = [];
     let j = i;
     while (
@@ -262,7 +593,8 @@ export function renderMarkdown(src: string): ReactNode {
       !/^#{1,6}\s/.test(lines[j]!) &&
       !/^>\s?/.test(lines[j]!) &&
       !listItem(lines[j]!) &&
-      !/^(-{3,}|\*{3,})\s*$/.test(lines[j]!)
+      !/^(-{3,}|\*{3,})\s*$/.test(lines[j]!) &&
+      (j === i || (parseTable(lines, j, lineStart) === null && !DISPLAY_OPEN.test(lines[j]!)))
     ) {
       para.push([lines[j]!, lineStart[j]!]);
       j += 1;
@@ -293,6 +625,8 @@ export function renderMarkdown(src: string): ReactNode {
  * 思路:选区两端各自找到最近的带 `data-ms` 的叶子,换算出源码偏移,然后从**该气泡的
  * 源码**里切片。纯文本叶子逐字符对应,可精确换算;带标记的叶子(`data-mx`)整段取用 ——
  * 宁可多带上它自己的 `**`,也不能给出一段少了标记、粘回去就不成立的 Markdown。
+ * 公式叶子同规:KaTeX 生成的 DOM 都在那个 span 里面,`closest('[data-ms]')` 会爬回它,
+ * 复制出来的是 `$…$` 原文。
  *
  * 返回 null = 选区不在消息气泡里(交给浏览器默认行为)。
  */
