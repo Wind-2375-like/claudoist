@@ -37,7 +37,7 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
   const modeArg = process.argv.find((a) => a.startsWith('--agent-smoke-mode='));
   const mode = (modeArg?.slice('--agent-smoke-mode='.length) ?? 'manual') as PermissionModeId;
   const auth = authStatus();
-  let init: { tools?: string[]; skills?: string[] } | null = null;
+  let init: { tools?: string[]; skills?: string[]; claude_code_version?: string } | null = null;
   let failed = false;
   const toolsCalled: string[] = [];
   /** canUseTool 实际收到的调用 —— 与 toolsCalled 对不上就说明有调用绕过了权限层 */
@@ -113,7 +113,7 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
     setTimeout(() => send(question, []), 300);
   });
 
-  const i = init as { tools?: string[]; skills?: string[] } | null;
+  const i = init as { tools?: string[]; skills?: string[]; claude_code_version?: string } | null;
   const tools = i?.tools ?? [];
   const gtdTools = tools.filter((t) => t.startsWith('mcp__gtd__'));
   const builtins = tools.filter((t) => !t.startsWith('mcp__'));
@@ -124,6 +124,8 @@ export async function runAgentSmoke(store: GtdStore, clock: Clock, arg: string):
 
   const report = {
     mode,
+    // 实际跑的是哪个 Claude Code(可能是本机安装而非内置,见 cliPath.ts)
+    claudeCodeVersion: i?.claude_code_version ?? null,
     auth: { loggedIn: auth.loggedIn, email: auth.email, apiKeyInEnv: auth.apiKeyInEnv },
     skillsDir: skillsDir(),
     // 注意区分:init.skills 是**发现**到的(含用户 ~/.claude/skills 里的私人 skill),

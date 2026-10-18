@@ -186,6 +186,8 @@ const agentApi = {
     ipcRenderer.invoke('agent:effort.set', { effort }),
   setThinking: (mode: 'off' | 'hidden' | 'shown'): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:thinking.set', { mode }),
+  setCliFollowLocal: (follow: boolean): Promise<void> =>
+    ipcRenderer.invoke('agent:cli.followLocal.set', { follow }),
   startSession: (opts: {
     resume?: boolean;
     conversationId?: string;

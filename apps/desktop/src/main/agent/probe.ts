@@ -1,8 +1,9 @@
 import { app } from 'electron';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { ModelInfo, Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { resolveClaudeBinary } from './cliPath';
-import { liveQuery, sessionBusy } from './sessionManager';
+import { currentClaudeBinary, markClaudeBinaryBad } from './cliPath';
+import type { ClaudeBinary } from './claudeBinaries';
+import { liveBinary, liveQuery, sessionBusy } from './sessionManager';
 
 /**
  * 零 token 探针(M11-A)。
@@ -33,15 +34,17 @@ import { liveQuery, sessionBusy } from './sessionManager';
  */
 
 /** 探针不加载 skill、不注册任何工具、不注入 GTD MCP —— 它连数据库都不碰。 */
-function probeOptions(abort: AbortController): Options {
+function probeOptions(abort: AbortController, binary: ClaudeBinary): Options {
   const env: Record<string, string | undefined> = { ...process.env };
   // 与 sessionManager 同因:宿主可能泄漏这个变量,会让子进程跑成 node
   delete env['ELECTRON_RUN_AS_NODE'];
+  // 同 sessionManager.buildEnv:可能跑在用户自己的 Claude Code 安装上,别借我们的进程升级它
+  env['DISABLE_AUTOUPDATER'] ??= '1';
   // ⚠ 绝不设 CLAUDE_CONFIG_DIR:一设凭据就不可见(M1 实证),探针会误报"未登录"
   return {
     cwd: app.getPath('userData'),
     env,
-    pathToClaudeCodeExecutable: resolveClaudeBinary(),
+    pathToClaudeCodeExecutable: binary.path,
     abortController: abort,
     // 故意的空数组:探针不需要任何工具。sessionManager 那边注释说 `tools: []`
     // 会连 Skill 一起关掉 —— 那正是这里想要的效果,别"顺手修好"它。
@@ -59,11 +62,20 @@ const silentPrompt: AsyncIterable<SDKUserMessage> = {
 };
 
 async function withProbe<T>(fn: (q: Query) => Promise<T>): Promise<T> {
+  const binary = currentClaudeBinary();
   const abort = new AbortController();
-  const q = query({ prompt: silentPrompt, options: probeOptions(abort) });
+  const q = query({ prompt: silentPrompt, options: probeOptions(abort, binary) });
   try {
     // 等 initialize 落地后控制通道才可用
-    await q.initializationResult();
+    try {
+      await q.initializationResult();
+    } catch (e) {
+      // 本机安装的 Claude Code 起不来(见 cliPath.ts):本次运行弃用它,换下一个候选重试一次
+      if (binary.source === 'bundled') throw e;
+      markClaudeBinaryBad(binary.path);
+      abort.abort();
+      return await withProbe(fn);
+    }
     return await fn(q);
   } finally {
     abort.abort();
@@ -79,7 +91,9 @@ export async function onQuery<T>(fn: (q: Query) => Promise<T>): Promise<{
   source: 'live-session' | 'probe';
 }> {
   const live = liveQuery();
-  if (live !== null && !sessionBusy()) {
+  // 活会话若还跑在旧的 Claude Code 上(会话期间插件升级了),它给的模型目录也是旧的 ——
+  // 这时宁可起探针读新版本的,面板才能"插件一升级就跟上"
+  if (live !== null && !sessionBusy() && liveBinary()?.path === currentClaudeBinary().path) {
     try {
       return { value: await fn(live), source: 'live-session' };
     } catch {

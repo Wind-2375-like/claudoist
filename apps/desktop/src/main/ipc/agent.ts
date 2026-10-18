@@ -9,6 +9,7 @@ import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import { authStatus, localSnapshot } from '../agent/auth';
 import { invalidateSnapshot, readModels, readSnapshot } from '../agent/probe';
+import { CLI_FOLLOW_LOCAL_KEY, currentClaudeBinary } from '../agent/cliPath';
 import {
   readAccount,
   readCachedUsage,
@@ -33,6 +34,7 @@ import {
   currentConversationId,
   destroySession,
   interruptTurn,
+  liveBinary,
   send,
   sessionAlive,
   sessionBusy,
@@ -182,6 +184,15 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
   ipcMain.handle('agent:thinking.set', async (_e, p: { mode: ThinkingMode }) => {
     settingsStore().set(THINKING_KEY, p.mode);
     return setThinking(p.mode);
+  });
+  /**
+   * 跟不跟随本机 Claude Code 自动升级(cliPath.ts)。不热切:换二进制等于换进程,
+   * 静默重起会话是不可逆的副作用(同护栏的理由)—— 下次起会话生效。
+   * 模型目录随二进制走,缓存作废,面板重取时就是新目录。
+   */
+  ipcMain.handle('agent:cli.followLocal.set', (_e, p: { follow: boolean }) => {
+    settingsStore().set(CLI_FOLLOW_LOCAL_KEY, p.follow);
+    invalidateSnapshot();
   });
 
   // ------------------------------------------------------------ 护栏
@@ -397,6 +408,17 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
       model: s.get<string>(MODEL_KEY),
       effort: s.get<EffortLevel>(EFFORT_KEY),
       thinking: s.get<ThinkingMode>(THINKING_KEY) ?? 'hidden',
+      cli: (() => {
+        const b = currentClaudeBinary();
+        const running = liveBinary();
+        return {
+          version: b.version,
+          source: b.source,
+          followLocal: s.get<boolean>(CLI_FOLLOW_LOCAL_KEY) ?? true,
+          // 活会话还跑在别的版本上(会话期间插件升级了 / 刚改了开关):如实告诉用户
+          runningVersion: running !== null && running.path !== b.path ? running.version : null,
+        };
+      })(),
       permissionMode: readMode(s),
       alwaysAllow: readAlwaysAllow(s),
       // 用量:本会话取会话行,总账取全表 —— 渲染层重挂载不会把账清零

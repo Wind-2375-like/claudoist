@@ -133,6 +133,7 @@ declare global {
       setModel: (model: string) => Promise<{ applied: boolean; error?: string }>;
       setEffort: (effort: string) => Promise<{ error?: string }>;
       setThinking: (mode: 'off' | 'hidden' | 'shown') => Promise<{ error?: string }>;
+      setCliFollowLocal: (follow: boolean) => Promise<void>;
       startSession: (opts: {
         resume?: boolean;
         conversationId?: string;

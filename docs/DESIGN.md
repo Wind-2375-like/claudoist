@@ -59,7 +59,7 @@
 | 数学公式 | katex | 0.18.7(pin) | agent 回复里的 `$…$` / `$$…$$`。选 KaTeX 而非 MathJax:同步渲染、无网络、包小;**不违反「绝不 innerHTML」**——它把 TeX 词法解析成自己的语法树再生成 DOM,输入文本全部经它转义,`trust:false` 下 `\href` `\url` `\html*` 禁用,渲染走 `katex.render(tex, el)` 往一个 React 不管理子节点的空 span 里写。CSS 与字体随 Vite 打包(CSP `default-src 'self'` 已覆盖 font-src)。Markdown 表格仍是自研解析(见 markdown.tsx) |
 | 数据库 | **`node:sqlite`(运行时内置)** | Node ≥23.4 / Electron 43(Node 24) | **M3 定案(2026-08-08),启用原风险表预留的逃生通道**:零原生编译,dev(Electron 的 Node 24)、测试(系统 Node)、CI 三个运行时同一份代码——better-sqlite3 的双 ABI 问题(Electron 编译产物与系统 Node 互不可载)在 M4 是结构性爆发点,就地消解。同步 API 保持"main 单写者"串行化语义 |
 | 数据访问 | 手写 SQL + `PRAGMA user_version` 迁移 | — | drizzle 无 node:sqlite 驱动;本应用查询极简单,正确性由 domain 的 store-contract 套件(对拍 `applyToSnapshot` 参照实现)保证;迁移以 TS 常量内嵌 SQL 提交(打包无资产解包问题) |
-| Agent | @anthropic-ai/claude-agent-sdk | 0.3.301(2026-10-18 自 0.3.269 升级:内嵌 Claude Code 2.1.301,与 VSCode 插件同版,模型目录因此一致、Opus 为 5.5;更早 0.3.226 → 0.3.269 是为跑 Fable 5.1 —— 后端要求内嵌 Claude Code ≥ 2.1.251;peers:zod ^4、@anthropic-ai/sdk >=0.93.0、@modelcontextprotocol/sdk ^1.29.0) | 官方 SDK;in-process MCP server(`createSdkMcpServer`)让 GTD 工具直连同一 store 实例 |
+| Agent | @anthropic-ai/claude-agent-sdk | 0.3.301(2026-10-18 自 0.3.269 升级:内嵌 Claude Code 2.1.301,与 VSCode 插件同版,模型目录因此一致、Opus 为 5.5;**运行时优先用本机更新的 Claude Code,内置只是保底,见 §9.3**;更早 0.3.226 → 0.3.269 是为跑 Fable 5.1 —— 后端要求内嵌 Claude Code ≥ 2.1.251;peers:zod ^4、@anthropic-ai/sdk >=0.93.0、@modelcontextprotocol/sdk ^1.29.0) | 官方 SDK;in-process MCP server(`createSdkMcpServer`)让 GTD 工具直连同一 store 实例 |
 | 密钥 | Electron `safeStorage` | 内置 | OS keychain 加密,无 keytar 原生依赖 |
 | 测试 | Vitest | 最新 stable | domain 包纯 Node 运行,无 Electron/SQLite 依赖 |
 | 原生重建 | @electron/rebuild | 最新 stable | dev 环境 better-sqlite3 ABI 重建;打包时由 electron-builder 接管 |
@@ -977,6 +977,11 @@ SDK 0.3.x 以**平台原生二进制**交付(`@anthropic-ai/claude-agent-sdk-dar
 两个 M1 实证的坑:
 - **SDK tarball 的 `optionalDependencies` 只声明 linux 平台包**,darwin 二进制不会随 `pnpm install` 自动安装——`apps/desktop/package.json` 显式声明 `@anthropic-ai/claude-agent-sdk-darwin-arm64` 为 optionalDependency(SDK 升级时两处版本必须同步)。
 - **宿主环境可能泄漏 `ELECTRON_RUN_AS_NODE=1`**(如 VSCode 派生 shell):构造 `options.env` 时防御性删除。
+
+**运行时跟随本机 Claude Code 自动升级(2026-10-18,用户:「我需要让 claude code sdk 能自动升级」)**:打包内置的二进制只是**保底**。每次起会话 / 起探针,`cliPath.ts` 都重新扫描本机已装的 Claude Code —— VSCode 插件(`~/.vscode[-insiders]/extensions/anthropic.claude-code-<ver>-<platform>-<arch>/resources/native-binary/claude`,跳过 `.obsolete` 里待删的)与原生安装器(`~/.local/bin/claude` 符号链接当前指向的 `versions/<ver>`)—— 挑**版本最高**的;与内置平手或更旧则用内置。模型目录由 CLI 在 initialize 时下发,所以插件一升级,下一次起会话的模型列表就与插件一致,无需升 SDK、无需重新打包。
+- **为什么可行**:SDK 只经 `pathToClaudeCodeExecutable` 起子进程,不校验 CLI 版本。实测 SDK JS 0.3.269 驱动 CLI 2.1.301(差 32 版):init、in-process MCP 工具、`canUseTool` 全部正常。SDK JS 本身(MCP server、类型)仍随打包固定。
+- **防护**:候选须 `--version` 实跑通过且与路径上的版本号一致(60–110ms,按路径 + mtime 缓存),防升级器写到一半;起会话在 init 之前就失败的外部二进制本次运行标记为坏、下次自动退回下一个候选(探针则立即换一个重试)。env 设 `DISABLE_AUTOUPDATER=1`,不借我们的进程去升级用户的安装。活会话不因插件升级而重起(静默销毁会话不可逆),但模型面板不蹭跑在旧版本上的活会话,改起探针读新目录。
+- **开关**:设置 · 账号与用量 · 模型,显示当前用的 Claude Code 版本与来源;「跟随本机 Claude Code 自动升级」(`agent.cli.followLocal`,缺省开)关掉即固定用内置。
 
 其他:dmg 体积因二进制约 192MB;`install-app-deps` 为 Electron ABI 重建 better-sqlite3(M3 起);macOS hardened runtime + notarization,凭据走 CI secrets 绝不入库。
 

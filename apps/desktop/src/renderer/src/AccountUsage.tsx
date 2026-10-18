@@ -210,7 +210,12 @@ export function AccountUsage({
         </>
       )}
 
-      <ModelSection status={status} models={models} onChanged={onChanged} />
+      <ModelSection
+        status={status}
+        models={models}
+        onChanged={onChanged}
+        onReloadModels={() => load()}
+      />
       <Guardrails status={status} />
     </div>
   );
@@ -341,14 +346,22 @@ function BehaviorRow({
 
 // ------------------------------------------------------------------ 模型
 
+const CLI_SOURCE_LABEL: Record<AgentStatusVM['cli']['source'], string> = {
+  vscode: '来自 VSCode 插件',
+  native: '来自本机 claude 命令',
+  bundled: '应用内置',
+};
+
 function ModelSection({
   status,
   models,
   onChanged,
+  onReloadModels,
 }: {
   status: AgentStatusVM;
   models: ModelInfoVM[];
   onChanged: () => void;
+  onReloadModels: () => void;
 }): React.JSX.Element {
   // 没选过模型时,高亮 SDK 的默认那一行(而不是谁都不亮)
   const selected = status.model ?? models.find((m) => m.value === 'default')?.value ?? null;
@@ -359,6 +372,34 @@ function ModelSection({
   return (
     <section>
       <h3 className="mb-1 text-xs font-semibold text-mut">模型</h3>
+      {/* 模型目录是 Claude Code 下发的,所以先说清楚用的是哪一个(main/agent/cliPath.ts) */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fnt">
+        <span>
+          Claude Code {status.cli.version ?? '?'} · {CLI_SOURCE_LABEL[status.cli.source]}
+        </span>
+        {status.cli.runningVersion !== null && (
+          <span className="text-warn-ink">
+            当前会话仍在 {status.cli.runningVersion} 上,新开对话后切换
+          </span>
+        )}
+        <label
+          className="ml-auto flex cursor-pointer items-center gap-1"
+          title="开:每次起会话自动选本机最新的 Claude Code(VSCode 插件 / ~/.local/bin/claude),插件一升级这里就跟上,模型列表与插件一致。关:固定用应用内置的版本。"
+        >
+          <input
+            type="checkbox"
+            checked={status.cli.followLocal}
+            onChange={(e) => {
+              void window.agent.setCliFollowLocal(e.target.checked).then(() => {
+                toast(status.alive ? '已保存 —— 新开对话后生效' : '已保存');
+                onChanged();
+                onReloadModels();
+              });
+            }}
+          />
+          跟随本机 Claude Code 自动升级
+        </label>
+      </div>
       {models.length === 0 ? (
         <p className="text-[11px] text-fnt">读取模型列表失败,点上面的「刷新」重试。</p>
       ) : (

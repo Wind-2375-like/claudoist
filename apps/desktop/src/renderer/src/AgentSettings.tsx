@@ -28,6 +28,14 @@ export interface AgentStatusVM {
   model: string | null;
   effort: string | null;
   thinking: 'off' | 'hidden' | 'shown';
+  /** 起会话用的 Claude Code(见 main/agent/cliPath.ts) */
+  cli: {
+    version: string | null;
+    source: 'vscode' | 'native' | 'bundled';
+    followLocal: boolean;
+    /** 活会话还跑在另一个版本上时给出它;否则 null */
+    runningVersion: string | null;
+  };
   permissionMode: string;
   alwaysAllow: string[];
   /** 本会话累计 */

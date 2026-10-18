@@ -13,7 +13,8 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk';
 import { createMetaServer, createGtdServer, nowLine, statusSnapshot } from '@gtd/agent-tools';
 import type { ReadToolDeps, WriteToolDeps } from '@gtd/agent-tools';
-import { resolveClaudeBinary } from './cliPath';
+import { currentClaudeBinary, markClaudeBinaryBad } from './cliPath';
+import type { ClaudeBinary } from './claudeBinaries';
 import { skillsOption } from './skills';
 import { ensureHarnessMemory, ensureUserMemory } from './userMemory';
 import { buildMetaDeps } from './metaDeps';
@@ -65,6 +66,8 @@ interface LiveSession {
   pendingTurns: number;
   drain: () => void;
   conversationId: string;
+  /** 这个会话跑在哪个 Claude Code 上(本机安装可能在会话期间被升级,见 cliPath.ts) */
+  binary: ClaudeBinary;
 }
 
 let live: LiveSession | null = null;
@@ -185,6 +188,9 @@ function buildEnv(): Record<string, string | undefined> {
   // 主认证路径(DESIGN §6.1):不注入 ANTHROPIC_API_KEY,复用本机 Claude Code 登录。
   // 防御:宿主(如 VSCode 派生 shell)可能泄漏 ELECTRON_RUN_AS_NODE,会让子进程跑成 node。
   delete env['ELECTRON_RUN_AS_NODE'];
+  // 可能跑在用户自己的 Claude Code 安装上(cliPath.ts):别借我们的进程去升级那份安装 ——
+  // 升级器在会话中途换掉二进制只会添乱,升级是 VSCode / 原生安装器自己的事
+  env['DISABLE_AUTOUPDATER'] ??= '1';
   // CLAUDE_CONFIG_DIR **不设置**:M1 实证重定向到空目录会使订阅凭据不可见(Not logged in)。
   return env;
 }
@@ -220,12 +226,14 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
   ensureHarnessMemory();
   const stream = pushableStream();
   const abort = new AbortController();
+  const binary = currentClaudeBinary();
+  let initialized = false;
 
   const options: Options = {
     // 会话按 cwd 隔离在 ~/.claude/projects/<encoded>/ 下,与用户自己的 CLI 项目互不混淆
     cwd: app.getPath('userData'),
     env: buildEnv(),
-    pathToClaudeCodeExecutable: resolveClaudeBinary(),
+    pathToClaudeCodeExecutable: binary.path,
     abortController: abort,
     includePartialMessages: true,
     // 内置工具只留 `Skill` 与 `Read`(`tools: []` 会连 Skill 一起关掉 —— 冒烟实测过)。
@@ -275,6 +283,7 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
     pendingTurns: 0,
     drain: stream.drain,
     conversationId: input.conversationId,
+    binary,
   };
 
   void (async () => {
@@ -282,6 +291,7 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
       for await (const msg of q) {
         const m = msg as SDKMessage & { type: string; subtype?: string; session_id?: string };
         if (m.type === 'system' && m.subtype === 'init' && typeof m.session_id === 'string') {
+          initialized = true;
           if (live) live.sdkSessionId = m.session_id;
         }
         if (m.type === 'result' && live) {
@@ -294,7 +304,14 @@ export function startSession(input: StartSessionInput, onEvent: (e: SessionEvent
     } catch (e) {
       // abort 是我们自己发的(销毁会话/退出),不算错误
       if (!abort.signal.aborted) {
-        onEvent({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+        let message = e instanceof Error ? e.message : String(e);
+        // 本机安装的 Claude Code 连 init 都没走到(与这版 SDK 不兼容、被升级器挪走……):
+        // 本次运行不再用它,下一次起会话自动退回下一个候选 / 打包内置
+        if (!initialized && binary.source !== 'bundled') {
+          markClaudeBinaryBad(binary.path);
+          message += `(本机 Claude Code ${binary.version ?? ''} 起不来,已改用其它版本,重发即可)`;
+        }
+        onEvent({ type: 'error', message });
       }
       onEvent({ type: 'ended' });
     } finally {
@@ -324,6 +341,11 @@ export function sdkSessionId(): string | null {
  */
 export function liveQuery(): Query | null {
   return live?.q ?? null;
+}
+
+/** 活会话跑在哪个 Claude Code 上;没有会话 = null */
+export function liveBinary(): ClaudeBinary | null {
+  return live?.binary ?? null;
 }
 
 export function currentConversationId(): string | null {
