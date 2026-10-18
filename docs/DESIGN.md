@@ -59,7 +59,7 @@
 | 数学公式 | katex | 0.18.7(pin) | agent 回复里的 `$…$` / `$$…$$`。选 KaTeX 而非 MathJax:同步渲染、无网络、包小;**不违反「绝不 innerHTML」**——它把 TeX 词法解析成自己的语法树再生成 DOM,输入文本全部经它转义,`trust:false` 下 `\href` `\url` `\html*` 禁用,渲染走 `katex.render(tex, el)` 往一个 React 不管理子节点的空 span 里写。CSS 与字体随 Vite 打包(CSP `default-src 'self'` 已覆盖 font-src)。Markdown 表格仍是自研解析(见 markdown.tsx) |
 | 数据库 | **`node:sqlite`(运行时内置)** | Node ≥23.4 / Electron 43(Node 24) | **M3 定案(2026-08-08),启用原风险表预留的逃生通道**:零原生编译,dev(Electron 的 Node 24)、测试(系统 Node)、CI 三个运行时同一份代码——better-sqlite3 的双 ABI 问题(Electron 编译产物与系统 Node 互不可载)在 M4 是结构性爆发点,就地消解。同步 API 保持"main 单写者"串行化语义 |
 | 数据访问 | 手写 SQL + `PRAGMA user_version` 迁移 | — | drizzle 无 node:sqlite 驱动;本应用查询极简单,正确性由 domain 的 store-contract 套件(对拍 `applyToSnapshot` 参照实现)保证;迁移以 TS 常量内嵌 SQL 提交(打包无资产解包问题) |
-| Agent | @anthropic-ai/claude-agent-sdk | 0.3.269(2026-09-11 自 0.3.226 升级,为跑 Fable 5.1 —— 后端要求内嵌 Claude Code ≥ 2.1.251;peers:zod ^4、@anthropic-ai/sdk >=0.93.0、@modelcontextprotocol/sdk ^1.29.0) | 官方 SDK;in-process MCP server(`createSdkMcpServer`)让 GTD 工具直连同一 store 实例 |
+| Agent | @anthropic-ai/claude-agent-sdk | 0.3.301(2026-10-18 自 0.3.269 升级:内嵌 Claude Code 2.1.301,与 VSCode 插件同版,模型目录因此一致、Opus 为 5.5;更早 0.3.226 → 0.3.269 是为跑 Fable 5.1 —— 后端要求内嵌 Claude Code ≥ 2.1.251;peers:zod ^4、@anthropic-ai/sdk >=0.93.0、@modelcontextprotocol/sdk ^1.29.0) | 官方 SDK;in-process MCP server(`createSdkMcpServer`)让 GTD 工具直连同一 store 实例 |
 | 密钥 | Electron `safeStorage` | 内置 | OS keychain 加密,无 keytar 原生依赖 |
 | 测试 | Vitest | 最新 stable | domain 包纯 Node 运行,无 Electron/SQLite 依赖 |
 | 原生重建 | @electron/rebuild | 最新 stable | dev 环境 better-sqlite3 ABI 重建;打包时由 electron-builder 接管 |

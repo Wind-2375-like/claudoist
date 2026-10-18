@@ -617,4 +617,20 @@ UPDATE settings SET value_json = '"claude-fable-5-1"'
  WHERE key = 'agent.model' AND value_json = '"claude-fable-5"';
 `,
   },
+  {
+    version: 22,
+    name: 'agent-model-catalog-2-1-301',
+    // 2026-10-18 用户:「opus 是 5.5 的最新版本吗?我想要可选模型列表和 vscode claude code
+    // 插件显示的模型保持一致」。SDK 0.3.269 → 0.3.301(内嵌 Claude Code 2.1.301,与插件同版),
+    // 新目录把 opus / fable 改成了不带 [1m] 的别名:`opus` = Opus 5.5、`fable` = Fable 5.1。
+    // 旧目录的 `opus[1m]`(Opus 5)与 `claude-fable-5-1[1m]` 都不在新目录里,不改写的话面板
+    // 只能亮「(目录外)」。opus 改到 5.5 正是用户要的方向;fable 指向的仍是同一个 5.1。
+    // 同 v21:只改这一个键,对话表里的 model 列是历史记录,不动。
+    sql: `
+UPDATE settings SET value_json = '"opus"'
+ WHERE key = 'agent.model' AND value_json = '"opus[1m]"';
+UPDATE settings SET value_json = '"fable"'
+ WHERE key = 'agent.model' AND value_json IN ('"claude-fable-5-1[1m]"', '"claude-fable-5-1"');
+`,
+  },
 ];

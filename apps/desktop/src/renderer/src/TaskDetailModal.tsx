@@ -504,6 +504,8 @@ export function TaskDetailModal({
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIME = /^\d{2}:\d{2}$/;
+/** keydown 之后多久内的 change 算键入(实际同步派发、间隔约 0;留余量给卡顿) */
+const TYPED_CHANGE_MS = 300;
 
 /**
  * 可自由键入 + **回车保存**的小输入(Todoist 式,2026-08-10 用户定案)。
@@ -511,6 +513,11 @@ const ISO_TIME = /^\d{2}:\d{2}$/;
  * 在敲第一个数字时就凑成完整值触发 onChange,会立刻持久化并收起编辑器;且显示格式
  * 随系统 locale(DD.MM.YYYY),无法按 YYYY-MM-DD 键入。故一律改用文本框。
  * Enter 提交、Esc 取消;不做 blur 提交(避免与"清除/Today"按钮的点击顺序打架)。
+ *
+ * 例外(2026-10-18 用户:「在小 calendar 点完后还得按回车才能保存,我不想要这样」):
+ * type='date' 时**从弹出的小日历点选**(含它自带的「今天」「清除」)直接保存。
+ * 点选与键入都只表现为一次 change,区分靠「这次 change 前刚有没有按键」——
+ * 键入的 change 紧跟在 keydown 之后同步派发;点选来自弹窗,输入框本身收不到按键。
  */
 function DraftField({
   initial,
@@ -530,6 +537,7 @@ function DraftField({
 }): React.JSX.Element {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement | null>(null);
+  const lastKeyAt = useRef(-Infinity);
   useEffect(() => {
     ref.current?.focus();
     // ⚠ date/time 类型不支持文本选区,调 select() 会抛 InvalidStateError ——
@@ -542,10 +550,16 @@ function DraftField({
       value={value}
       type={type}
       {...(placeholder !== undefined ? { placeholder } : {})}
-      title="回车保存,Esc 取消"
+      title={type === 'date' ? '点选日期即保存;键入后回车保存,Esc 取消' : '回车保存,Esc 取消'}
       className={`rounded border border-line px-2 py-1 text-xs outline-none focus:border-acc ${className}`}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => {
+        setValue(e.target.value);
+        if (type === 'date' && performance.now() - lastKeyAt.current > TYPED_CHANGE_MS) {
+          onCommit(e.target.value);
+        }
+      }}
       onKeyDown={(e) => {
+        lastKeyAt.current = performance.now();
         if (isSubmitEnter(e)) {
           e.preventDefault();
           onCommit(value.trim());

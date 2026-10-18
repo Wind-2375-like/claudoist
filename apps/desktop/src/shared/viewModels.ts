@@ -380,6 +380,11 @@ export interface ModelInfoVM {
   supportsEffort?: boolean;
   supportedEffortLevels?: string[];
   supportsAdaptiveThinking?: boolean;
+  /**
+   * 能不能关掉思考。CLI 2.1.301 起随目录下发,SDK 类型里还没有;5.5 这一代都是 false。
+   * 缺省(旧 CLI 不发)按"能"处理。
+   */
+  supportsThinkingOff?: boolean;
 }
 
 export interface ToolManualEntryVM {

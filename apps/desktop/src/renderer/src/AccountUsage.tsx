@@ -447,7 +447,14 @@ function ModelSection({
           <button
             key={m}
             type="button"
-            className={`rounded-md border px-2 py-1 text-xs ${
+            // 同 effort:当前模型关不掉思考(5.5 这一代)就禁用,而不是点了没效果
+            disabled={m === 'off' && current?.supportsThinkingOff === false}
+            title={
+              m === 'off' && current?.supportsThinkingOff === false
+                ? `${current.displayName}不支持关闭思考`
+                : undefined
+            }
+            className={`rounded-md border px-2 py-1 text-xs disabled:opacity-30 ${
               status.thinking === m
                 ? 'border-acc bg-acc-soft text-acc'
                 : 'border-line text-mut hover:bg-hov'
