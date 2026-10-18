@@ -99,11 +99,15 @@ function userMessage(
       source: { type: 'base64', media_type: img.mediaType, data: img.data },
     })),
   );
-  const body =
+  const parts = [
+    text,
     attachments.length > 0
-      ? `${text}\n\n附件(可用 Read 工具读取):\n${attachments.map((p) => `- ${p}`).join('\n')}`
-      : text;
-  content.push({ type: 'text', text: body });
+      ? `附件(可用 Read 工具读取):\n${attachments.map((p) => `- ${p}`).join('\n')}`
+      : '',
+  ].filter((s) => s !== '');
+  // 只发图片时没有正文:不推空的 text block。CLI 目前会替我们滤掉(2026-10-18 实测),
+  // 但别依赖它 —— Messages API 本身不收空文本块
+  if (parts.length > 0) content.push({ type: 'text', text: parts.join('\n\n') });
   return {
     type: 'user',
     // **我们自己生成 uuid 并透传**(SDKUserMessage.uuid 是可选字段,CLI 侧是

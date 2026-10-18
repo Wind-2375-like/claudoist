@@ -378,7 +378,8 @@ export function AgentPanel(): React.JSX.Element {
     async (text: string) => {
       const t = text.trim();
       // busy 不再拦截:忙时照发,主进程排进 streaming 队列(对齐 Claude Code 的缓冲)
-      if (t === '') return;
+      // 只发图片 / 附件、不带文字也是一条完整的消息(2026-10-18 用户:「没办法单独发送图片」)
+      if (t === '' && images.length === 0 && attachments.length === 0) return;
       const wasBusy = busy;
       await ensureSession();
       const localKey = crypto.randomUUID();
@@ -614,7 +615,7 @@ export function AgentPanel(): React.JSX.Element {
               >
                 <div className="max-w-[85%] rounded-2xl bg-acc px-3 py-1.5 text-sm whitespace-pre-wrap text-on-acc select-text">
                   {(it.images?.length ?? 0) > 0 && (
-                    <div className="mb-1 flex flex-wrap gap-1">
+                    <div className={`flex flex-wrap gap-1 ${it.text !== '' ? 'mb-1' : ''}`}>
                       {it.images!.map((src, k) => (
                         <img
                           key={k}
