@@ -5,6 +5,7 @@ import type {
   AuditRowVM,
   RewindAnchorVM,
   RewindPreviewVM,
+  BookmarkVM,
   ConversationVM,
   ModelInfoVM,
   PermissionRequestVM,
@@ -264,6 +265,16 @@ const agentApi = {
   }> => ipcRenderer.invoke('agent:conversations.transcript', { id }),
   deleteConversation: (id: string): Promise<{ error?: string }> =>
     ipcRenderer.invoke('agent:conversations.delete', { id }),
+  renameConversation: (id: string, title: string): Promise<{ error?: string }> =>
+    ipcRenderer.invoke('agent:conversations.rename', { id, title }),
+  archiveConversation: (id: string, archived: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('agent:conversations.archive', { id, archived }),
+  bookmarks: (): Promise<BookmarkVM[]> => ipcRenderer.invoke('agent:bookmarks.list'),
+  toggleBookmark: (b: {
+    conversationId: string;
+    uuid: string;
+    preview: string;
+  }): Promise<{ bookmarked: boolean }> => ipcRenderer.invoke('agent:bookmarks.toggle', b),
   usageTotals: (): Promise<{
     conversations: number;
     costUsd: number;

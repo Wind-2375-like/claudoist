@@ -1,11 +1,43 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgentSettings } from './AgentSettings';
-import type { AgentStatusVM } from './AgentSettings';
+import type { AgentSettingsTab, AgentStatusVM } from './AgentSettings';
 import { ConversationList } from './ConversationList';
+import { BookmarkList } from './BookmarkList';
+import {
+  CacheBadge,
+  EFFORT_LABEL,
+  filterSlash,
+  MODE_SHORT,
+  MODE_TONE,
+  ModeMenu,
+  ModelMenu,
+  modelLabel,
+  SendButton,
+  SlashMenu,
+  type SlashItem,
+} from './ComposerBar';
+import {
+  IconBookmark,
+  IconCheck,
+  IconChevronDown,
+  IconCopy,
+  IconHistory,
+  IconMode,
+  IconPlus,
+  IconPlusCircle,
+  IconSlash,
+} from './icons';
+import { IconButton, Popover } from './Popover';
+import { recordFromUsage, type CacheRecord } from './promptCache';
 import { PermissionPrompt } from './PermissionPrompt';
 import { ErrorBoundary } from './ErrorBoundary';
 import { toast } from './toast';
-import type { PermissionRequestVM, RewindAnchorVM } from '../../shared/viewModels';
+import type {
+  BookmarkVM,
+  ModelInfoVM,
+  PermissionRequestVM,
+  RewindAnchorVM,
+} from '../../shared/viewModels';
 import { isSubmitEnter } from './keys';
 import { renderMarkdown, selectionToMarkdown } from './markdown';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
@@ -46,7 +78,13 @@ type Item =
       /** 本地临时键:锚点要等主进程返回才回填,靠它找回这一条 */
       localKey?: string;
     }
-  | { kind: 'assistant'; text: string; anchorUuid?: string }
+  | {
+      kind: 'assistant';
+      text: string;
+      anchorUuid?: string;
+      /** SDK 消息 uuid(书签用;与 transcript 里存的同一个)。流式中途还没有 */
+      uuid?: string;
+    }
   | { kind: 'thinking'; text: string }
   | {
       kind: 'tool';
@@ -78,48 +116,84 @@ interface StreamEvent {
  * 让用户自己判断,而不是替他决定。这不是文风偏好 —— GTD 的价值就在"用户亲手做出
  * 那些判断",一个直接给答案的助手会把这个过程整个抽掉。
  */
-const SUGGESTIONS: { label: string; prompt: string; needsWrite?: boolean }[] = [
-  { label: '挑一件事做', prompt: '帮我挑一件现在能做的事。' },
-  { label: '今天什么最紧', prompt: '今天什么最紧?带我判断一下轻重。' },
-  { label: '规划今日行程', prompt: '帮我规划今天的行程。' },
-  { label: '理清收件箱', prompt: '带我理清收件箱。', needsWrite: true },
-  { label: '开始周回顾', prompt: '带我做一次每周回顾。', needsWrite: true },
+const SUGGESTIONS: { id: string; label: string; prompt: string; needsWrite?: boolean }[] = [
+  { id: 'engage', label: '挑一件事做', prompt: '帮我挑一件现在能做的事。' },
+  { id: 'today', label: '今天什么最紧', prompt: '今天什么最紧?带我判断一下轻重。' },
+  { id: 'plan', label: '规划今日行程', prompt: '帮我规划今天的行程。' },
+  { id: 'clarify', label: '理清收件箱', prompt: '带我理清收件箱。', needsWrite: true },
+  { id: 'review', label: '开始周回顾', prompt: '带我做一次每周回顾。', needsWrite: true },
 ];
+
+/** 底栏 / 顶栏同一时刻只开一个弹层 */
+type Menu = 'slash' | 'model' | 'mode' | 'history' | 'bookmarks';
 
 const shortName = (n: string): string => n.replace(/^mcp__gtd__/, '');
 
-/** 单条助手回复:渲染 Markdown + 一颗"复制原文"按钮。 */
+/**
+ * 单条助手回复:渲染 Markdown;下方悬停出现「复制原文 / 书签」(VSCode 式)。
+ * 已收藏的书签图标常亮 —— 否则用户看不出哪条收过。
+ */
 function AssistantBubble({
   text,
   register,
+  bookmarked,
+  flash = false,
+  onToggleBookmark,
 }: {
   text: string;
   register?: (el: Element | null, src: string) => void;
+  bookmarked: boolean;
+  /** 从书签跳过来时闪一下,告诉用户「就是这条」 */
+  flash?: boolean;
+  /** 没有 uuid(还在流式)时不给 —— 那时还收藏不了 */
+  onToggleBookmark?: () => void;
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="group relative max-w-[92%] rounded-2xl bg-surface px-3 py-2 text-sm">
+    <div className="group max-w-[92%]">
       <div
-        data-md-bubble=""
-        ref={(el) => {
-          register?.(el, text);
-        }}
+        className={`rounded-2xl bg-surface px-3 py-2 text-sm transition-shadow duration-300 ${
+          flash ? 'ring-2 ring-acc' : ''
+        }`}
       >
-        {renderMarkdown(text)}
+        <div
+          data-md-bubble=""
+          ref={(el) => {
+            register?.(el, text);
+          }}
+        >
+          {renderMarkdown(text)}
+        </div>
       </div>
-      <button
-        type="button"
-        title="复制 Markdown 原文"
-        className="absolute top-1 right-1 rounded border border-line bg-app/80 px-1.5 py-0.5 text-[10px] text-fnt opacity-60 group-hover:opacity-100 hover:text-ink"
-        onClick={() => {
-          void navigator.clipboard.writeText(text).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
-          });
-        }}
-      >
-        {copied ? '已复制' : '复制'}
-      </button>
+      <div className="mt-0.5 flex h-5 items-center gap-0.5 px-1 text-fnt">
+        <button
+          type="button"
+          title="复制 Markdown 原文"
+          aria-label="复制"
+          className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:text-ink"
+          onClick={() => {
+            void navigator.clipboard.writeText(text).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1200);
+            });
+          }}
+        >
+          {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+        </button>
+        {onToggleBookmark !== undefined && (
+          <button
+            type="button"
+            title={bookmarked ? '取消书签' : '加书签'}
+            aria-label={bookmarked ? '取消书签' : '加书签'}
+            className={`rounded p-0.5 hover:text-ink ${
+              bookmarked ? 'text-acc' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            onClick={onToggleBookmark}
+          >
+            <IconBookmark size={13} filled={bookmarked} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -151,8 +225,23 @@ export function AgentPanel(): React.JSX.Element {
   const [images, setImages] = useState<ChatImage[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  /** 设置弹窗开在哪一页;null = 关 */
+  const [settingsTab, setSettingsTab] = useState<AgentSettingsTab | null>(null);
+  const [openMenu, setOpenMenu] = useState<Menu | null>(null);
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  const toggleMenu = (m: Menu): void => setOpenMenu((cur) => (cur === m ? null : m));
+  const [models, setModels] = useState<ModelInfoVM[]>([]);
+  const [bookmarks, setBookmarks] = useState<BookmarkVM[]>([]);
+  /** Prompt 缓存记录(底栏 ⏱);nowMs 每 30s 走一格,只为重算剩余分钟 */
+  const [cacheRec, setCacheRec] = useState<CacheRecord | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [slashActive, setSlashActive] = useState(0);
+  /** 书签跳转后闪一下的那条 */
+  const [flashUuid, setFlashUuid] = useState<string | null>(null);
+  const pendingJump = useRef<string | null>(null);
+  /** 只有停在底部时才跟随新消息滚动 —— 用户往上翻看(或刚跳到书签)时不能被拽回底部 */
+  const stickBottom = useRef(true);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [dragOver, setDragOver] = useState(false);
   /** 审批请求队列 —— 一轮里可能连来两个,不能后来的把前一个挤掉 */
   const [permQueue, setPermQueue] = useState<PermissionRequestVM[]>([]);
@@ -180,8 +269,40 @@ export function AgentPanel(): React.JSX.Element {
   }, [refreshStatus]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    if (stickBottom.current) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [items]);
+
+  const jumpToUuid = useCallback((uuid: string): boolean => {
+    const el = scrollRef.current?.querySelector(`[data-uuid="${CSS.escape(uuid)}"]`);
+    if (!el) return false;
+    stickBottom.current = false;
+    el.scrollIntoView({ block: 'center' });
+    setFlashUuid(uuid);
+    setTimeout(() => setFlashUuid((u) => (u === uuid ? null : u)), 1600);
+    return true;
+  }, []);
+
+  // 书签跳到别的会话:等那条会话的正文渲染出来再滚
+  useEffect(() => {
+    if (pendingJump.current !== null && jumpToUuid(pendingJump.current)) {
+      pendingJump.current = null;
+    }
+  }, [items, jumpToUuid]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const loadBookmarks = useCallback(() => {
+    void window.agent.bookmarks().then(setBookmarks);
+  }, []);
+  useEffect(loadBookmarks, [loadBookmarks]);
+
+  const loadModels = useCallback(() => {
+    void window.agent.models().then(setModels);
+  }, []);
+  useEffect(loadModels, [loadModels]);
 
   /** 审批请求:入队即可,渲染只显示队首;同时给聊天流里那枚 chip 打上"等待批准" */
   useEffect(
@@ -220,6 +341,11 @@ export function AgentPanel(): React.JSX.Element {
       const m = ev.payload as Record<string, unknown> | undefined;
       if (!m) return;
       const type = m['type'] as string;
+
+      if (type === 'system' && m['subtype'] === 'compact_boundary') {
+        setCacheRec({ compactedAt: Date.now() });
+        return;
+      }
 
       if (type === 'system' && m['subtype'] === 'init') {
         const tools = (m['tools'] as string[] | undefined) ?? [];
@@ -293,6 +419,19 @@ export function AgentPanel(): React.JSX.Element {
         // 一条完整的 assistant 消息落定 → 结束当前文本气泡,下一段重新开
         textBuf.current = '';
         thinkBuf.current = '';
+        const msg = m['message'] as { content?: { type?: string }[]; usage?: unknown } | undefined;
+        const now = Date.now();
+        setCacheRec((prev) => recordFromUsage(prev, msg?.usage, now));
+        setNowMs(now);
+        // 这条是正文 → 它的 uuid 记到刚流完的那个气泡上(书签靠它定位)
+        const uuid = m['uuid'];
+        if (typeof uuid === 'string' && msg?.content?.some((b) => b.type === 'text') === true) {
+          setItems((p) => {
+            const last = p[p.length - 1];
+            if (last?.kind !== 'assistant' || last.uuid !== undefined) return p;
+            return [...p.slice(0, -1), { ...last, uuid }];
+          });
+        }
         return;
       }
 
@@ -380,6 +519,8 @@ export function AgentPanel(): React.JSX.Element {
       // busy 不再拦截:忙时照发,主进程排进 streaming 队列(对齐 Claude Code 的缓冲)
       // 只发图片 / 附件、不带文字也是一条完整的消息(2026-10-18 用户:「没办法单独发送图片」)
       if (t === '' && images.length === 0 && attachments.length === 0) return;
+      stickBottom.current = true; // 自己发的消息一定要看得见
+      setOpenMenu(null);
       const wasBusy = busy;
       await ensureSession();
       const localKey = crypto.randomUUID();
@@ -491,9 +632,31 @@ export function AgentPanel(): React.JSX.Element {
     });
   };
 
+  const newSession = (): void => {
+    setOpenMenu(null);
+    void window.agent.newSession().then(() => {
+      setItems([]);
+      setCacheRec(null);
+      void refreshStatus();
+    });
+  };
+
+  const openSettings = (tab: AgentSettingsTab): void => {
+    setOpenMenu(null);
+    setSettingsTab(tab);
+  };
+
+  const toggleBookmark = (uuid: string, text: string): void => {
+    const conversationId = status?.conversationId;
+    if (conversationId == null) return toast('还没有会话,收藏不了');
+    void window.agent.toggleBookmark({ conversationId, uuid, preview: text }).then(loadBookmarks);
+  };
+
   const openConversation = (id: string, fork: boolean): void => {
-    setHistoryOpen(false);
+    setOpenMenu(null);
     setItems([]);
+    setCacheRec(null);
+    stickBottom.current = true;
     void (async () => {
       const t = await window.agent.transcript(id);
       setItems(
@@ -513,6 +676,7 @@ export function AgentPanel(): React.JSX.Element {
                   x.text === '' && x.tools.length > 0
                     ? `(调用了 ${x.tools.map(shortName).join('、')})`
                     : x.text,
+                ...(x.uuid !== null && x.text !== '' ? { uuid: x.uuid } : {}),
               },
         ),
       );
@@ -522,6 +686,98 @@ export function AgentPanel(): React.JSX.Element {
   };
 
   const canWrite = status !== null && status.permissionMode !== 'plan';
+
+  // ------------------------------------------------------------ 「/」命令
+
+  const slashItems: SlashItem[] = [
+    ...SUGGESTIONS.map((sg) => ({
+      id: sg.id,
+      group: '开场',
+      label: sg.label,
+      hint: sg.prompt,
+      ...(busy ? { disabledReason: '正在回复中' } : {}),
+      run: () => void submit(sg.prompt),
+    })),
+    { id: 'new', group: '会话', label: '新会话', run: newSession },
+    {
+      id: 'history',
+      group: '会话',
+      label: '历史会话',
+      hint: '改名 · 分叉 · 归档 · 删除',
+      run: () => setOpenMenu('history'),
+    },
+    {
+      id: 'bookmarks',
+      group: '会话',
+      label: '书签',
+      run: () => {
+        loadBookmarks();
+        setOpenMenu('bookmarks');
+      },
+    },
+    {
+      id: 'model',
+      group: '设置',
+      label: '切换模型 / 思考深度',
+      run: () => {
+        loadModels();
+        setOpenMenu('model');
+      },
+    },
+    { id: 'mode', group: '设置', label: '切换权限模式', run: () => setOpenMenu('mode') },
+    {
+      id: 'settings',
+      group: '设置',
+      label: '设置…',
+      hint: '账号与用量 · 我的偏好 · Skills · 权限 · 工具',
+      run: () => openSettings('account'),
+    },
+  ];
+  /** 行首键入的「/xxx」就是过滤词;按钮打开时不过滤 */
+  const SLASH_TYPED = /^\/\S*$/;
+  const slashShown = filterSlash(slashItems, SLASH_TYPED.test(draft) ? draft.slice(1) : '');
+
+  const runSlash = (it: SlashItem): void => {
+    if (it.disabledReason !== undefined) return;
+    if (SLASH_TYPED.test(draft)) setDraft('');
+    setOpenMenu(null);
+    it.run(); // 它自己可能再开一个弹层(历史 / 模型…),在同一批更新里覆盖上面的 null
+  };
+
+  const onDraftChange = (v: string): void => {
+    setDraft(v);
+    // 行首键入「/」= 打开命令菜单并按后面的字过滤;删掉「/」或打了空格(在写正文)就收起。
+    // 不论菜单是怎么打开的,一开始写正文就收 —— 否则回车会执行命令而不是发出去
+    if (SLASH_TYPED.test(v)) {
+      setSlashActive(0);
+      setOpenMenu('slash');
+    } else if (openMenu === 'slash') {
+      setOpenMenu(null);
+    }
+  };
+
+  const onComposerKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (openMenu === 'slash' && slashShown.length > 0) {
+      const n = slashShown.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const step = e.key === 'ArrowDown' ? 1 : n - 1;
+        setSlashActive((i) => (Math.min(i, n - 1) + step) % n);
+        return;
+      }
+      if (isSubmitEnter(e) && !e.shiftKey) {
+        e.preventDefault();
+        const it = slashShown[Math.min(slashActive, n - 1)];
+        if (it !== undefined) runSlash(it);
+        return;
+      }
+    }
+    // 没有匹配的命令时回车照常发送 —— 「/compact」这类 Claude Code 自带命令按原文发过去
+    if (isSubmitEnter(e) && !e.shiftKey) {
+      e.preventDefault();
+      void submit(draft);
+    }
+  };
 
   return (
     <div
@@ -534,46 +790,84 @@ export function AgentPanel(): React.JSX.Element {
       onDrop={onDrop}
       onPaste={onPaste}
     >
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <span className="text-sm font-semibold">Agent</span>
-        <div className="flex items-center gap-2 text-mut">
+      {/* 顶栏(VSCode 式):左边会话标题,右边 书签 / 历史 / 新会话 */}
+      <div className="relative flex items-center gap-1 border-b border-line py-1.5 pr-2 pl-4">
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-semibold"
+          title={status?.email != null ? `Claude 账号:${status.email}` : undefined}
+        >
+          {items.length === 0 ? '新会话' : (status?.conversationTitle ?? '新会话')}
+        </span>
+        {status !== null && !status.loggedIn && (
           <button
             type="button"
-            title="账号与用量 · 模型 · 我的偏好 · Skills · 权限"
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 leading-none hover:bg-hov hover:text-ink"
-            onClick={() => setSettingsOpen(true)}
+            title="没检测到 Claude Code 登录 —— 打开账号设置"
+            className="rounded px-1.5 py-0.5 text-[11px] text-warn-ink hover:bg-hov"
+            onClick={() => openSettings('account')}
           >
-            <span className={status?.loggedIn === true ? 'text-ok' : 'text-warn-ink'}>●</span>
-            <span className="max-w-24 truncate text-[11px]">
-              {status?.email?.split('@')[0] ?? '未登录'}
-            </span>
+            ● 未登录
           </button>
-          <button
-            type="button"
-            title="历史会话"
-            className="leading-none hover:text-ink"
-            onClick={() => setHistoryOpen(true)}
-          >
-            🕘
-          </button>
-          <button
-            type="button"
-            title="新建会话"
-            className="leading-none hover:text-ink"
-            onClick={() => {
-              void window.agent.newSession().then(() => {
-                setItems([]);
-                void refreshStatus();
-              });
+        )}
+        <IconButton
+          title="书签"
+          toggle
+          active={openMenu === 'bookmarks'}
+          onClick={() => {
+            loadBookmarks();
+            toggleMenu('bookmarks');
+          }}
+        >
+          <IconBookmark />
+        </IconButton>
+        <IconButton
+          title="历史会话"
+          toggle
+          active={openMenu === 'history'}
+          onClick={() => toggleMenu('history')}
+        >
+          <IconHistory />
+        </IconButton>
+        <IconButton title="新会话" onClick={newSession}>
+          <IconPlusCircle />
+        </IconButton>
+
+        <Popover
+          open={openMenu === 'history'}
+          onClose={closeMenu}
+          className="top-full right-2 left-2 mt-1"
+        >
+          <ErrorBoundary label="历史会话">
+            <ConversationList onOpen={openConversation} onChanged={() => void refreshStatus()} />
+          </ErrorBoundary>
+        </Popover>
+        <Popover
+          open={openMenu === 'bookmarks'}
+          onClose={closeMenu}
+          className="top-full right-2 left-2 mt-1"
+        >
+          <BookmarkList
+            marks={bookmarks}
+            onJump={(b) => {
+              setOpenMenu(null);
+              if (jumpToUuid(b.uuid)) return;
+              pendingJump.current = b.uuid;
+              openConversation(b.conversationId, false);
             }}
-          >
-            ＋
-          </button>
-        </div>
+            onRemove={(b) =>
+              void window.agent
+                .toggleBookmark({ conversationId: b.conversationId, uuid: b.uuid, preview: '' })
+                .then(loadBookmarks)
+            }
+          />
+        </Popover>
       </div>
 
       <div
         ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stickBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
         className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3 select-text"
         onCopy={(e) => {
           // 渲染成 HTML 之后,浏览器默认复制的是**看得见的文字**(`**粗体**` 变成 `粗体`)。
@@ -596,11 +890,36 @@ export function AgentPanel(): React.JSX.Element {
           </div>
         )}
         {items.length === 0 && (
-          <p className="px-1 py-6 text-center text-xs text-fnt">
-            {canWrite
-              ? '我能查你的任务并按你的确认帮你改。每次写入都会先问你(可在设置里调权限模式)。'
-              : '只读模式:我能查你的任务、项目、日历、标签与过滤器,但改不了数据。'}
-          </p>
+          <div className="px-1 py-6 text-center">
+            <p className="text-xs text-fnt">
+              {canWrite
+                ? '我能查你的任务并按你的确认帮你改。每次写入都会先问你(可在底栏切换权限模式)。'
+                : '只读模式:我能查你的任务、项目、日历、标签与过滤器,但改不了数据。'}
+            </p>
+            {/* 建议按钮(D-28):点击 = 发预置提示;只读期明确降级。
+                VSCode 式 composer 下没有常驻按钮了 —— 空会话在这里给,随时在「/」菜单里也有 */}
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  disabled={busy}
+                  title={
+                    s.needsWrite === true && !canWrite
+                      ? '需要写入能力:当前是只读模式,agent 会说明能做到哪一步'
+                      : s.prompt
+                  }
+                  className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mut hover:bg-hov disabled:opacity-40"
+                  onClick={() => void submit(s.prompt)}
+                >
+                  {s.label}
+                  {s.needsWrite === true && !canWrite && (
+                    <span className="ml-1 text-fnt">·只读</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {items.map((it, i) => {
           if (it.kind === 'user') {
@@ -646,6 +965,7 @@ export function AgentPanel(): React.JSX.Element {
             return (
               <div
                 key={i}
+                {...(it.uuid !== undefined ? { 'data-uuid': it.uuid } : {})}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setTurnMenu({ x: e.clientX, y: e.clientY, index: i });
@@ -656,6 +976,16 @@ export function AgentPanel(): React.JSX.Element {
                   register={(el, src) => {
                     if (el !== null) mdSources.current.set(el, src);
                   }}
+                  flash={it.uuid !== undefined && it.uuid === flashUuid}
+                  bookmarked={
+                    it.uuid !== undefined &&
+                    bookmarks.some(
+                      (b) => b.uuid === it.uuid && b.conversationId === status?.conversationId,
+                    )
+                  }
+                  {...(it.uuid !== undefined
+                    ? { onToggleBookmark: () => toggleBookmark(it.uuid!, it.text) }
+                    : {})}
                 />
               </div>
             );
@@ -700,7 +1030,7 @@ export function AgentPanel(): React.JSX.Element {
                   <button
                     type="button"
                     className="rounded border border-danger px-2 py-0.5 hover:bg-danger-soft"
-                    onClick={() => setSettingsOpen(true)}
+                    onClick={() => openSettings('account')}
                   >
                     去调高上限
                   </button>
@@ -724,99 +1054,162 @@ export function AgentPanel(): React.JSX.Element {
         {busy && <p className="text-center text-xs text-fnt">思考中…</p>}
       </div>
 
-      {/* 建议按钮(D-28):点击 = 发预置提示;只读期明确降级 */}
-      <div className="flex flex-wrap gap-1.5 border-t border-line-soft px-3 pt-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s.label}
-            type="button"
-            disabled={busy}
-            title={
-              s.needsWrite === true && !canWrite
-                ? '需要写入能力:当前是只读模式,agent 会说明能做到哪一步'
-                : undefined
-            }
-            className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mut hover:bg-hov disabled:opacity-40"
-            onClick={() => void submit(s.prompt)}
-          >
-            {s.label}
-            {s.needsWrite === true && !canWrite && <span className="ml-1 text-fnt">·只读</span>}
-          </button>
-        ))}
-      </div>
-
-      <div className="px-3 pt-2 pb-3">
-        {(images.length > 0 || attachments.length > 0) && (
-          <div className="mb-1.5 flex flex-wrap items-center gap-2">
-            {images.map((img, i) => (
-              <div key={i} className="relative">
-                <img
-                  src={`data:${img.mediaType};base64,${img.data}`}
-                  alt=""
-                  className="h-12 w-12 rounded border border-line object-cover"
-                />
-                <button
-                  type="button"
-                  className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-sel text-[10px] leading-none text-ink"
-                  onClick={() => setImages((p) => p.filter((_, j) => j !== i))}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {attachments.map((a, i) => (
-              <span
-                key={a.path}
-                className="flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-mut"
-                title={a.path}
-              >
-                📎 {a.name}
-                <button
-                  type="button"
-                  className="text-fnt hover:text-ink"
-                  onClick={() => setAttachments((p) => p.filter((_, j) => j !== i))}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (isSubmitEnter(e) && !e.shiftKey) {
-              e.preventDefault();
-              void submit(draft);
-            }
-          }}
-          rows={3}
-          placeholder="给 Claude 发消息…(Enter 发送;图片随时可粘贴,文件可拖入)"
-          className="w-full resize-none rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none placeholder:text-fnt focus:border-acc"
-        />
-        <div className="mt-1 flex min-h-[18px] items-center gap-2 text-[11px] text-fnt">
-          <button
-            type="button"
-            title="添加附件(复制进应用附件目录后 agent 才能读)"
-            className="hover:text-ink"
-            onClick={pickFiles}
-          >
-            📎
-          </button>
+      {/* Composer(VSCode 式):圆角输入框,底栏 + / ⏱ 模型 ‖ 权限 发送 */}
+      <div className="relative px-3 pt-2 pb-3">
+        <Popover
+          open={openMenu === 'slash'}
+          onClose={closeMenu}
+          className="right-3 bottom-full left-3 mb-1"
+        >
+          <SlashMenu
+            items={slashShown}
+            active={Math.min(slashActive, Math.max(0, slashShown.length - 1))}
+            onHover={setSlashActive}
+            onPick={runSlash}
+          />
+        </Popover>
+        <Popover
+          open={openMenu === 'model'}
+          onClose={closeMenu}
+          className="right-3 bottom-full left-3 mb-1"
+        >
           {status !== null && (
-            <ModePill mode={status.permissionMode} onClick={() => setSettingsOpen(true)} />
+            <ModelMenu
+              status={status}
+              models={models}
+              onChanged={() => void refreshStatus()}
+              onPicked={closeMenu}
+              onMore={() => openSettings('account')}
+            />
           )}
-          {busy && (
-            <button
-              type="button"
-              className="ml-auto shrink-0 rounded border border-line px-2 py-0.5 hover:bg-hov"
-              onClick={() => void window.agent.interrupt()}
-              title="只停当前这轮,会话继续"
+        </Popover>
+        <Popover
+          open={openMenu === 'mode'}
+          onClose={closeMenu}
+          className="right-3 bottom-full left-3 mb-1"
+        >
+          {status !== null && (
+            <ModeMenu
+              mode={status.permissionMode}
+              onChanged={() => void refreshStatus()}
+              onPicked={closeMenu}
+              onMore={() => openSettings('permissions')}
+            />
+          )}
+        </Popover>
+
+        <div className="rounded-xl border border-line bg-surface focus-within:border-acc">
+          {(images.length > 0 || attachments.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2 px-2.5 pt-2.5">
+              {images.map((img, i) => (
+                <div key={i} className="relative">
+                  <img
+                    src={`data:${img.mediaType};base64,${img.data}`}
+                    alt=""
+                    className="h-12 w-12 rounded border border-line object-cover"
+                  />
+                  <button
+                    type="button"
+                    className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-sel text-[10px] leading-none text-ink"
+                    onClick={() => setImages((p) => p.filter((_, j) => j !== i))}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {attachments.map((a, i) => (
+                <span
+                  key={a.path}
+                  className="flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-mut"
+                  title={a.path}
+                >
+                  📎 {a.name}
+                  <button
+                    type="button"
+                    className="text-fnt hover:text-ink"
+                    onClick={() => setAttachments((p) => p.filter((_, j) => j !== i))}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <textarea
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onKeyDown={onComposerKey}
+            rows={3}
+            placeholder="给 Claude 发消息…(Enter 发送,/ 打开命令;图片可粘贴,文件可拖入)"
+            className="block w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-sm outline-none placeholder:text-fnt"
+          />
+          <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+            <IconButton title="添加附件(复制进应用附件目录后 agent 才能读)" onClick={pickFiles}>
+              <IconPlus />
+            </IconButton>
+            <IconButton
+              title="命令(也可以在输入框里键入 /)"
+              toggle
+              active={openMenu === 'slash'}
+              onClick={() => {
+                if (openMenu === 'slash') return setOpenMenu(null);
+                // 同 VSCode:空输入框先填一个「/」,接着打的字就是过滤词
+                if (draft === '') setDraft('/');
+                setSlashActive(0);
+                setOpenMenu('slash');
+                inputRef.current?.focus();
+              }}
             >
-              中断
-            </button>
-          )}
+              <IconSlash />
+            </IconButton>
+            <CacheBadge rec={cacheRec} now={nowMs} />
+            {status !== null && (
+              <button
+                type="button"
+                data-popover-toggle=""
+                title="切换模型与思考深度"
+                className={`flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hov ${
+                  openMenu === 'model' ? 'bg-hov' : ''
+                }`}
+                onClick={() => {
+                  if (openMenu !== 'model') loadModels();
+                  toggleMenu('model');
+                }}
+              >
+                {/* 窄面板里先截思考深度,模型名永远完整 —— 用户最先要确认的是「现在是哪个模型」 */}
+                <span className="shrink-0 text-ink">{modelLabel(models, status.model)}</span>
+                {status.effort !== null && status.thinking !== 'off' && (
+                  <span className="min-w-0 truncate text-fnt">
+                    {EFFORT_LABEL[status.effort] ?? status.effort}
+                  </span>
+                )}
+                <IconChevronDown size={12} className="shrink-0 text-fnt" />
+              </button>
+            )}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {status !== null && (
+                <button
+                  type="button"
+                  data-popover-toggle=""
+                  title="权限模式:agent 写入前要不要问你"
+                  className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hov ${
+                    MODE_TONE[status.permissionMode] ?? ''
+                  } ${openMenu === 'mode' ? 'bg-hov' : ''}`}
+                  onClick={() => toggleMenu('mode')}
+                >
+                  <IconMode mode={status.permissionMode} size={14} />
+                  {MODE_SHORT[status.permissionMode] ?? status.permissionMode}
+                </button>
+              )}
+              <SendButton
+                canSend={draft.trim() !== '' || images.length > 0 || attachments.length > 0}
+                busy={busy}
+                onSend={() => void submit(draft)}
+                onStop={() => void window.agent.interrupt()}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -938,43 +1331,18 @@ export function AgentPanel(): React.JSX.Element {
         </ErrorBoundary>
       )}
 
-      {historyOpen && (
-        <ErrorBoundary label="历史会话">
-          <ConversationList onOpen={openConversation} onClose={() => setHistoryOpen(false)} />
-        </ErrorBoundary>
-      )}
-
-      {settingsOpen && status !== null && (
+      {settingsTab !== null && status !== null && (
         <AgentSettings
           status={status}
-          onClose={() => setSettingsOpen(false)}
+          initialTab={settingsTab}
+          onClose={() => {
+            setSettingsTab(null);
+            loadModels(); // 设置里可能换了 Claude Code 版本 → 模型目录跟着变
+          }}
           onChanged={() => void refreshStatus()}
         />
       )}
     </div>
-  );
-}
-
-const MODE_PILL: Record<string, { text: string; cls: string }> = {
-  plan: { text: '只读', cls: 'text-mut border-line' },
-  manual: { text: '逐条确认', cls: 'text-ok border-ok' },
-  acceptEdits: { text: '自动改已有', cls: 'text-warn-ink border-warn-line' },
-  auto: { text: '自动', cls: 'text-warn-ink border-warn-line' },
-  bypass: { text: '全部放行', cls: 'text-danger-ink border-danger' },
-};
-
-/** 权限模式常驻在 composer 下方 —— 用户任何时候都该知道 agent 现在能做到什么程度。 */
-function ModePill({ mode, onClick }: { mode: string; onClick: () => void }): React.JSX.Element {
-  const p = MODE_PILL[mode] ?? MODE_PILL['manual']!;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="点击修改权限模式"
-      className={`rounded-full border px-2 py-0.5 text-[10px] ${p.cls}`}
-    >
-      {p.text}
-    </button>
   );
 }
 

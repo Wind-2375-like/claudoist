@@ -24,6 +24,8 @@ export interface AgentStatusVM {
   maxBudgetUsd: number;
   lastConversationId: string | null;
   conversationId: string | null;
+  /** 当前会话标题(顶栏显示) */
+  conversationTitle: string | null;
   memoryPath: string;
   model: string | null;
   effort: string | null;
@@ -46,16 +48,21 @@ export interface AgentStatusVM {
 
 type Tab = 'account' | 'permissions' | 'memory' | 'skills' | 'tools';
 
+export type AgentSettingsTab = Tab;
+
 export function AgentSettings({
   status,
   onClose,
   onChanged,
+  initialTab = 'account',
 }: {
   status: AgentStatusVM;
   onClose: () => void;
   onChanged: () => void;
+  /** 从底栏的模型 / 权限菜单点「更多设置」时直接落到对应页 */
+  initialTab?: Tab;
 }): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>('account');
+  const [tab, setTab] = useState<Tab>(initialTab);
   // 全窗弹层:portal 到 body,脱离 .theme-panel 作用域,吃主题主色(而不是面板色)。
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-start justify-center bg-scrim pt-16">

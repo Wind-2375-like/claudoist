@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { Clock, GtdStore, RewindStore } from '@gtd/domain';
-import type { AccountUsageVM, GuardrailsVM } from '../../shared/viewModels';
+import type { AccountUsageVM, BookmarkVM, GuardrailsVM } from '../../shared/viewModels';
 import { toolManual } from '@gtd/agent-tools';
 import type { WriteToolDeps } from '@gtd/agent-tools';
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
@@ -87,6 +87,9 @@ const LAST_CONV_KEY = 'agent.lastConversationId';
 const MODEL_KEY = 'agent.model';
 const EFFORT_KEY = 'agent.effort';
 const THINKING_KEY = 'agent.thinking';
+/** 书签(BookmarkVM 去掉现查的 title) */
+const BOOKMARKS_KEY = 'agent.bookmarks';
+type StoredBookmark = Omit<BookmarkVM, 'title'>;
 
 type ThinkingMode = 'off' | 'hidden' | 'shown';
 
@@ -357,8 +360,61 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
     if (settingsStore().get<string>(LAST_CONV_KEY) === p.id) {
       settingsStore().set(LAST_CONV_KEY, null);
     }
+    // 会话没了,指向它的书签也就跳不过去了
+    const marks = settingsStore().get<StoredBookmark[]>(BOOKMARKS_KEY) ?? [];
+    settingsStore().set(
+      BOOKMARKS_KEY,
+      marks.filter((b) => b.conversationId !== p.id),
+    );
     return r;
   });
+  /** 改名(2026-10-18 用户:历史会话要有 rename)。改过名的不再被首条消息自动改标题 */
+  ipcMain.handle('agent:conversations.rename', (_e, p: { id: string; title: string }) => {
+    const title = p.title.trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (title === '') return { error: '标题不能为空' };
+    if (agentStore().getConversation(p.id) === null) return { error: '会话不存在' };
+    agentStore().renameConversation(p.id, title);
+    return {};
+  });
+  /** 归档 = 从历史列表默认视图收起;正文与索引都在,随时可取消。不影响正在进行的会话 */
+  ipcMain.handle('agent:conversations.archive', (_e, p: { id: string; archived: boolean }) => {
+    agentStore().setConversationArchived(p.id, p.archived);
+    return {};
+  });
+
+  // ------------------------------------------------------------ 书签
+
+  ipcMain.handle('agent:bookmarks.list', (): BookmarkVM[] => {
+    const marks = settingsStore().get<StoredBookmark[]>(BOOKMARKS_KEY) ?? [];
+    const out: BookmarkVM[] = [];
+    for (const b of marks) {
+      const conv = agentStore().getConversation(b.conversationId);
+      if (conv !== null) out.push({ ...b, title: conv.title });
+    }
+    return out;
+  });
+  ipcMain.handle(
+    'agent:bookmarks.toggle',
+    (_e, p: { conversationId: string; uuid: string; preview: string }) => {
+      const marks = settingsStore().get<StoredBookmark[]>(BOOKMARKS_KEY) ?? [];
+      const hit = marks.some((b) => b.conversationId === p.conversationId && b.uuid === p.uuid);
+      settingsStore().set(
+        BOOKMARKS_KEY,
+        hit
+          ? marks.filter((b) => !(b.conversationId === p.conversationId && b.uuid === p.uuid))
+          : [
+              {
+                conversationId: p.conversationId,
+                uuid: p.uuid,
+                preview: p.preview.replace(/\s+/g, ' ').trim().slice(0, 120),
+                createdAt: new Date().toISOString(),
+              },
+              ...marks,
+            ],
+      );
+      return { bookmarked: !hit };
+    },
+  );
   ipcMain.handle('agent:usage.totals', () => agentStore().totals());
 
   // ------------------------------------------------------------ 附件
@@ -405,6 +461,7 @@ export function registerAgentIpc(store: GtdStore, clock: Clock): void {
       maxBudgetUsd: readGuardrail(s, MAX_BUDGET_KEY, DEFAULT_MAX_BUDGET),
       lastConversationId: s.get<string>(LAST_CONV_KEY),
       conversationId: convId,
+      conversationTitle: conv?.title ?? null,
       model: s.get<string>(MODEL_KEY),
       effort: s.get<EffortLevel>(EFFORT_KEY),
       thinking: s.get<ThinkingMode>(THINKING_KEY) ?? 'hidden',

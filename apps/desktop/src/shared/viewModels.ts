@@ -358,6 +358,18 @@ export interface AuditRowVM {
   createdAt: string;
 }
 
+/** 书签(2026-10-18 用户要求「跟 vscode 差不多的 ui」):收藏某条助手回复,之后一键跳回去 */
+export interface BookmarkVM {
+  conversationId: string;
+  /** SDK 消息 uuid —— 流式收到的与 transcript 里存的是同一个(已实测) */
+  uuid: string;
+  /** 收藏时那条回复的开头,列表里显示用 */
+  preview: string;
+  createdAt: string;
+  /** 会话当前标题(列表时现查,改名后跟着变) */
+  title: string;
+}
+
 export interface ConversationVM {
   id: string;
   sdkSessionId: string | null;
@@ -369,6 +381,7 @@ export interface ConversationVM {
   inputTokens: number;
   outputTokens: number;
   forkedFrom: string | null;
+  archived: boolean;
   active: boolean;
 }
 
@@ -380,6 +393,8 @@ export interface ModelInfoVM {
   supportsEffort?: boolean;
   supportedEffortLevels?: string[];
   supportsAdaptiveThinking?: boolean;
+  /** 别名解析到的真实型号('default' → 'claude-opus-5-5'),底栏药丸靠它把 Default 显示成 Opus 5.5 */
+  resolvedModel?: string;
   /**
    * 能不能关掉思考。CLI 2.1.301 起随目录下发,SDK 类型里还没有;5.5 这一代都是 false。
    * 缺省(旧 CLI 不发)按"能"处理。

@@ -4,6 +4,7 @@ import type {
   AuditRowVM,
   RewindAnchorVM,
   RewindPreviewVM,
+  BookmarkVM,
   ConversationVM,
   ModelInfoVM,
   PermissionRequestVM,
@@ -190,6 +191,14 @@ declare global {
         }[];
       }>;
       deleteConversation: (id: string) => Promise<{ error?: string }>;
+      renameConversation: (id: string, title: string) => Promise<{ error?: string }>;
+      archiveConversation: (id: string, archived: boolean) => Promise<unknown>;
+      bookmarks: () => Promise<BookmarkVM[]>;
+      toggleBookmark: (b: {
+        conversationId: string;
+        uuid: string;
+        preview: string;
+      }) => Promise<{ bookmarked: boolean }>;
       usageTotals: () => Promise<{
         conversations: number;
         costUsd: number;

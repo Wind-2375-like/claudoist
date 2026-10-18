@@ -48,6 +48,8 @@ export interface AgentStore {
   }): void;
   setSdkSessionId(id: string, sdkSessionId: string): void;
   renameConversation(id: string, title: string): void;
+  /** 归档 = 从历史列表默认视图里收起来;正文与索引都在,随时可取消 */
+  setConversationArchived(id: string, archived: boolean): void;
   /** 累加一轮的用量(ResultMessage 到达时调用) */
   addUsage(
     id: string,
@@ -103,6 +105,9 @@ export function createAgentStore(db: DatabaseSync): AgentStore {
     },
     renameConversation(id, title) {
       db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, id);
+    },
+    setConversationArchived(id, archived) {
+      db.prepare('UPDATE conversations SET archived = ? WHERE id = ?').run(archived ? 1 : 0, id);
     },
     addUsage(id, u) {
       db.prepare(

@@ -28,6 +28,7 @@ export interface ConversationVM {
   inputTokens: number;
   outputTokens: number;
   forkedFrom: string | null;
+  archived: boolean;
   /** 是不是当前活着的那条 */
   active: boolean;
 }
@@ -43,6 +44,7 @@ const toVM = (r: ConversationRow, activeId: string | null): ConversationVM => ({
   inputTokens: r.totalInputTokens,
   outputTokens: r.totalOutputTokens,
   forkedFrom: r.forkedFrom,
+  archived: r.archived,
   active: r.id === activeId,
 });
 
