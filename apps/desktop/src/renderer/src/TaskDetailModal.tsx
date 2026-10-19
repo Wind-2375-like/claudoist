@@ -39,6 +39,9 @@ export function TaskDetailModal({
   const [comment, setComment] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [newReminder, setNewReminder] = useState('');
+  /** 标题 + 描述的原地编辑草稿(editing === 'title' 时有效) */
+  const [titleDraft, setTitleDraft] = useState('');
+  const [descDraft, setDescDraft] = useState('');
 
   const backTarget = stack.length > 1 ? stack[stack.length - 2]! : null;
 
@@ -102,6 +105,31 @@ export function TaskDetailModal({
 
   const t = data?.task;
   const done = t?.done === true;
+
+  /**
+   * 标题与描述原地编辑(2026-10-19 用户:「没办法点击"跟进"然后修改内容,只能退出来右键编辑。
+   * 我需要增加直接在里面修改的功能」)。Todoist 式:点一下就地变输入框,标题回车 / 描述 ⌘回车
+   * 保存,Esc 取消;改了什么就只发什么。Google 日历来的任务标题归 Google 管(领域层会拒),
+   * 只开放描述。
+   */
+  const startTitleEdit = (): void => {
+    if (!t) return;
+    setTitleDraft(t.title);
+    setDescDraft(t.description ?? '');
+    setEditing('title');
+  };
+  const saveTitleEdit = (): void => {
+    if (!t) return;
+    const p: Record<string, unknown> = {};
+    const title = titleDraft.trim();
+    if (t.externalId === null && title !== t.title) {
+      if (title === '') return toast('标题不能为空');
+      p['title'] = title;
+    }
+    if (descDraft.trim() !== (t.description ?? '').trim()) p['description'] = descDraft.trim();
+    if (Object.keys(p).length === 0) return setEditing(null);
+    void patch(p);
+  };
 
   // ── 右栏属性行(点 1:有值 → 点值本身编辑(toggle);无值 → 显 ＋)──
   const attrRow = (
@@ -196,11 +224,110 @@ export function TaskDetailModal({
                   />
                 )}
                 <div className="min-w-0 flex-1">
-                  <h2 className={`text-lg font-semibold ${done ? 'text-fnt line-through' : ''}`}>
-                    {t.title}
-                  </h2>
-                  {t.description && (
-                    <p className="mt-1 text-sm whitespace-pre-wrap text-mut">{t.description}</p>
+                  {editing === 'title' ? (
+                    <div>
+                      <div className="rounded-md border border-acc bg-surface px-2 py-1.5">
+                        <textarea
+                          autoFocus={t.externalId === null}
+                          value={titleDraft}
+                          readOnly={t.externalId !== null}
+                          rows={1}
+                          title={
+                            t.externalId !== null
+                              ? '标题来自 Google 日历,请在 Google 日历中修改'
+                              : undefined
+                          }
+                          className={`field-sizing-content block w-full resize-none bg-transparent text-lg font-semibold outline-none ${
+                            t.externalId !== null ? 'text-mut' : ''
+                          }`}
+                          // 标题没有换行:回车就是保存(粘贴进来的换行也压成空格)
+                          onChange={(e) => setTitleDraft(e.target.value.replace(/\s*\n\s*/g, ' '))}
+                          onFocus={(e) => {
+                            const el = e.currentTarget;
+                            el.setSelectionRange(el.value.length, el.value.length);
+                          }}
+                          onKeyDown={(e) => {
+                            if (isSubmitEnter(e)) {
+                              e.preventDefault();
+                              saveTitleEdit();
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditing(null);
+                            }
+                          }}
+                        />
+                        <textarea
+                          autoFocus={t.externalId !== null}
+                          value={descDraft}
+                          rows={2}
+                          placeholder="描述"
+                          className="field-sizing-content mt-1 block max-h-60 min-h-10 w-full resize-none bg-transparent text-sm text-mut outline-none placeholder:text-fnt"
+                          onChange={(e) => setDescDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            // 描述可以多行:回车换行,⌘/Ctrl+回车保存
+                            if (isSubmitEnter(e) && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault();
+                              saveTitleEdit();
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditing(null);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center justify-end gap-2">
+                        {t.externalId !== null && (
+                          <span className="mr-auto text-[11px] text-fnt">
+                            标题来自 Google 日历,只能在那边改;描述可以在这里改
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="rounded-md px-2.5 py-1 text-xs text-mut hover:bg-hov"
+                          onClick={() => setEditing(null)}
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md bg-brand px-2.5 py-1 text-xs text-on-brand hover:bg-brand-strong"
+                          onClick={saveTitleEdit}
+                        >
+                          保存
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      title="点击编辑标题和描述"
+                      className="-mx-2 cursor-text rounded-md px-2 py-1 hover:bg-hov"
+                      onClick={startTitleEdit}
+                      onKeyDown={(e) => {
+                        if (isSubmitEnter(e)) {
+                          e.preventDefault();
+                          startTitleEdit();
+                        }
+                      }}
+                    >
+                      <h2
+                        className={`text-lg font-semibold break-words ${
+                          done ? 'text-fnt line-through' : ''
+                        }`}
+                      >
+                        {t.title}
+                      </h2>
+                      {t.description ? (
+                        <p className="mt-1 text-sm break-words whitespace-pre-wrap text-mut">
+                          {t.description}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-sm text-fnt">描述</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
